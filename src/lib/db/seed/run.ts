@@ -1,0 +1,80 @@
+import { getPayload } from 'payload'
+import config from '@payload-config'
+import { seedBrands, seedDevices } from './devices'
+
+async function run() {
+  const payload = await getPayload({ config })
+
+  console.log('🌱 Seeding database...')
+
+  // Seed brands
+  const brandMap = new Map<string, string>()
+  for (const brand of seedBrands) {
+    const existing = await payload.find({
+      collection: 'brands',
+      where: { slug: { equals: brand.slug } },
+      limit: 1,
+      depth: 0,
+    })
+
+    if (existing.docs.length > 0) {
+      brandMap.set(brand.slug, String(existing.docs[0].id))
+      console.log(`  ✓ Brand "${brand.name}" already exists`)
+    } else {
+      const created = await payload.create({
+        collection: 'brands',
+        data: brand,
+      })
+      brandMap.set(brand.slug, String(created.id))
+      console.log(`  ✓ Created brand "${brand.name}"`)
+    }
+  }
+
+  // Seed devices
+  for (const device of seedDevices) {
+    const brandSlug = device.brand as unknown as string
+    const brandId = brandMap.get(brandSlug)
+
+    if (!brandId) {
+      console.error(`  ✗ Brand "${brandSlug}" not found — skipping device "${device.name}"`)
+      continue
+    }
+
+    const existing = await payload.find({
+      collection: 'devices',
+      where: { slug: { equals: device.slug } },
+      limit: 1,
+      depth: 0,
+    })
+
+    if (existing.docs.length > 0) {
+      // Update existing
+      await payload.update({
+        collection: 'devices',
+        id: String(existing.docs[0].id),
+        data: {
+          ...device,
+          brand: brandId,
+        },
+      })
+      console.log(`  ✓ Updated device "${device.name}"`)
+    } else {
+      await payload.create({
+        collection: 'devices',
+        data: {
+          ...device,
+          brand: brandId,
+        },
+      })
+      console.log(`  ✓ Created device "${device.name}"`)
+    }
+  }
+
+  console.log('✅ Seed complete!')
+  process.exit(0)
+}
+
+run().catch((error) => {
+  console.error('❌ Seed failed:', error)
+  process.exit(1)
+})
