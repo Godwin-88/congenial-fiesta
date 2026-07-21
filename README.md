@@ -17,10 +17,10 @@ graph TB
 
     subgraph API["API Layer"]
         Payload[Payload CMS v3]
-        SearchAPI[/api/search]
-        NotifyAPI[/api/notify]
-        OutAPI[/api/out]
-        AdminAPI[/admin]
+        SearchAPI["/api/search"]
+        NotifyAPI["/api/notify"]
+        OutAPI["/api/out"]
+        AdminAPI["/admin"]
     end
 
     subgraph Data["Data Layer - lib/"]
