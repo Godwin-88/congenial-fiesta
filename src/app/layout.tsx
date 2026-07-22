@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import { Raleway } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import Header from "@/components/layout/Header";
@@ -98,16 +97,19 @@ export default function RootLayout({
       className={`${ralewaySans.variable} ${ralewayHeading.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">
-        <Script id="theme-init" strategy="beforeInteractive">
-          {`
-            try {
-              var t = localStorage.getItem('theme');
-              if (!t) t = 'dark';
-              document.documentElement.classList.add(t);
-            } catch(e) {}
-          `}
-        </Script>
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
+        <script
+          id="theme-init"
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var t = localStorage.getItem('theme');
+                if (!t) t = 'dark';
+                document.documentElement.classList.add(t);
+              } catch(e) {}
+            `,
+          }}
+        />
         <SkipLink />
         <ThemeProvider
           attribute="class"

@@ -3,7 +3,7 @@
 import { useChat2 } from '@/context/ChatContext'
 
 export default function ChatInput() {
-  const { input, setInput, handleSubmit, isLoading, rateLimitInfo, error } = useChat2()
+  const { input, setInput, handleSubmit, isLoading, rateLimitInfo, error, setShowAuthModal } = useChat2()
 
   const isDisabled = isLoading || (rateLimitInfo?.rateLimited ?? false)
 
@@ -68,10 +68,7 @@ export default function ChatInput() {
               <button
                 type="button"
                 className="underline hover:text-brand-primary"
-                onClick={() => {
-                  const btn = document.querySelector('[data-auth-trigger]') as HTMLElement
-                  btn?.click()
-                }}
+                onClick={() => setShowAuthModal(true)}
               >
                 Sign in for more
               </button>

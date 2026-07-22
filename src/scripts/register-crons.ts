@@ -32,6 +32,12 @@ const jobs = [
     // Mondays at 05:00 UTC (08:00 EAT)
     cron: '0 5 * * 1',
   },
+  {
+    name: 'seed-coming-soon',
+    url: `${BASE_URL}/api/cron/seed-coming-soon`,
+    // Daily at 06:00 UTC (09:00 EAT)
+    cron: '0 6 * * *',
+  },
 ]
 
 async function registerCrons() {

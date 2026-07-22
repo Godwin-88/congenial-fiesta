@@ -1,9 +1,14 @@
+#!/usr/bin/env tsx
+
+import { config } from 'dotenv'
 import { getPayload } from 'payload'
-import config from '@payload-config'
+import payloadConfig from '@payload-config'
 import { seedBrands, seedDevices } from './devices'
 
+config({ path: '.env.local' })
+
 async function run() {
-  const payload = await getPayload({ config })
+  const payload = await getPayload({ config: payloadConfig })
 
   console.log('🌱 Seeding database...')
 

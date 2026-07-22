@@ -1,8 +1,11 @@
+import { config } from 'dotenv'
+config({ path: '.env.local' })
+
 import { getPayload } from 'payload'
-import config from '@payload-config'
 
 async function seedAbout() {
-  const payload = await getPayload({ config })
+  const { default: payloadConfig } = await import('@payload-config')
+  const payload = await getPayload({ config: payloadConfig })
 
   // Seed milestones
   const milestones = [

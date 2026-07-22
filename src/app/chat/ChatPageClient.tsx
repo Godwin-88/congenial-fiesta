@@ -2,7 +2,7 @@
 
 import { useChat2 } from '@/context/ChatContext'
 import ChatWindow from '@/components/chat/ChatWindow'
-import AuthButton from '@/components/auth/AuthButton'
+import AuthModal from '@/components/auth/AuthModal'
 
 const HELP_ITEMS = [
   { icon: '📱', text: 'Device recommendations by budget or use case' },
@@ -22,7 +22,7 @@ const SIDEBAR_QUESTIONS = [
 ]
 
 export default function ChatPageClient() {
-  const { rateLimitInfo, setInput } = useChat2()
+  const { rateLimitInfo, setInput, showAuthModal, setShowAuthModal } = useChat2()
 
   return (
     <div className="flex h-full">
@@ -58,7 +58,13 @@ export default function ChatPageClient() {
               {rateLimitInfo.isGuest ? (
                 <span>
                   Guest: {rateLimitInfo.remaining}/10 messages per hour —{' '}
-                  <AuthButton redirectTo="/chat" />
+                  <button
+                    type="button"
+                    className="underline hover:text-brand-primary"
+                    onClick={() => setShowAuthModal(true)}
+                  >
+                    Sign in
+                  </button>
                 </span>
               ) : (
                 <span>Signed in: {rateLimitInfo.remaining}/40 messages per hour</span>
@@ -94,6 +100,12 @@ export default function ChatPageClient() {
       <div className="flex-1">
         <ChatWindow variant="page" />
       </div>
+
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        redirectTo="/chat"
+      />
     </div>
   )
 }

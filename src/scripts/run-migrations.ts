@@ -5,11 +5,14 @@
  * Usage: npx tsx src/scripts/run-migrations.ts
  */
 
+import { config } from 'dotenv'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import pg from 'pg'
 
 const { Client } = pg
+
+config({ path: '.env.local' })
 
 const databaseUrl = process.env.DATABASE_URL || process.env.DIRECT_URL
 

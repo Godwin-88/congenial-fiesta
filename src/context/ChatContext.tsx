@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react'
-import { generateSessionId } from '@/lib/chat/session'
+import { generateSessionId } from '@/lib/chat/session-id'
 import type { NavigationCard, RateLimitInfo } from '@/types/chat'
 
 const SESSION_STORAGE_KEY = 'fweezytech:chat-session-id'
@@ -25,6 +25,8 @@ type ChatContextType = {
   setIsOpen: (v: boolean) => void
   clearChat: () => void
   sessionId: string
+  showAuthModal: boolean
+  setShowAuthModal: (v: boolean) => void
 }
 
 const ChatContext = createContext<ChatContextType | null>(null)
@@ -38,6 +40,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [navigationCards, setNavigationCards] = useState<Record<string, NavigationCard[]>>({})
   const [rateLimitInfo, setRateLimitInfo] = useState<RateLimitInfo | null>(null)
+  const [showAuthModal, setShowAuthModal] = useState(false)
 
   useEffect(() => {
     const stored = localStorage.getItem(SESSION_STORAGE_KEY)
@@ -60,7 +63,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setIsLoading(true)
     setRateLimitInfo(null)
 
-    // Add user message immediately
     const userMsgId = crypto.randomUUID()
     setMessages(prev => [...prev, { id: userMsgId, role: 'user', content: userMessage }])
 
@@ -110,7 +112,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         throw new Error(data.error || `Request failed (${response.status})`)
       }
 
-      // Read the SSE stream
       const reader = response.body?.getReader()
       if (!reader) {
         throw new Error('No response body')
@@ -120,7 +121,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       let assistantContent = ''
       const assistantId = crypto.randomUUID()
 
-      // Add empty assistant message
       setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }])
 
       while (true) {
@@ -142,7 +142,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Associate navigation cards with this assistant message
       setNavigationCards(prev => {
         const cards = prev['__pending__']
         if (!cards) return prev
@@ -152,7 +151,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'An error occurred'
       setError(msg)
-      // Remove the last user message on error so user can retry
       setMessages(prev => prev.slice(0, -1))
     } finally {
       setIsLoading(false)
@@ -183,6 +181,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setIsOpen,
       clearChat,
       sessionId,
+      showAuthModal,
+      setShowAuthModal,
     }}>
       {children}
     </ChatContext.Provider>

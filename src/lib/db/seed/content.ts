@@ -1,8 +1,11 @@
+import { config } from 'dotenv'
+config({ path: '.env.local' })
+
 import { getPayload } from 'payload'
-import config from '@payload-config'
 
 async function seed() {
-  const payload = await getPayload({ config })
+  const { default: payloadConfig } = await import('@payload-config')
+  const payload = await getPayload({ config: payloadConfig })
 
   console.log('Seeding articles, videos, and coming-soon items...')
 

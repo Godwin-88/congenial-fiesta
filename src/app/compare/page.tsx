@@ -106,7 +106,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
 
       <section className="mt-12">
         <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Fweezy Score</h2>
-        <div className={`grid gap-6 sm:grid-cols-${devices.length}`}>
+        <div className={`grid gap-6 ${devices.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
           {devices.map((device) => (
             <div key={device.slug} className="text-center">
               <p className="font-heading text-lg font-bold text-foreground mb-2">{device.name}</p>
@@ -152,7 +152,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
 
       <section className="mt-12">
         <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Performance Benchmarks</h2>
-        <div className={`grid gap-6 sm:grid-cols-${devices.length}`}>
+        <div className={`grid gap-6 ${devices.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
           {devices.map((device) => (
             <div key={device.slug} className="rounded-xl border border-border bg-card p-6">
               <h3 className="mb-4 font-heading text-lg font-bold text-foreground">{device.name}</h3>
@@ -163,8 +163,8 @@ export default async function ComparePage({ searchParams }: PageProps) {
       </section>
 
       <section className="mt-12">
-        <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Fweezy&apos;s Take</h2>
-        <div className={`grid gap-6 sm:grid-cols-${devices.length}`}>
+        <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Fweezy's Take</h2>
+        <div className={`grid gap-6 ${devices.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
           {devices.map((device) => (
             <VerdictBlock key={device.slug} verdict={device.verdict} />
           ))}
@@ -173,7 +173,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
 
       <section className="mt-12">
         <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Where to Buy</h2>
-        <div className={`grid gap-6 sm:grid-cols-${devices.length}`}>
+        <div className={`grid gap-6 ${devices.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
           {devices.map((device) => (
             <BuyBox
               key={device.slug}
