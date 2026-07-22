@@ -635,6 +635,78 @@ export default buildConfig({
       ],
     },
 
+    // ── Milestones ──────────────────────────────────────────
+    {
+      slug: 'milestones',
+      admin: {
+        useAsTitle: 'title',
+        defaultColumns: ['year', 'title'],
+      },
+      fields: [
+        {
+          name: 'year',
+          type: 'number',
+          required: true,
+          admin: { description: 'e.g. 2021' },
+        },
+        {
+          name: 'title',
+          type: 'text',
+          required: true,
+          admin: { description: 'e.g. "Hit 100K subscribers on YouTube"' },
+        },
+        {
+          name: 'description',
+          type: 'textarea',
+        },
+        {
+          name: 'displayOrder',
+          type: 'number',
+          defaultValue: 0,
+          admin: { description: 'Lower = shown first. Use for ordering within same year.' },
+        },
+      ],
+    },
+
+    // ── Awards ──────────────────────────────────────────────
+    {
+      slug: 'awards',
+      admin: {
+        useAsTitle: 'awardName',
+        defaultColumns: ['awardName', 'awardingBody', 'year'],
+      },
+      fields: [
+        {
+          name: 'awardName',
+          type: 'text',
+          required: true,
+          admin: { description: 'e.g. "Best Tech Creator — Kenya Digital Awards 2024"' },
+        },
+        {
+          name: 'awardingBody',
+          type: 'text',
+          required: true,
+          admin: { description: 'e.g. "Kenya Digital Awards"' },
+        },
+        { name: 'year', type: 'number', required: true },
+        {
+          name: 'certificateImageUrl',
+          type: 'text',
+          admin: { description: 'Cloudflare Images URL of certificate scan or award badge' },
+        },
+        {
+          name: 'awardUrl',
+          type: 'text',
+          admin: { description: 'Link to announcement or award body website' },
+        },
+        {
+          name: 'displayOrder',
+          type: 'number',
+          defaultValue: 0,
+        },
+      ],
+    },
+
     // ── Media Kit ─────────────────────────────────────────
     {
       slug: 'media-kit',

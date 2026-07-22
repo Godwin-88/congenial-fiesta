@@ -1,15 +1,46 @@
-export const dynamic = "force-dynamic"
+import { MetadataRoute } from 'next'
 
-export default function robots(): Response {
-  const body = `User-agent: *
-Allow: /
-Disallow: /admin/
-Sitemap: https://fweezytech.com/sitemap.xml`
-
-  return new Response(body, {
-    status: 200,
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-    },
-  })
+export default function robots(): MetadataRoute.Robots {
+  const BASE_URL = process.env.NEXT_PUBLIC_SERVER_URL ?? 'https://fweezytech.com'
+  return {
+    rules: [
+      {
+        userAgent: '*',
+        allow: [
+          '/',
+          '/devices/',
+          '/articles/',
+          '/videos',
+          '/compare',
+          '/search',
+          '/about',
+          '/press',
+          '/coming-soon',
+        ],
+        disallow: [
+          '/admin/',
+          '/api/',
+          '/auth/',
+          '/advertise',
+          '/_next/',
+          '/static/',
+        ],
+      },
+      {
+        userAgent: [
+          'GPTBot',
+          'ChatGPT-User',
+          'CCBot',
+          'anthropic-ai',
+          'Claude-Web',
+          'Omgilibot',
+          'FacebookBot',
+          'Applebot-Extended',
+        ],
+        disallow: ['/'],
+      },
+    ],
+    sitemap: `${BASE_URL}/sitemap.xml`,
+    host: BASE_URL,
+  }
 }

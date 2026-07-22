@@ -8,18 +8,22 @@ import { AuthProvider } from "@/context/AuthContext";
 import { ComparisonTrayProvider } from "@/context/ComparisonTrayContext";
 import ComparisonTray from "@/components/compare/ComparisonTray";
 import PageViewBeacon from "@/components/analytics/PageViewBeacon";
+import InstallPrompt from "@/components/pwa/InstallPrompt";
+import SkipLink from "@/components/a11y/SkipLink";
 import "@/styles/globals.css";
 
 const ralewaySans = Raleway({
   variable: "--font-sans",
   subsets: ["latin"],
   weight: ["400", "500", "700"],
+  display: "swap",
 });
 
 const ralewayHeading = Raleway({
   variable: "--font-heading",
   subsets: ["latin"],
   weight: ["400", "500", "700"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -29,6 +33,26 @@ export const metadata: Metadata = {
   },
   description:
     "Kenya's #1 tech review destination — honest device reviews, comparisons, and tech insights.",
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/icons/icon-96.png", sizes: "96x96", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [
+      { url: "/icons/icon-152.png", sizes: "152x152", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    shortcut: "/favicon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "FweezyTech",
+  },
+  formatDetection: {
+    telephone: false,
+  },
   openGraph: {
     title: "FweezyTech",
     description:
@@ -48,6 +72,17 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#111827" },
+    { media: "(prefers-color-scheme: light)", color: "#0066FF" },
+  ],
 };
 
 export default function RootLayout({
@@ -71,6 +106,7 @@ export default function RootLayout({
             } catch(e) {}
           `}
         </Script>
+        <SkipLink />
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
@@ -81,8 +117,9 @@ export default function RootLayout({
             <ComparisonTrayProvider>
               <Header />
               <PageViewBeacon />
-              <main className="flex-1">{children}</main>
+              <main id="main-content" className="flex-1">{children}</main>
               <ComparisonTray />
+              <InstallPrompt />
               <Footer />
             </ComparisonTrayProvider>
           </AuthProvider>

@@ -1,39 +1,42 @@
 import type { MetadataRoute } from 'next'
 import { getAllDevicePaths } from '@/lib/devices/queries'
 import { getAllArticlePaths } from '@/lib/articles/queries'
-
-// Excluded per M4 Step 15:
-// - /compare (dynamic user-generated URL)
-// - /auth/callback, /auth/error (auth flow routes)
+import { getPayload } from 'payload'
+import config from '@payload-config'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:3000'
 
-  const [devicePaths, articlePaths] = await Promise.all([
+  const [devicePaths, articlePaths, milestones] = await Promise.all([
     getAllDevicePaths().catch(() => []),
     getAllArticlePaths().catch(() => []),
+    getPayload({ config })
+      .then((payload) => payload.find({ collection: 'milestones', limit: 1 }))
+      .catch(() => ({ docs: [] })),
   ])
 
+  const now = new Date()
+
   const staticPages: MetadataRoute.Sitemap = [
-    { url: baseUrl, lastModified: new Date(), changeFrequency: 'daily', priority: 1 },
-    { url: `${baseUrl}/devices`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 },
-    { url: `${baseUrl}/videos`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.8 },
-    { url: `${baseUrl}/articles`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.8 },
-    { url: `${baseUrl}/coming-soon`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.5 },
-    { url: `${baseUrl}/advertise`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${baseUrl}/press`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },
+    { url: baseUrl, lastModified: now, changeFrequency: 'daily', priority: 1.0 },
+    { url: `${baseUrl}/devices`, lastModified: now, changeFrequency: 'daily', priority: 0.9 },
+    { url: `${baseUrl}/videos`, lastModified: now, changeFrequency: 'daily', priority: 0.8 },
+    { url: `${baseUrl}/articles`, lastModified: now, changeFrequency: 'daily', priority: 0.8 },
+    { url: `${baseUrl}/about`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${baseUrl}/press`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${baseUrl}/coming-soon`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
   ]
 
   const devicePages: MetadataRoute.Sitemap = devicePaths.map(({ brand, slug }) => ({
     url: `${baseUrl}/devices/${brand}/${slug}`,
-    lastModified: new Date(),
+    lastModified: now,
     changeFrequency: 'weekly' as const,
     priority: 0.8,
   }))
 
   const articlePages: MetadataRoute.Sitemap = articlePaths.map(({ slug }) => ({
     url: `${baseUrl}/articles/${slug}`,
-    lastModified: new Date(),
+    lastModified: now,
     changeFrequency: 'monthly' as const,
     priority: 0.7,
   }))
