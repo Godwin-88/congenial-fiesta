@@ -46,7 +46,7 @@ export async function GET(
   }
 
   // Get the device with buy links
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const device = (await payload.findByID({
     collection: 'devices',
     id: deviceId,
@@ -67,12 +67,24 @@ export async function GET(
   // Log click to Supabase
   try {
     const supabase = await createClient()
-    await supabase.from('affiliate_clicks').insert({
-      device_slug: deviceSlug,
-      retailer,
-      referrer: _req.headers.get('referer') ?? null,
-      created_at: new Date().toISOString(),
-    })
+    const { data: insertedClick } = await supabase
+      .from('affiliate_clicks')
+      .insert({
+        device_slug: deviceSlug,
+        retailer,
+        referrer: _req.headers.get('referer') ?? null,
+        created_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single()
+
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.user?.id && insertedClick?.id) {
+      await supabase
+        .from('affiliate_clicks')
+        .update({ user_id: session.user.id })
+        .eq('id', insertedClick.id)
+    }
   } catch {
     // Log failure silently — don't block the redirect
   }

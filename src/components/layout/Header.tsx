@@ -6,6 +6,7 @@ import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import SearchBar from "@/components/search/SearchBar"
+import AuthButton from "@/components/auth/AuthButton"
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -66,11 +67,15 @@ export default function Header() {
             <Search className="h-5 w-5" />
           </Button>
 
+          <AuthButton />
+
           <Sheet open={open} onOpenChange={setOpen}>
-            <SheetTrigger className="md:hidden">
-              <Button variant="ghost" size="icon" aria-label="Menu">
-                <Menu className="h-5 w-5" />
-              </Button>
+            <SheetTrigger
+              render={
+                <Button variant="ghost" size="icon" aria-label="Menu" />
+              }
+            >
+              <Menu className="h-5 w-5" />
             </SheetTrigger>
             <SheetContent side="right" className="w-[280px]">
               {/* Mobile search inside sheet */}

@@ -10,7 +10,8 @@
     "cron:register": "tsx src/scripts/register-keepalive-cron.ts",
     "db:seed": "tsx src/lib/db/seed/run.ts",
     "db:seed:content": "tsx src/lib/db/seed/content.ts",
-    "search:reindex": "tsx src/scripts/reindex-all.ts"
+    "search:reindex": "tsx src/scripts/reindex-all.ts",
+    "db:migrate": "tsx src/scripts/run-migrations.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

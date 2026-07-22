@@ -91,7 +91,7 @@ export async function getActiveComingSoon(): Promise<CmsVideo[]> {
 
   const result = await payload.find({
     collection: 'coming-soon',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     where: {
       active: { equals: true },
     } as any,

@@ -10,6 +10,11 @@ import { SpecTable } from '@/components/devices/SpecTable'
 import { BenchmarkChart } from '@/components/devices/BenchmarkChart'
 import { BuyBox } from '@/components/devices/BuyBox'
 import { VerdictBlock } from '@/components/devices/VerdictBlock'
+import RatingsSection from '@/components/community/RatingsSection'
+import CommentsSection from '@/components/community/CommentsSection'
+import { Suspense } from 'react'
+import RatingsSkeleton from '@/components/community/RatingsSkeleton'
+import CommentsSkeleton from '@/components/community/CommentsSkeleton'
 
 interface DeviceDetailPageProps {
   params: Promise<{ brand: string; slug: string }>
@@ -286,6 +291,14 @@ export default async function DeviceDetailPage({
           </div>
         </section>
       )}
+
+      <Suspense fallback={<RatingsSkeleton />}>
+        <RatingsSection deviceSlug={device.slug} deviceName={device.name} />
+      </Suspense>
+
+      <Suspense fallback={<CommentsSkeleton />}>
+        <CommentsSection contentType="device" contentSlug={device.slug} />
+      </Suspense>
 
       {/* Schema.org JSON-LD */}
       <script

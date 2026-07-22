@@ -90,7 +90,7 @@ export async function getDevice(
 
   const devices = await payload.find({
     collection: 'devices',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     where: {
       slug: { equals: deviceSlug },
       brand: { equals: brandDocs.docs[0].id },
@@ -164,7 +164,7 @@ export async function searchDevices(query: string): Promise<Device[]> {
 
   const result = await payload.find({
     collection: 'devices',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     where: {
       status: { equals: 'published' },
       name: { contains: query },
@@ -174,6 +174,32 @@ export async function searchDevices(query: string): Promise<Device[]> {
   })
 
   return result.docs as unknown as Device[]
+}
+
+export async function getDeviceBySlug(deviceSlug: string): Promise<Device | null> {
+  const cacheKey = `devices:slug:${deviceSlug}`
+  const cached = await redis.get(cacheKey)
+  const parsed = safeJsonParse<Device>(cached)
+  if (parsed) return parsed
+
+  const payload = await getPayload({ config })
+
+  const devices = await payload.find({
+    collection: 'devices',
+     
+    where: {
+      slug: { equals: deviceSlug },
+      status: { equals: 'published' },
+    } as any,
+    limit: 1,
+    depth: 2,
+  })
+
+  const device = (devices.docs[0] ?? null) as unknown as Device | null
+  if (device) {
+    await redis.setex(cacheKey, 600, JSON.stringify(device))
+  }
+  return device
 }
 
 export async function getAllBrands(): Promise<Brand[]> {

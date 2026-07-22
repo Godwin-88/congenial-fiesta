@@ -4,6 +4,9 @@ import { Raleway } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import { AuthProvider } from "@/context/AuthContext";
+import { ComparisonTrayProvider } from "@/context/ComparisonTrayContext";
+import ComparisonTray from "@/components/compare/ComparisonTray";
 import "@/styles/globals.css";
 
 const ralewaySans = Raleway({
@@ -73,9 +76,14 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          <Header />
-          <main className="flex-1">{children}</main>
-          <Footer />
+          <AuthProvider>
+            <ComparisonTrayProvider>
+              <Header />
+              <main className="flex-1">{children}</main>
+              <ComparisonTray />
+              <Footer />
+            </ComparisonTrayProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

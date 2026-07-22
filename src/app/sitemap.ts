@@ -2,6 +2,10 @@ import type { MetadataRoute } from 'next'
 import { getAllDevicePaths } from '@/lib/devices/queries'
 import { getAllArticlePaths } from '@/lib/articles/queries'
 
+// Excluded per M4 Step 15:
+// - /compare (dynamic user-generated URL)
+// - /auth/callback, /auth/error (auth flow routes)
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:3000'
 

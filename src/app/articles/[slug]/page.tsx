@@ -4,6 +4,9 @@ import Image from 'next/image'
 import { getArticle, getAllArticlePaths, getArticlesForDevice, getRecentArticles } from '@/lib/articles/queries'
 import { ArticleBody } from '@/components/articles/ArticleBody'
 import { ArticleCard } from '@/components/articles/ArticleCard'
+import CommentsSection from '@/components/community/CommentsSection'
+import { Suspense } from 'react'
+import CommentsSkeleton from '@/components/community/CommentsSkeleton'
 import type { Metadata } from 'next'
 
 export async function generateStaticParams() {
@@ -166,6 +169,11 @@ export default async function ArticleDetailPage({
           </div>
         </section>
       )}
+
+      {/* Comments */}
+      <Suspense fallback={<CommentsSkeleton />}>
+        <CommentsSection contentType="article" contentSlug={slug} />
+      </Suspense>
 
       {/* Schema.org JSON-LD */}
       <script

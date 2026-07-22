@@ -67,7 +67,7 @@ export async function getArticle(slug: string): Promise<Article | null> {
 
   const result = await payload.find({
     collection: 'articles',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     where: {
       slug: { equals: slug },
       status: { equals: 'published' },
@@ -152,7 +152,7 @@ export async function getArticlesForDevice(deviceSlug: string): Promise<Article[
 
   const result = await payload.find({
     collection: 'articles',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     where: {
       status: { equals: 'published' },
       associatedDevice: { equals: deviceId },

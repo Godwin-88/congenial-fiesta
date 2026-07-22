@@ -2,6 +2,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import type { Device, Brand } from '@/payload-types'
 import { ScoreBadge } from '@/components/devices/ScoreBadge'
+import AddToCompareButton from '@/components/devices/AddToCompareButton'
 
 interface DeviceCardProps {
   device: Device
@@ -61,13 +62,15 @@ export function DeviceCard({ device }: DeviceCardProps) {
           </p>
         )}
 
-        <button
-          disabled
-          className="mt-2 w-full rounded-lg border border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-          onClick={(e) => e.preventDefault()}
-        >
-          Add to Compare
-        </button>
+        <AddToCompareButton
+          device={{
+            slug: device.slug,
+            brandSlug: brand.slug,
+            name: device.name,
+            imageUrl: primaryImage?.url,
+            score: overallScore,
+          }}
+        />
       </div>
     </Link>
   )
