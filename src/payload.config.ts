@@ -575,6 +575,137 @@ export default buildConfig({
       },
       fields: [],
     },
+
+    // ── Sponsors (past brand partners showcase) ────────────
+    {
+      slug: 'sponsors',
+      admin: {
+        useAsTitle: 'companyName',
+        defaultColumns: ['companyName', 'active'],
+      },
+      fields: [
+        { name: 'companyName', type: 'text', required: true },
+        {
+          name: 'logo', type: 'text', required: true,
+          admin: { description: 'Cloudflare Images URL — use transparent PNG, min 300px wide' },
+        },
+        { name: 'website', type: 'text' },
+        {
+          name: 'associatedVideo', type: 'text',
+          admin: { description: 'YouTube video ID for the sponsored content' },
+        },
+        {
+          name: 'partnershipType', type: 'select',
+          options: ['shoutout', 'dedicated-video', 'full-campaign', 'product-seeding'],
+        },
+        {
+          name: 'displayOrder', type: 'number', defaultValue: 0,
+          admin: { description: 'Lower = shown first in logo grid' },
+        },
+        {
+          name: 'active', type: 'checkbox', defaultValue: true,
+          admin: { description: 'Uncheck to hide without deleting' },
+        },
+      ],
+    },
+
+    // ── Sponsorship Packages (three-tier cards) ────────────
+    {
+      slug: 'sponsorship-packages',
+      admin: {
+        useAsTitle: 'name',
+        defaultColumns: ['name', 'tier'],
+      },
+      fields: [
+        {
+          name: 'name', type: 'text', required: true,
+          admin: { description: 'e.g. "Shoutout" / "Dedicated Video" / "Full Campaign"' },
+        },
+        { name: 'tier', type: 'select', required: true, options: ['starter', 'pro', 'premium'] },
+        { name: 'description', type: 'textarea', required: true },
+        {
+          name: 'deliverables', type: 'array',
+          fields: [{ name: 'item', type: 'text', required: true }],
+        },
+        {
+          name: 'highlighted', type: 'checkbox', defaultValue: false,
+          admin: { description: 'Renders with brand accent border — use for recommended tier' },
+        },
+        { name: 'displayOrder', type: 'number', defaultValue: 0 },
+      ],
+    },
+
+    // ── Media Kit ─────────────────────────────────────────
+    {
+      slug: 'media-kit',
+      admin: {
+        useAsTitle: 'label',
+        defaultColumns: ['label', 'active'],
+      },
+      fields: [
+        {
+          name: 'label', type: 'text', required: true,
+          admin: { description: 'Internal label — not shown publicly' },
+        },
+        {
+          name: 'shortBio', type: 'textarea', required: true,
+          admin: { description: 'Max 100 words — shown on /press with Copy button' },
+        },
+        {
+          name: 'longBio', type: 'textarea', required: true,
+          admin: { description: 'Max 300 words — shown on /press with Copy button' },
+        },
+        {
+          name: 'totalFollowers', type: 'text',
+          admin: { description: 'e.g. "850K+" — manually updated' },
+        },
+        {
+          name: 'totalViews', type: 'text',
+          admin: { description: 'e.g. "12M+" — manually updated' },
+        },
+        { name: 'yearsActive', type: 'number' },
+        { name: 'youtubeFollowers', type: 'text' },
+        { name: 'tiktokFollowers', type: 'text' },
+        { name: 'instagramFollowers', type: 'text' },
+        { name: 'facebookFollowers', type: 'text' },
+        {
+          name: 'logoLight', type: 'text',
+          admin: { description: 'Cloudflare Images URL — light variant PNG' },
+        },
+        {
+          name: 'logoDark', type: 'text',
+          admin: { description: 'Cloudflare Images URL — dark variant PNG' },
+        },
+        {
+          name: 'logoSvgLight', type: 'text',
+          admin: { description: 'Cloudflare Images URL — light variant SVG' },
+        },
+        {
+          name: 'logoSvgDark', type: 'text',
+          admin: { description: 'Cloudflare Images URL — dark variant SVG' },
+        },
+        {
+          name: 'headshots', type: 'array', maxRows: 4,
+          fields: [
+            { name: 'url', type: 'text', required: true },
+            { name: 'label', type: 'text', admin: { description: 'e.g. "Studio headshot 2025"' } },
+          ],
+        },
+        {
+          name: 'brandColours', type: 'array',
+          fields: [
+            { name: 'name', type: 'text', required: true },
+            { name: 'hex', type: 'text', required: true },
+            { name: 'rgb', type: 'text' },
+            { name: 'cmyk', type: 'text' },
+          ],
+        },
+        {
+          name: 'active', type: 'checkbox', defaultValue: true,
+          admin: { description: 'Only one MediaKit record should be active at a time' },
+        },
+      ],
+    },
   ],
   db: postgresAdapter({
     pool: {

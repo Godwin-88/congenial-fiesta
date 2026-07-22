@@ -7,6 +7,7 @@ import Footer from "@/components/layout/Footer";
 import { AuthProvider } from "@/context/AuthContext";
 import { ComparisonTrayProvider } from "@/context/ComparisonTrayContext";
 import ComparisonTray from "@/components/compare/ComparisonTray";
+import PageViewBeacon from "@/components/analytics/PageViewBeacon";
 import "@/styles/globals.css";
 
 const ralewaySans = Raleway({
@@ -79,6 +80,7 @@ export default function RootLayout({
           <AuthProvider>
             <ComparisonTrayProvider>
               <Header />
+              <PageViewBeacon />
               <main className="flex-1">{children}</main>
               <ComparisonTray />
               <Footer />
