@@ -10,6 +10,8 @@ import ComparisonTray from "@/components/compare/ComparisonTray";
 import PageViewBeacon from "@/components/analytics/PageViewBeacon";
 import InstallPrompt from "@/components/pwa/InstallPrompt";
 import SkipLink from "@/components/a11y/SkipLink";
+import { ChatProvider } from "@/context/ChatContext";
+import ChatBubbleWrapper from "@/components/chat/ChatBubbleWrapper";
 import "@/styles/globals.css";
 
 const ralewaySans = Raleway({
@@ -115,12 +117,15 @@ export default function RootLayout({
         >
           <AuthProvider>
             <ComparisonTrayProvider>
-              <Header />
-              <PageViewBeacon />
-              <main id="main-content" className="flex-1">{children}</main>
-              <ComparisonTray />
-              <InstallPrompt />
-              <Footer />
+              <ChatProvider>
+                <Header />
+                <PageViewBeacon />
+                <main id="main-content" className="flex-1">{children}</main>
+                <ComparisonTray />
+                <InstallPrompt />
+                <ChatBubbleWrapper />
+                <Footer />
+              </ChatProvider>
             </ComparisonTrayProvider>
           </AuthProvider>
         </ThemeProvider>

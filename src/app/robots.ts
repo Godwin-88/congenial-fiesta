@@ -22,6 +22,7 @@ export default function robots(): MetadataRoute.Robots {
           '/api/',
           '/auth/',
           '/advertise',
+          '/chat',
           '/_next/',
           '/static/',
         ],
