@@ -1,13 +1,16 @@
 #!/usr/bin/env tsx
 
 import { config } from 'dotenv'
-import { getPayload } from 'payload'
-import payloadConfig from '@payload-config'
-import { seedBrands, seedDevices } from './devices'
 
+// Load .env.local BEFORE any other module imports
 config({ path: '.env.local' })
 
 async function run() {
+  // Dynamic import to ensure env vars are loaded first
+  const { getPayload } = await import('payload')
+  const payloadConfig = (await import('@payload-config')).default
+  const { seedBrands, seedDevices } = await import('./devices')
+
   const payload = await getPayload({ config: payloadConfig })
 
   console.log('🌱 Seeding database...')
@@ -52,26 +55,35 @@ async function run() {
       depth: 0,
     })
 
+    const deviceData = {
+      ...device,
+      brand: brandId,
+    }
+
     if (existing.docs.length > 0) {
       // Update existing
-      await payload.update({
-        collection: 'devices',
-        id: String(existing.docs[0].id),
-        data: {
-          ...device,
-          brand: brandId,
-        },
-      })
-      console.log(`  ✓ Updated device "${device.name}"`)
+      try {
+        const result = await payload.update({
+          collection: 'devices',
+          id: String(existing.docs[0].id),
+          data: deviceData,
+        })
+        console.log(`  ✓ Updated device "${device.name}" (id: ${result.id})`)
+      } catch (err: any) {
+        console.error(`  ✗ Failed to update device "${device.name}":`, JSON.stringify(err?.data?.errors ?? err?.message, null, 2))
+        throw err
+      }
     } else {
-      await payload.create({
-        collection: 'devices',
-        data: {
-          ...device,
-          brand: brandId,
-        },
-      })
-      console.log(`  ✓ Created device "${device.name}"`)
+      try {
+        const result = await payload.create({
+          collection: 'devices',
+          data: deviceData,
+        })
+        console.log(`  ✓ Created device "${device.name}" (id: ${result.id})`)
+      } catch (err: any) {
+        console.error(`  ✗ Failed to create device "${device.name}":`, JSON.stringify(err?.data?.errors ?? err?.message, null, 2))
+        throw err
+      }
     }
   }
 

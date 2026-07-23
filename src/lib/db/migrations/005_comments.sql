@@ -25,20 +25,27 @@ CREATE TABLE IF NOT EXISTS comment_votes (
 );
 
 ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Comments viewable by everyone" ON comments;
 CREATE POLICY "Comments viewable by everyone"
   ON comments FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Authenticated users can post comments" ON comments;
 CREATE POLICY "Authenticated users can post comments"
   ON comments FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can edit their own comments" ON comments;
 CREATE POLICY "Users can edit their own comments"
   ON comments FOR UPDATE
   USING (auth.uid() = user_id);
 
 ALTER TABLE comment_votes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Votes viewable by everyone" ON comment_votes;
 CREATE POLICY "Votes viewable by everyone"
   ON comment_votes FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Authenticated users can vote" ON comment_votes;
 CREATE POLICY "Authenticated users can vote"
   ON comment_votes FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can change their own vote" ON comment_votes;
 CREATE POLICY "Users can change their own vote"
   ON comment_votes FOR UPDATE USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can remove their own vote" ON comment_votes;
 CREATE POLICY "Users can remove their own vote"
   ON comment_votes FOR DELETE USING (auth.uid() = user_id);

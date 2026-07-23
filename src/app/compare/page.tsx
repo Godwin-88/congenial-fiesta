@@ -11,6 +11,7 @@ import CompareRadarChart from '@/components/compare/CompareRadarChart'
 import CompareSpecTable from '@/components/compare/CompareSpecTable'
 import CompareDevicePicker from '@/components/compare/CompareDevicePicker'
 import ShareComparisonButton from '@/components/compare/ShareComparisonButton'
+import SaveComparisonButton from '@/components/compare/SaveComparisonButton'
 
 interface PageProps {
   searchParams: Promise<{ devices: string }>
@@ -185,7 +186,8 @@ export default async function ComparePage({ searchParams }: PageProps) {
         </div>
       </section>
 
-      <div className="mt-8 flex justify-end">
+      <div className="mt-8 flex justify-end gap-3">
+        <SaveComparisonButton deviceSlugs={slugs} />
         <ShareComparisonButton />
       </div>
 

@@ -32,20 +32,27 @@ CREATE TABLE IF NOT EXISTS rating_votes (
 );
 
 ALTER TABLE device_ratings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Ratings viewable by everyone" ON device_ratings;
 CREATE POLICY "Ratings viewable by everyone"
   ON device_ratings FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Authenticated users can insert ratings" ON device_ratings;
 CREATE POLICY "Authenticated users can insert ratings"
   ON device_ratings FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can update their own ratings within 48h" ON device_ratings;
 CREATE POLICY "Users can update their own ratings within 48h"
   ON device_ratings FOR UPDATE
   USING (auth.uid() = user_id AND created_at > now() - interval '48 hours');
 
 ALTER TABLE rating_votes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Votes viewable by everyone" ON rating_votes;
 CREATE POLICY "Votes viewable by everyone"
   ON rating_votes FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Authenticated users can vote" ON rating_votes;
 CREATE POLICY "Authenticated users can vote"
   ON rating_votes FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can change their own vote" ON rating_votes;
 CREATE POLICY "Users can change their own vote"
   ON rating_votes FOR UPDATE USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can remove their own vote" ON rating_votes;
 CREATE POLICY "Users can remove their own vote"
   ON rating_votes FOR DELETE USING (auth.uid() = user_id);

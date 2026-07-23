@@ -1,11 +1,16 @@
-import { getPayload } from 'payload'
-import config from '@payload-config'
-import { indexDevice, indexArticle } from '@/lib/search/indexing'
+import { config } from 'dotenv'
+
+// Load .env.local BEFORE any other module imports
+config({ path: '.env.local' })
 
 async function reindexAll() {
+  const { getPayload } = await import('payload')
+  const payloadConfig = (await import('@payload-config')).default
+  const { indexDevice, indexArticle } = await import('@/lib/search/indexing')
+
   console.log('Starting reindex of all content into Upstash Search + Vector...\n')
 
-  const payload = await getPayload({ config })
+  const payload = await getPayload({ config: payloadConfig })
 
   // ── Index Devices ─────────────────────────────────────────
   console.log('Fetching published devices...')

@@ -30,7 +30,9 @@ CREATE TRIGGER on_auth_user_created
 
 -- RLS
 ALTER TABLE community_profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Profiles are viewable by everyone" ON community_profiles;
 CREATE POLICY "Profiles are viewable by everyone"
   ON community_profiles FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Users can update their own profile" ON community_profiles;
 CREATE POLICY "Users can update their own profile"
   ON community_profiles FOR UPDATE USING (auth.uid() = id);
