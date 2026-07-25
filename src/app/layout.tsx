@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Raleway } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import Header from "@/components/layout/Header";
@@ -86,11 +87,31 @@ export const viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Detect if we're on a Payload CMS admin route.
+  // The middleware sets x-pathname, but we also check the URL as a fallback.
+  let pathname = "";
+  try {
+    const headerList = await headers();
+    pathname = headerList.get("x-pathname") || "";
+  } catch {
+    // headers() may throw in some edge cases; fall back to empty string
+  }
+
+  const isPayloadAdmin =
+    pathname === "/admin" ||
+    (pathname.startsWith("/admin/") && !pathname.startsWith("/admin/analytics"));
+
+  // For Payload admin routes, skip the site wrapper entirely.
+  // Payload's own RootLayout in (payload)/layout.tsx provides <html>/<body>.
+  if (isPayloadAdmin) {
+    return <>{children}</>;
+  }
+
   return (
     <html
       lang="en"

@@ -5,8 +5,13 @@ import { createClient } from "@/lib/supabase/server"
 export async function updateSession(request: NextRequest) {
   const supabase = await createClient()
 
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-pathname', request.nextUrl.pathname)
+
   const response = NextResponse.next({
-    request,
+    request: {
+      headers: requestHeaders,
+    },
   })
 
   const {

@@ -39,6 +39,9 @@ export default function Footer() {
                 <Link href="/privacy" className="text-sm text-foreground/60 hover:text-foreground transition-colors">
                   Privacy Policy
                 </Link>
+                <Link href="/admin" className="text-sm text-foreground/40 hover:text-foreground transition-colors">
+                  Admin
+                </Link>
               </nav>
             </div>
 

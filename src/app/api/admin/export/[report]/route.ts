@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+export const dynamic = 'force-dynamic'
 import { getUser } from '@/lib/auth/actions'
 import {
   getPageViewsOverTime,

@@ -9,11 +9,11 @@ import SearchBar from "@/components/search/SearchBar"
 import AuthButton from "@/components/auth/AuthButton"
 
 const navLinks = [
-  { href: "/", label: "Home" },
+  { href: "/articles", label: "Articles" },
   { href: "/devices", label: "Devices" },
   { href: "/videos", label: "Videos" },
-  { href: "/articles", label: "Articles" },
   { href: "/about", label: "About" },
+  { href: "/advertise", label: "Advertise" },
 ]
 
 export default function Header() {

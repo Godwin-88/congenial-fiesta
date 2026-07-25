@@ -3,6 +3,7 @@ import { postgresAdapter } from '@payloadcms/db-postgres'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { adminOnly, adminOnlyField, adminOrEditor, adminOrSelf, authenticatedRead } from '@/lib/admin/access'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -22,6 +23,28 @@ if (!process.env.NEXT_PUBLIC_SERVER_URL) {
 export default buildConfig({
   admin: {
     user: 'users',
+
+    // Custom branding — replaces default Payload logo + name
+    meta: {
+      titleSuffix: '— FweezyTech CMS',
+    },
+    components: {
+      // Keep existing analytics nav link
+      afterNavLinks: ['@/components/admin/AnalyticsNavLink'],
+
+      // Custom dashboard that replaces the default blank screen
+      views: {
+        Dashboard: {
+          Component: '@/components/admin/Dashboard',
+        },
+      },
+
+      // Brand logo in the sidebar top-left
+      graphics: {
+        Logo: '@/components/admin/Logo',
+        Icon: '@/components/admin/Icon',
+      },
+    },
   },
   serverURL: process.env.NEXT_PUBLIC_SERVER_URL,
   collections: [
@@ -29,12 +52,44 @@ export default buildConfig({
     {
       slug: 'users',
       auth: true,
+      admin: {
+        useAsTitle: 'email',
+        defaultColumns: ['email', 'role', 'createdAt'],
+        description: 'CMS staff accounts. Admin role has full access. Editor can create and update content but cannot delete. Viewer is read-only.',
+        group: 'Settings',
+      },
+      access: {
+        create: adminOnly,
+        read: adminOrSelf,
+        update: adminOrSelf,
+        delete: adminOnly,
+      },
       fields: [
         {
           name: 'role',
           type: 'select',
-          options: ['admin', 'editor', 'viewer'],
+          options: [
+            { label: '👑 Admin — full access', value: 'admin' },
+            { label: '✏️ Editor — create and update', value: 'editor' },
+            { label: '👁️ Viewer — read only', value: 'viewer' },
+          ],
           defaultValue: 'viewer',
+          required: true,
+          admin: {
+            position: 'sidebar',
+            description: 'Controls what this user can do in the CMS.',
+          },
+          // Only admins can change roles
+          access: {
+            update: adminOnlyField,
+          },
+        },
+        {
+          name: 'displayName',
+          type: 'text',
+          admin: {
+            description: 'Name shown in the CMS dashboard greeting.',
+          },
         },
       ],
     },
@@ -43,8 +98,16 @@ export default buildConfig({
     {
       slug: 'brands',
       admin: {
+        group: 'Reviews',
         useAsTitle: 'name',
         defaultColumns: ['name', 'slug'],
+        description: 'Phone manufacturers and tech brands featured on the site',
+      },
+      access: {
+        create: adminOrEditor,
+        read: authenticatedRead,
+        update: adminOrEditor,
+        delete: adminOnly,
       },
       fields: [
         {
@@ -87,8 +150,33 @@ export default buildConfig({
     {
       slug: 'devices',
       admin: {
+        group: 'Reviews',
         useAsTitle: 'name',
-        defaultColumns: ['name', 'brand', 'status', 'releaseYear'],
+        defaultColumns: ['name', 'brand', 'category', 'status', 'scores.overall', 'releaseYear'],
+        description: 'Each device becomes a review page at /devices/{brand}/{slug}. Fill all spec groups for the best user experience.',
+
+        livePreview: {
+          url: ({ data }: { data: Record<string, unknown> }) => {
+            const brand = typeof data.brand === 'object' && data.brand ? (data.brand as Record<string, unknown>)?.slug as string : data.brand as string
+            return `${process.env.NEXT_PUBLIC_SERVER_URL}/devices/${brand}/${data.slug as string}`
+          },
+          breakpoints: [
+            { label: 'Mobile',  name: 'mobile',  width: 390,  height: 844 },
+            { label: 'Tablet',  name: 'tablet',  width: 768,  height: 1024 },
+            { label: 'Desktop', name: 'desktop', width: 1440, height: 900 },
+          ],
+        },
+
+        preview: (data: Record<string, unknown>) => {
+          const brand = typeof data.brand === 'object' && data.brand ? (data.brand as Record<string, unknown>)?.slug as string : data.brand as string
+          return `${process.env.NEXT_PUBLIC_SERVER_URL}/devices/${brand}/${data.slug as string}`
+        },
+      },
+      access: {
+        create: adminOrEditor,
+        read: authenticatedRead,
+        update: adminOrEditor,
+        delete: adminOnly,
       },
       hooks: {
         beforeChange: [
@@ -122,7 +210,16 @@ export default buildConfig({
       fields: [
         // ── Identity ──────────────────────────────────────
         { name: 'name', type: 'text', required: true },
-        { name: 'slug', type: 'text', required: true, unique: true },
+        {
+          name: 'slug',
+          type: 'text',
+          required: true,
+          unique: true,
+          admin: {
+            position: 'sidebar',
+            description: 'Auto-fill: lowercase, hyphens only. e.g. galaxy-s25-ultra',
+          },
+        },
         { name: 'brand', type: 'relationship', relationTo: 'brands', required: true },
         { name: 'releaseYear', type: 'number', required: true },
         {
@@ -145,17 +242,28 @@ export default buildConfig({
         {
           name: 'status',
           type: 'select',
-          options: ['draft', 'published'],
+          options: [
+            { label: '📝 Draft — not visible on site', value: 'draft' },
+            { label: '✅ Published — live on site', value: 'published' },
+          ],
           defaultValue: 'draft',
           required: true,
+          admin: {
+            description: 'Set to Published when the device page is ready for public viewing.',
+            position: 'sidebar',
+          },
         },
 
         // ── Images ────────────────────────────────────────
         {
           name: 'images',
           type: 'array',
+          label: '📸 Device Images',
           minRows: 1,
           maxRows: 10,
+          admin: {
+            description: 'Upload to Cloudflare Images first, then paste the URL here. Mark exactly ONE image as isPrimary — it powers the catalogue card and OG image.',
+          },
           fields: [
             { name: 'url', type: 'text', required: true, admin: { description: 'Cloudflare Images URL' } },
             { name: 'alt', type: 'text', required: true },
@@ -168,7 +276,10 @@ export default buildConfig({
         {
           name: 'scores',
           type: 'group',
-          label: 'Fweezy Score',
+          label: '⭐ Fweezy Score',
+          admin: {
+            description: 'Rate each dimension 0–10. The Overall score is computed automatically when you save.',
+          },
           fields: [
             { name: 'display', type: 'number', min: 0, max: 10, required: true },
             { name: 'performance', type: 'number', min: 0, max: 10, required: true },
@@ -332,8 +443,11 @@ export default buildConfig({
         {
           name: 'buyLinks',
           type: 'array',
-          label: 'Buy Links',
+          label: '🛒 Where to Buy',
           maxRows: 4,
+          admin: {
+            description: 'Add affiliate links. Always set priceDate so visitors know how current the price is.',
+          },
           fields: [
             {
               name: 'retailer',
@@ -356,7 +470,8 @@ export default buildConfig({
         {
           name: 'relatedVideo',
           type: 'text',
-          admin: { description: 'YouTube video ID e.g. dQw4w9WgXcQ' },
+          label: '▶️ YouTube Review Video ID',
+          admin: { description: 'Paste the YouTube video ID only (not the full URL). e.g. dQw4w9WgXcQ' },
         },
         {
           name: 'relatedTiktok',
@@ -368,7 +483,11 @@ export default buildConfig({
         {
           name: 'seo',
           type: 'group',
-          label: 'SEO',
+          label: '🔍 SEO',
+          admin: {
+            position: 'sidebar',
+            description: 'Leave blank to use auto-generated values. Only fill if you want to override the defaults.',
+          },
           fields: [
             { name: 'metaTitle', type: 'text' },
             { name: 'metaDescription', type: 'text' },
@@ -382,8 +501,16 @@ export default buildConfig({
     {
       slug: 'videos',
       admin: {
+        group: 'Content',
         useAsTitle: 'title',
-        defaultColumns: ['title', 'platform', 'publishedAt'],
+        defaultColumns: ['title', 'platform', 'featured', 'publishedAt', 'viewCount'],
+        description: 'Manually add TikTok, Instagram, and Facebook videos here. YouTube videos are auto-fetched from the channel — only add YouTube videos here if you want to feature them manually.',
+      },
+      access: {
+        create: adminOrEditor,
+        read: authenticatedRead,
+        update: adminOrEditor,
+        delete: adminOrEditor,
       },
       hooks: {
         afterChange: [
@@ -433,8 +560,28 @@ export default buildConfig({
     {
       slug: 'articles',
       admin: {
+        group: 'Content',
         useAsTitle: 'title',
-        defaultColumns: ['title', 'category', 'status', 'publishedAt'],
+        defaultColumns: ['title', 'category', 'status', 'publishedAt', 'readingTimeMinutes'],
+        description: 'Published articles appear at /articles/{slug} and are indexed for search automatically on save.',
+
+        livePreview: {
+          url: ({ data }) =>
+            `${process.env.NEXT_PUBLIC_SERVER_URL}/articles/${data.slug}`,
+          breakpoints: [
+            { label: 'Mobile',  name: 'mobile',  width: 390,  height: 844 },
+            { label: 'Desktop', name: 'desktop', width: 1440, height: 900 },
+          ],
+        },
+
+        preview: (data) =>
+          `${process.env.NEXT_PUBLIC_SERVER_URL}/articles/${data.slug}`,
+      },
+      access: {
+        create: adminOrEditor,
+        read: authenticatedRead,
+        update: adminOrEditor,
+        delete: adminOnly,
       },
       hooks: {
         beforeChange: [
@@ -463,7 +610,16 @@ export default buildConfig({
       },
       fields: [
         { name: 'title', type: 'text', required: true },
-        { name: 'slug', type: 'text', required: true, unique: true },
+        {
+          name: 'slug',
+          type: 'text',
+          required: true,
+          unique: true,
+          admin: {
+            position: 'sidebar',
+            description: 'URL path: /articles/{slug}',
+          },
+        },
         {
           name: 'excerpt',
           type: 'textarea',
@@ -474,7 +630,12 @@ export default buildConfig({
           type: 'text',
           admin: { description: 'Cloudflare Images URL' },
         },
-        { name: 'body', type: 'richText' },
+        {
+          name: 'body',
+          type: 'richText',
+          label: '✍️ Article Body',
+          admin: { description: 'Use the Pros/Cons block for verdict sections. Use the Buy Box block for affiliate links inside the article.' },
+        },
         {
           name: 'category',
           type: 'select',
@@ -489,18 +650,37 @@ export default buildConfig({
         {
           name: 'status',
           type: 'select',
-          options: ['draft', 'published'],
+          options: [
+            { label: '📝 Draft', value: 'draft' },
+            { label: '✅ Published', value: 'published' },
+          ],
           defaultValue: 'draft',
+          admin: { position: 'sidebar' },
         },
-        { name: 'publishedAt', type: 'date' },
+        {
+          name: 'publishedAt',
+          type: 'date',
+          admin: {
+            position: 'sidebar',
+            description: 'Set the publish date. Used for sorting and Schema.org.',
+          },
+        },
         {
           name: 'readingTimeMinutes',
           type: 'number',
-          admin: { description: 'Auto-computed — leave blank', readOnly: true },
+          admin: {
+            position: 'sidebar',
+            readOnly: true,
+            description: 'Auto-computed — leave blank',
+          },
         },
         {
           name: 'seo',
           type: 'group',
+          label: '🔍 SEO',
+          admin: {
+            position: 'sidebar',
+          },
           fields: [
             { name: 'metaTitle', type: 'text' },
             { name: 'metaDescription', type: 'text' },
@@ -513,8 +693,16 @@ export default buildConfig({
     {
       slug: 'coming-soon',
       admin: {
+        group: 'Content',
         useAsTitle: 'deviceName',
         defaultColumns: ['deviceName', 'expectedWeek', 'notifyCount'],
+        description: 'Tease upcoming devices before they launch — captures email notifications',
+      },
+      access: {
+        create: adminOrEditor,
+        read: authenticatedRead,
+        update: adminOrEditor,
+        delete: adminOrEditor,
       },
       fields: [
         {
@@ -542,27 +730,44 @@ export default buildConfig({
         {
           name: 'notifyEmails',
           type: 'array',
-          admin: { description: 'Auto-populated by email capture — do not edit manually' },
+          admin: {
+            description: 'Auto-populated — do not edit. View count in notifyCount field.',
+            readOnly: true,
+          },
+          access: {
+            read: adminOnlyField,
+            update: adminOnlyField,
+          },
           fields: [{ name: 'email', type: 'email' }],
         },
         {
           name: 'notifyCount',
           type: 'number',
           defaultValue: 0,
-          admin: { readOnly: true, description: 'Auto-computed count of notify signups' },
+          admin: {
+            position: 'sidebar',
+            readOnly: true,
+            description: 'Auto-computed count of notify signups',
+          },
         },
         {
           name: 'linkedDevice',
           type: 'relationship',
           relationTo: 'devices',
           hasMany: false,
-          admin: { description: 'Set this when the device is published — teaser auto-hides' },
+          admin: {
+            position: 'sidebar',
+            description: 'When you publish the device, set this relationship. The teaser card auto-hides.',
+          },
         },
         {
           name: 'active',
           type: 'checkbox',
           defaultValue: true,
-          admin: { description: 'Uncheck to hide without deleting' },
+          admin: {
+            position: 'sidebar',
+            description: 'Uncheck to hide without deleting',
+          },
         },
       ],
     },
@@ -570,6 +775,16 @@ export default buildConfig({
     // ── Media ─────────────────────────────────────────────
     {
       slug: 'media',
+      admin: {
+        group: 'Settings',
+        description: 'Upload and manage images and files used across the site',
+      },
+      access: {
+        create: adminOrEditor,
+        read: authenticatedRead,
+        update: adminOrEditor,
+        delete: adminOnly,
+      },
       upload: {
         staticDir: path.resolve(dirname, '../../public/media'),
       },
@@ -580,8 +795,16 @@ export default buildConfig({
     {
       slug: 'sponsors',
       admin: {
+        group: 'Brand',
         useAsTitle: 'companyName',
         defaultColumns: ['companyName', 'active'],
+        description: 'Past and current brand partners showcased on the site',
+      },
+      access: {
+        create: adminOnly,
+        read: authenticatedRead,
+        update: adminOnly,
+        delete: adminOnly,
       },
       fields: [
         { name: 'companyName', type: 'text', required: true },
@@ -613,8 +836,16 @@ export default buildConfig({
     {
       slug: 'sponsorship-packages',
       admin: {
+        group: 'Brand',
         useAsTitle: 'name',
         defaultColumns: ['name', 'tier'],
+        description: 'Three-tier pricing cards shown on the Advertise page',
+      },
+      access: {
+        create: adminOnly,
+        read: authenticatedRead,
+        update: adminOnly,
+        delete: adminOnly,
       },
       fields: [
         {
@@ -639,8 +870,16 @@ export default buildConfig({
     {
       slug: 'milestones',
       admin: {
+        group: 'Brand',
         useAsTitle: 'title',
         defaultColumns: ['year', 'title'],
+        description: 'Company timeline milestones shown on the About page',
+      },
+      access: {
+        create: adminOnly,
+        read: authenticatedRead,
+        update: adminOnly,
+        delete: adminOnly,
       },
       fields: [
         {
@@ -672,8 +911,16 @@ export default buildConfig({
     {
       slug: 'awards',
       admin: {
+        group: 'Brand',
         useAsTitle: 'awardName',
         defaultColumns: ['awardName', 'awardingBody', 'year'],
+        description: 'Awards and recognitions received by FweezyTech',
+      },
+      access: {
+        create: adminOnly,
+        read: authenticatedRead,
+        update: adminOnly,
+        delete: adminOnly,
       },
       fields: [
         {
@@ -711,8 +958,16 @@ export default buildConfig({
     {
       slug: 'media-kit',
       admin: {
+        group: 'Brand',
         useAsTitle: 'label',
         defaultColumns: ['label', 'active'],
+        description: 'Press kit content — bios, logos, headshots, and brand colours',
+      },
+      access: {
+        create: adminOnly,
+        read: authenticatedRead,
+        update: adminOnly,
+        delete: adminOnly,
       },
       fields: [
         {
@@ -782,8 +1037,9 @@ export default buildConfig({
   db: postgresAdapter({
     pool: {
       connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_URL?.includes('supabase') ? { rejectUnauthorized: false } : undefined,
     },
-    push: false,
+    push: true,
   }),
   editor: lexicalEditor({}),
   secret: process.env.PAYLOAD_SECRET,
