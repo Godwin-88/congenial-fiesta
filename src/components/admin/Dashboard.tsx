@@ -25,7 +25,6 @@ export default function Dashboard() {
   const todayTip = TIPS[new Date().getDay()]
 
   useEffect(() => {
-    // Fetch current user from Payload REST API
     fetch('/api/users/me', { credentials: 'include' })
       .then(r => r.json())
       .then(data => {
@@ -34,7 +33,6 @@ export default function Dashboard() {
       })
       .catch(() => {})
 
-    // Fetch draft counts
     fetch('/api/devices?where[status][equals]=draft&limit=0', { credentials: 'include' })
       .then(r => r.json())
       .then(data => setDraftDevices(data?.totalDocs ?? 0))
@@ -56,10 +54,10 @@ export default function Dashboard() {
 
       {/* Greeting */}
       <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#F9FAFB', margin: 0 }}>
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--theme-elevation-800)', margin: 0 }}>
           {greeting}{displayName ? `, ${displayName}` : ''}! 👋
         </h1>
-        <p style={{ color: '#9CA3AF', marginTop: 4 }}>
+        <p style={{ color: 'var(--theme-elevation-500)', marginTop: 4 }}>
           Welcome to the FweezyTech CMS. Here's what needs attention today.
         </p>
       </div>
@@ -67,7 +65,7 @@ export default function Dashboard() {
       {/* Quick Actions */}
       <div style={{ marginBottom: '2rem' }}>
         <h2 style={{
-          fontSize: '1rem', fontWeight: 600, color: '#9CA3AF',
+          fontSize: '1rem', fontWeight: 600, color: 'var(--theme-elevation-500)',
           textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem',
         }}>
           Quick Actions
@@ -82,21 +80,21 @@ export default function Dashboard() {
             <Link key={action.href} href={action.href} style={{
               display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
               padding: '1rem 1.25rem',
-              background: '#1F2937',
-              border: '1px solid #374151',
+              background: 'var(--theme-elevation-50)',
+              border: '1px solid var(--theme-elevation-150)',
               borderRadius: 10,
               textDecoration: 'none',
               transition: 'border-color 0.15s',
             }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = '#0066FF' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#374151' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--theme-elevation-150)' }}
             >
               <span style={{ fontSize: '1.5rem' }}>{action.emoji}</span>
               <div>
-                <div style={{ fontWeight: 600, color: '#F9FAFB', fontSize: '0.95rem' }}>
+                <div style={{ fontWeight: 600, color: 'var(--theme-elevation-800)', fontSize: '0.95rem' }}>
                   {action.label}
                 </div>
-                <div style={{ color: '#9CA3AF', fontSize: '0.8rem', marginTop: 2 }}>
+                <div style={{ color: 'var(--theme-elevation-500)', fontSize: '0.8rem', marginTop: 2 }}>
                   {action.sub}
                 </div>
               </div>
@@ -108,7 +106,7 @@ export default function Dashboard() {
       {/* Status Summary */}
       <div style={{ marginBottom: '2rem' }}>
         <h2 style={{
-          fontSize: '1rem', fontWeight: 600, color: '#9CA3AF',
+          fontSize: '1rem', fontWeight: 600, color: 'var(--theme-elevation-500)',
           textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem',
         }}>
           Content Status
@@ -122,16 +120,16 @@ export default function Dashboard() {
             <Link key={item.label} href={item.href} style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
               padding: '0.5rem 1rem',
-              background: item.count && item.count > 0 ? 'rgba(245,158,11,0.15)' : '#1F2937',
-              border: `1px solid ${item.count && item.count > 0 ? '#F59E0B' : '#374151'}`,
+              background: item.count && item.count > 0 ? 'color-mix(in srgb, var(--theme-warning) 15%, transparent)' : 'var(--theme-elevation-50)',
+              border: `1px solid ${item.count && item.count > 0 ? 'var(--theme-warning)' : 'var(--theme-elevation-150)'}`,
               borderRadius: 999,
               textDecoration: 'none',
-              color: item.count && item.count > 0 ? '#F59E0B' : '#9CA3AF',
+              color: item.count && item.count > 0 ? 'var(--theme-warning)' : 'var(--theme-elevation-500)',
               fontSize: '0.85rem', fontWeight: 500,
             }}>
               <span style={{
-                background: item.count && item.count > 0 ? '#F59E0B' : '#374151',
-                color: item.count && item.count > 0 ? '#111827' : '#F9FAFB',
+                background: item.count && item.count > 0 ? 'var(--theme-warning)' : 'var(--theme-elevation-150)',
+                color: item.count && item.count > 0 ? '#111827' : 'var(--theme-elevation-800)',
                 borderRadius: 999, padding: '0 6px', fontSize: '0.75rem', fontWeight: 700,
                 minWidth: 20, textAlign: 'center',
               }}>
@@ -146,10 +144,10 @@ export default function Dashboard() {
       {/* Daily Tip */}
       <div style={{
         padding: '1rem 1.25rem',
-        background: 'rgba(0,102,255,0.08)',
-        border: '1px solid rgba(0,102,255,0.25)',
+        background: 'color-mix(in srgb, #0066FF 8%, transparent)',
+        border: '1px solid color-mix(in srgb, #0066FF 25%, transparent)',
         borderRadius: 10,
-        color: '#93C5FD',
+        color: 'var(--theme-elevation-600)',
         fontSize: '0.875rem',
       }}>
         {todayTip}

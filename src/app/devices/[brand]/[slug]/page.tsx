@@ -1,9 +1,9 @@
 import { notFound } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
+import Script from 'next/script'
 import type { Metadata } from 'next'
 import { getAllDevicePaths, getDevice } from '@/lib/devices/queries'
-import type { Brand } from '@/payload-types'
 import { ScoreBadge } from '@/components/devices/ScoreBadge'
 import { RadarChart } from '@/components/devices/RadarChart'
 import { SpecTable } from '@/components/devices/SpecTable'
@@ -24,6 +24,11 @@ export async function generateStaticParams() {
   return getAllDevicePaths()
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toOld(d: any): any {
+  return d
+}
+
 export async function generateMetadata({
   params,
 }: DeviceDetailPageProps): Promise<Metadata> {
@@ -31,11 +36,23 @@ export async function generateMetadata({
   const device = await getDevice(brand, slug)
   if (!device) return { title: 'Device Not Found | FweezyTech' }
 
-  const brandData = device.brand as Brand
-  const metaTitle = device.seo?.metaTitle ?? `${device.name} Review & Full Specs | FweezyTech`
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = device as any
+  const brandData = d.brand as Record<string, unknown>
+  const dName = String(d.name ?? '')
+  const dScore = Number(d.score_overall ?? 0)
+  const metaTitle = d.seo_title ? String(d.seo_title) : `${dName} Review & Full Specs | FweezyTech`
   const metaDescription =
-    device.seo?.metaDescription ??
-    `In-depth ${device.name} review by Fweezy. Score: ${device.scores?.overall ?? 'N/A'}/100. Full specs, benchmarks, pros & cons, and best prices in Kenya.`
+    d.seo_description
+      ? String(d.seo_description)
+      : `In-depth ${dName} review by Fweezy. Score: ${dScore}/100. Full specs, benchmarks, pros & cons, and best prices in Kenya.`
+
+  const ogImages: Array<{ url: string }> = []
+  if (d.seo_og_image) {
+    ogImages.push({ url: String(d.seo_og_image) })
+  } else if (d.images?.[0]) {
+    ogImages.push({ url: String(d.images[0].url) })
+  }
 
   return {
     title: metaTitle,
@@ -43,11 +60,7 @@ export async function generateMetadata({
     openGraph: {
       title: metaTitle,
       description: metaDescription,
-      images: device.seo?.ogImageUrl
-        ? [{ url: device.seo.ogImageUrl }]
-        : device.images?.[0]
-          ? [{ url: device.images[0].url }]
-          : [],
+      images: ogImages,
     },
     twitter: {
       card: 'summary_large_image',
@@ -64,20 +77,43 @@ export default async function DeviceDetailPage({
   const device = await getDevice(brandSlug, slug)
   if (!device) notFound()
 
-  const brandData = device.brand as Brand
-  const overallScore = device.scores?.overall ?? 0
-  const primaryImage = device.images?.find((img) => img.isPrimary) ?? device.images?.[0]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = device as any
+  const brandData = d.brand as Record<string, unknown>
+  const overallScore = Number(d.score_overall ?? 0)
+  const images = d.images as Array<Record<string, unknown>> | undefined
+  const primaryImage = images?.find((img: any) => img.isPrimary) ?? images?.[0]
+  const dName = String(d.name ?? '')
+  const dSlug = String(d.slug ?? '')
+  const dCategory = String(d.category ?? '')
+  const dPriceKES = Number(d.price_kes ?? 0)
+  const dPriceUSD = Number(d.price_usd ?? 0)
+  const dReleaseYear = String(d.release_year ?? '')
+  const dScoreDisplay = Number(d.score_display ?? 0)
+  const dScorePerformance = Number(d.score_performance ?? 0)
+  const dScoreCamera = Number(d.score_camera ?? 0)
+  const dScoreBattery = Number(d.score_battery ?? 0)
+  const dScoreValue = Number(d.score_value ?? 0)
+  const dBuyLinks = d.buy_links as Array<Record<string, unknown>> | undefined
+  const dSpecsDesign = d.specs_design as Record<string, unknown> | undefined
+  const dSpecsDisplay = d.specs_display as Record<string, unknown> | undefined
+  const dSpecsProcessor = d.specs_processor as Record<string, unknown> | undefined
+  const dSpecsMemory = d.specs_memory as Record<string, unknown> | undefined
+  const dSpecsCamera = d.specs_camera as Record<string, unknown> | undefined
+  const dSpecsBattery = d.specs_battery as Record<string, unknown> | undefined
+  const dRelatedVideoId = String(d.related_video_id ?? '')
+  const dRelatedTiktokUrl = String(d.related_tiktok_url ?? '')
+
   const hasBenchmarks =
-    device.benchmarks &&
-    Object.values(device.benchmarks).some((v) => v !== null && v !== undefined && v > 0)
+    d.benchmark_geekbench_single || d.benchmark_geekbench_multi || d.benchmark_antutu || d.benchmark_pcmark
 
   const schemaOrg = {
     '@context': 'https://schema.org',
     '@type': 'Product',
-    name: device.name,
-    description: device.seo?.metaDescription ?? device.tagline ?? '',
-    brand: { '@type': 'Brand', name: brandData.name },
-    image: primaryImage?.url ?? '',
+    name: dName,
+    description: d.seo_description ? String(d.seo_description) : (d.tagline ? String(d.tagline) : ''),
+    brand: { '@type': 'Brand', name: brandData.name ?? '' },
+    image: primaryImage?.url ? String(primaryImage.url) : '',
     review: {
       '@type': 'Review',
       author: { '@type': 'Person', name: 'Fweezy' },
@@ -98,9 +134,9 @@ export default async function DeviceDetailPage({
           <li aria-hidden="true">›</li>
           <li><Link href="/devices" className="hover:text-foreground">Devices</Link></li>
           <li aria-hidden="true">›</li>
-          <li>{brandData.name}</li>
+          <li>{String(brandData.name ?? '')}</li>
           <li aria-hidden="true">›</li>
-          <li className="text-foreground">{device.name}</li>
+          <li className="text-foreground">{dName}</li>
         </ol>
       </nav>
 
@@ -111,8 +147,8 @@ export default async function DeviceDetailPage({
           <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-muted">
             {primaryImage ? (
               <Image
-                src={primaryImage.url}
-                alt={primaryImage.alt}
+                src={String(primaryImage.url)}
+                alt={String(primaryImage.alt)}
                 fill
                 priority
                 sizes="(max-width: 1024px) 100vw, 50vw"
@@ -124,9 +160,9 @@ export default async function DeviceDetailPage({
               </div>
             )}
           </div>
-          {device.images && device.images.length > 1 && (
+          {images && images.length > 1 && (
             <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
-              {device.images.map((img, i) => (
+              {images.map((img: any, i: number) => (
                 <div
                   key={i}
                   className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 ${
@@ -134,8 +170,8 @@ export default async function DeviceDetailPage({
                   }`}
                 >
                   <Image
-                    src={img.url}
-                    alt={img.alt}
+                    src={String(img.url)}
+                    alt={String(img.alt)}
                     fill
                     sizes="64px"
                     className="object-contain p-1"
@@ -150,33 +186,33 @@ export default async function DeviceDetailPage({
         <div className="space-y-6">
           <div>
             <h1 className="font-heading text-3xl font-bold text-foreground lg:text-4xl">
-              {device.name}
+              {dName}
             </h1>
             <p className="mt-2 text-lg text-muted-foreground">
-              {brandData.name} &middot; Released {device.releaseYear}
+              {String(brandData.name ?? '')} &middot; Released {dReleaseYear}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <span className="rounded-full bg-muted px-3 py-1 text-sm font-medium capitalize text-muted-foreground">
-              {device.category}
+              {dCategory}
             </span>
-            {device.priceKES && (
+            {dPriceKES > 0 && (
               <span className="text-xl font-bold text-foreground">
-                KES {device.priceKES.toLocaleString()}
+                KES {dPriceKES.toLocaleString()}
               </span>
             )}
-            {device.priceUSD && (
+            {dPriceUSD > 0 && (
               <span className="text-sm text-muted-foreground">
-                (~${device.priceUSD.toLocaleString()})
+                (~${dPriceUSD.toLocaleString()})
               </span>
             )}
           </div>
 
           <BuyBox
-            buyLinks={device.buyLinks}
-            deviceName={device.name}
-            deviceSlug={device.slug}
+            buyLinks={dBuyLinks}
+            deviceName={dName}
+            deviceSlug={dSlug}
           />
 
           <div className="flex items-center gap-4">
@@ -189,27 +225,34 @@ export default async function DeviceDetailPage({
 
           <RadarChart
             scores={{
-              display: device.scores?.display ?? 0,
-              performance: device.scores?.performance ?? 0,
-              camera: device.scores?.camera ?? 0,
-              battery: device.scores?.battery ?? 0,
-              value: device.scores?.value ?? 0,
+              display: dScoreDisplay,
+              performance: dScorePerformance,
+              camera: dScoreCamera,
+              battery: dScoreBattery,
+              value: dScoreValue,
             }}
           />
 
-          <VerdictBlock verdict={device.verdict} />
+          <VerdictBlock
+            verdict={{
+              pros: d.verdict_pros ?? [],
+              cons: d.verdict_cons ?? [],
+              bottomLine: d.verdict_bottom_line ?? null,
+              fullVerdict: d.verdict_full ?? null,
+            }}
+          />
         </div>
       </div>
 
       {/* Quick specs strip */}
       <div className="mt-12 flex flex-wrap gap-4 rounded-xl border border-border bg-card p-4">
         {[
-          { icon: '📱', label: 'Display', value: device.specsDisplay?.size },
-          { icon: '⚡', label: 'Chipset', value: device.specsProcessor?.chipset },
-          { icon: '📷', label: 'Camera', value: device.specsCamera?.mainCamera?.split(' ')[0] },
-          { icon: '🔋', label: 'Battery', value: device.specsBattery?.capacity },
-          { icon: '💾', label: 'RAM', value: device.specsMemory?.ram?.split(' ')[0] },
-          { icon: '🛡️', label: 'Protection', value: device.specsDesign?.waterResistance },
+          { icon: '📱', label: 'Display', value: dSpecsDisplay?.size },
+          { icon: '⚡', label: 'Chipset', value: dSpecsProcessor?.chipset },
+          { icon: '📷', label: 'Camera', value: dSpecsCamera?.mainCamera?.toString().split(' ')[0] },
+          { icon: '🔋', label: 'Battery', value: dSpecsBattery?.capacity },
+          { icon: '💾', label: 'RAM', value: dSpecsMemory?.ram?.toString().split(' ')[0] },
+          { icon: '🛡️', label: 'Protection', value: dSpecsDesign?.waterResistance },
         ]
           .filter((s) => s.value)
           .map((spec) => (
@@ -219,20 +262,20 @@ export default async function DeviceDetailPage({
             >
               <span className="text-lg">{spec.icon}</span>
               <span className="mt-1 text-xs text-muted-foreground">{spec.label}</span>
-              <span className="text-sm font-semibold text-foreground">{spec.value}</span>
+              <span className="text-sm font-semibold text-foreground">{String(spec.value)}</span>
             </div>
           ))}
       </div>
 
       {/* Full Verdict */}
-      {device.verdict?.fullVerdict && (
+      {d.verdict_full && (
         <section className="mt-12">
           <div className="rounded-xl border-l-4 border-brand-primary bg-card p-6">
             <h2 className="mb-4 font-heading text-xl font-bold text-foreground">
               Fweezy's Full Verdict
             </h2>
             <div className="prose prose-sm dark:prose-invert max-w-none text-foreground/80">
-              {JSON.stringify(device.verdict.fullVerdict)}
+              {d.verdict_full}
             </div>
           </div>
         </section>
@@ -243,7 +286,7 @@ export default async function DeviceDetailPage({
         <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">
           Full Specifications
         </h2>
-        <SpecTable device={device} />
+        <SpecTable device={d} />
       </section>
 
       {/* Benchmarks */}
@@ -253,23 +296,30 @@ export default async function DeviceDetailPage({
             Performance Benchmarks
           </h2>
           <div className="rounded-xl border border-border bg-card p-6">
-            <BenchmarkChart benchmarks={device.benchmarks ?? null} />
+            <BenchmarkChart
+              benchmarks={{
+                geekbenchSingle: d.benchmark_geekbench_single ?? null,
+                geekbenchMulti: d.benchmark_geekbench_multi ?? null,
+                antutu: d.benchmark_antutu ?? null,
+                pcmark: d.benchmark_pcmark ?? null,
+              }}
+            />
           </div>
         </section>
       )}
 
       {/* Video Review */}
-      {(device.relatedVideo || device.relatedTiktok) && (
+      {(dRelatedVideoId || dRelatedTiktokUrl) && (
         <section className="mt-12">
           <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">
             Fweezy's Video Review
           </h2>
           <div className="space-y-6">
-            {device.relatedVideo && (
+            {dRelatedVideoId && (
               <div className="aspect-video w-full overflow-hidden rounded-xl">
                 <iframe
-                  src={`https://www.youtube.com/embed/${device.relatedVideo}`}
-                  title={`${device.name} Review by Fweezy`}
+                  src={`https://www.youtube.com/embed/${dRelatedVideoId}`}
+                  title={`${dName} Review by Fweezy`}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
                   className="h-full w-full"
@@ -277,11 +327,11 @@ export default async function DeviceDetailPage({
                 />
               </div>
             )}
-            {device.relatedTiktok && (
+            {dRelatedTiktokUrl && (
               <div>
-                <blockquote className="tiktok-embed" cite={device.relatedTiktok}>
+                <blockquote className="tiktok-embed" cite={dRelatedTiktokUrl}>
                   <section>
-                    <a target="_blank" rel="noopener" href={device.relatedTiktok}>
+                    <a target="_blank" rel="noopener" href={dRelatedTiktokUrl}>
                       View on TikTok
                     </a>
                   </section>
@@ -293,15 +343,15 @@ export default async function DeviceDetailPage({
       )}
 
       <Suspense fallback={<RatingsSkeleton />}>
-        <RatingsSection deviceSlug={device.slug} deviceName={device.name} />
+        <RatingsSection deviceSlug={dSlug} deviceName={dName} />
       </Suspense>
 
       <Suspense fallback={<CommentsSkeleton />}>
-        <CommentsSection contentType="device" contentSlug={device.slug} />
+        <CommentsSection contentType="device" contentSlug={dSlug} />
       </Suspense>
 
       {/* Schema.org JSON-LD */}
-      <script
+      <Script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaOrg) }}
       />

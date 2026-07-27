@@ -1,7 +1,9 @@
-import type { Device } from '@/payload-types'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type VerdictDevice = any
 
 interface VerdictBlockProps {
-  verdict: Device['verdict']
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  verdict: any
 }
 
 export function VerdictBlock({ verdict }: VerdictBlockProps) {
@@ -34,7 +36,7 @@ export function VerdictBlock({ verdict }: VerdictBlockProps) {
               Pros
             </h4>
             <ul className="space-y-1.5">
-              {verdict.pros!.map((pro, i) => (
+              {verdict.pros!.map((pro: any, i: number) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-foreground">
                   <span className="mt-0.5 text-score-high">✓</span>
                   {pro.point}
@@ -57,7 +59,7 @@ export function VerdictBlock({ verdict }: VerdictBlockProps) {
               Cons
             </h4>
             <ul className="space-y-1.5">
-              {verdict.cons!.map((con, i) => (
+              {verdict.cons!.map((con: any, i: number) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-foreground">
                   <span className="mt-0.5 text-score-low">✗</span>
                   {con.point}

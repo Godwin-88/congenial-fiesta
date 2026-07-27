@@ -1,15 +1,23 @@
-import { getPayload } from 'payload'
-import config from '@payload-config'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
 import { redis } from '@/lib/upstash/redis'
-import type { Device, Brand } from '@/payload-types'
+import type { Device, Brand } from '@/types/cms'
+import { mapDevice } from '@/types/cms'
 
-function safeJsonParse<T>(data: unknown): T | null {
-  if (!data || typeof data !== 'string') return null
-  try {
-    return JSON.parse(data) as T
-  } catch {
-    return null
-  }
+function getSupabase() {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll: async () => (await cookies()).getAll(), setAll: () => {} } }
+  )
+}
+
+function getPublicSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  )
 }
 
 type GetDevicesParams = {
@@ -25,48 +33,42 @@ export async function getDevices(
   const { brand, category, page = 1, limit = 12 } = params
 
   const cacheKey = `devices:list:${brand ?? ''}:${category ?? ''}:${page}`
-  const cached = await redis.get(cacheKey)
-  const parsed = safeJsonParse<{ devices: Device[]; totalPages: number }>(cached)
-  if (parsed) return parsed
+  const cached = await redis.get(cacheKey).catch(() => null)
+  if (cached) return JSON.parse(cached as string)
 
-  const payload = await getPayload({ config })
+  const supabase = getSupabase()
+  const offset = (page - 1) * limit
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: Record<string, any> = {
-    status: { equals: 'published' },
-  }
+  let query = supabase
+    .from('devices')
+    .select('*, brand:brands(*)', { count: 'exact' })
+    .eq('status', 'published')
+    .order('release_year', { ascending: false })
+    .range(offset, offset + limit - 1)
+
+  if (category) query = query.eq('category', category)
   if (brand) {
-    const brandDocs = await payload.find({
-      collection: 'brands',
-      where: { slug: { equals: brand } },
-      limit: 1,
-      depth: 0,
-    })
-    if (brandDocs.docs.length > 0) {
-      where.brand = { equals: brandDocs.docs[0].id }
-    }
-  }
-  if (category) {
-    where.category = { equals: category }
+    const { data: brandData } = await supabase
+      .from('brands')
+      .select('id')
+      .eq('slug', brand)
+      .single()
+    if (brandData) query = query.eq('brand_id', brandData.id)
   }
 
-  const result = await payload.find({
-    collection: 'devices',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    where: where as any,
-    page,
-    limit,
-    sort: '-releaseYear',
-    depth: 2,
-  })
-
-  const output = {
-    devices: result.docs as unknown as Device[],
-    totalPages: result.totalPages,
+  const { data, error, count } = await query
+  if (error) {
+    console.error('getDevices error:', error)
+    return { devices: [], totalPages: 0 }
   }
 
-  await redis.setex(cacheKey, 300, JSON.stringify(output))
-  return output
+  const result = {
+    devices: data?.map(mapDevice) ?? [],
+    totalPages: Math.ceil((count ?? 0) / limit),
+  }
+
+  await redis.setex(cacheKey, 300, JSON.stringify(result))
+  return result
 }
 
 export async function getDevice(
@@ -74,172 +76,190 @@ export async function getDevice(
   deviceSlug: string,
 ): Promise<Device | null> {
   const cacheKey = `devices:detail:${brandSlug}:${deviceSlug}`
-  const cached = await redis.get(cacheKey)
-  const parsed = safeJsonParse<Device>(cached)
-  if (parsed) return parsed
-
-  const payload = await getPayload({ config })
-
-  const brandDocs = await payload.find({
-    collection: 'brands',
-    where: { slug: { equals: brandSlug } },
-    limit: 1,
-    depth: 0,
-  })
-  if (brandDocs.docs.length === 0) return null
-
-  const devices = await payload.find({
-    collection: 'devices',
-     
-    where: {
-      slug: { equals: deviceSlug },
-      brand: { equals: brandDocs.docs[0].id },
-      status: { equals: 'published' },
-    } as any,
-    limit: 1,
-    depth: 2,
-  })
-
-  const device = (devices.docs[0] ?? null) as unknown as Device | null
-  if (device) {
-    await redis.setex(cacheKey, 600, JSON.stringify(device))
+  const cached = await redis.get(cacheKey).catch(() => null)
+  if (cached) {
+    try {
+      return JSON.parse(cached as string)
+    } catch {
+      return null
+    }
   }
-  return device
+
+  try {
+    const supabase = getSupabase()
+
+    const { data: brandData } = await supabase
+      .from('brands')
+      .select('id')
+      .eq('slug', brandSlug)
+      .single()
+
+    if (!brandData) return null
+
+    const { data, error } = await supabase
+      .from('devices')
+      .select('*, brand:brands(*)')
+      .eq('slug', deviceSlug)
+      .eq('brand_id', brandData.id)
+      .eq('status', 'published')
+      .single()
+
+    if (error || !data) return null
+
+    const device = mapDevice(data)
+    await redis.setex(cacheKey, 600, JSON.stringify(device))
+    return device
+  } catch {
+    return null
+  }
 }
 
 export async function getAllDevicePaths(): Promise<
   Array<{ brand: string; slug: string }>
 > {
   const cacheKey = 'devices:static-params'
-  const cached = await redis.get(cacheKey)
-  const parsed = safeJsonParse<Array<{ brand: string; slug: string }>>(cached)
-  if (parsed) return parsed
+  const cached = await redis.get(cacheKey).catch(() => null)
+  if (cached) {
+    try {
+      return JSON.parse(cached as string)
+    } catch {
+      // stale cache, fall through
+    }
+  }
 
-  const payload = await getPayload({ config })
+  try {
+    const supabase = getSupabase()
+    const { data, error } = await supabase
+      .from('devices')
+      .select('slug, brand:brands(slug)')
+      .eq('status', 'published')
 
-  const devices = await payload.find({
-    collection: 'devices',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    where: { status: { equals: 'published' } } as any,
-    limit: 500,
-    depth: 1,
-  })
+    if (error) {
+      console.error('getAllDevicePaths error:', error)
+      return []
+    }
 
-  const paths = (devices.docs as unknown as Device[]).map((d) => {
-    const brandSlug =
-      typeof d.brand === 'object' && d.brand !== null
-        ? (d.brand as Brand).slug
-        : ''
-    return { brand: brandSlug, slug: d.slug }
-  })
+    const paths = (data ?? []).map((d: Record<string, unknown>) => {
+      const brand = d.brand as { slug: string } | null
+      return { brand: brand?.slug ?? '', slug: d.slug as string }
+    })
 
-  await redis.setex(cacheKey, 3600, JSON.stringify(paths))
-  return paths
+    await redis.setex(cacheKey, 3600, JSON.stringify(paths))
+    return paths
+  } catch {
+    return []
+  }
 }
 
 export async function getTopDevices(limit: number = 6): Promise<Device[]> {
   const cacheKey = `devices:top:${limit}`
-  const cached = await redis.get(cacheKey)
-  const parsed = safeJsonParse<Device[]>(cached)
-  if (parsed) return parsed
+  const cached = await redis.get(cacheKey).catch(() => null)
+  if (cached) return JSON.parse(cached as string)
 
-  const payload = await getPayload({ config })
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from('devices')
+    .select('*, brand:brands(*)')
+    .eq('status', 'published')
+    .order('score_overall', { ascending: false })
+    .limit(limit)
 
-  const result = await payload.find({
-    collection: 'devices',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    where: { status: { equals: 'published' } } as any,
-    sort: '-scores.overall',
-    limit,
-    depth: 2,
-  })
+  if (error) {
+    console.error('getTopDevices error:', error)
+    return []
+  }
 
-  const devices = result.docs as unknown as Device[]
+  const devices = data?.map(mapDevice) ?? []
   await redis.setex(cacheKey, 600, JSON.stringify(devices))
   return devices
 }
 
 export async function searchDevices(query: string): Promise<Device[]> {
-  const payload = await getPayload({ config })
+  const supabase = getSupabase()
+  const { data } = await supabase
+    .from('devices')
+    .select('*, brand:brands(*)')
+    .eq('status', 'published')
+    .ilike('name', `%${query}%`)
+    .limit(20)
 
-  const result = await payload.find({
-    collection: 'devices',
-     
-    where: {
-      status: { equals: 'published' },
-      name: { contains: query },
-    } as any,
-    limit: 20,
-    depth: 2,
-  })
-
-  return result.docs as unknown as Device[]
+  return data?.map(mapDevice) ?? []
 }
 
 export async function getDeviceBySlug(deviceSlug: string): Promise<Device | null> {
   const cacheKey = `devices:slug:${deviceSlug}`
-  const cached = await redis.get(cacheKey)
-  const parsed = safeJsonParse<Device>(cached)
-  if (parsed) return parsed
-
-  const payload = await getPayload({ config })
-
-  const devices = await payload.find({
-    collection: 'devices',
-     
-    where: {
-      slug: { equals: deviceSlug },
-      status: { equals: 'published' },
-    } as any,
-    limit: 1,
-    depth: 2,
-  })
-
-  const device = (devices.docs[0] ?? null) as unknown as Device | null
-  if (device) {
-    await redis.setex(cacheKey, 600, JSON.stringify(device))
+  const cached = await redis.get(cacheKey).catch(() => null)
+  if (cached) {
+    try {
+      return JSON.parse(cached as string)
+    } catch {
+      return null
+    }
   }
-  return device
+
+  try {
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from('devices')
+    .select('*, brand:brands(*)')
+    .eq('slug', deviceSlug)
+    .eq('status', 'published')
+    .single()
+
+  if (error) {
+    console.error('getDeviceBySlug error:', error)
+    return null
+  }
+
+  if (!data) return null
+
+    const device = mapDevice(data)
+    await redis.setex(cacheKey, 600, JSON.stringify(device))
+    return device
+  } catch {
+    return null
+  }
 }
 
 export async function getAllBrands(): Promise<Brand[]> {
   const cacheKey = 'brands:all'
-  const cached = await redis.get(cacheKey)
-  const parsed = safeJsonParse<Brand[]>(cached)
-  if (parsed) return parsed
+  const cached = await redis.get(cacheKey).catch(() => null)
+  if (cached) return JSON.parse(cached as string)
 
-  const payload = await getPayload({ config })
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from('brands')
+    .select('*')
+    .order('name', { ascending: true })
 
-  const result = await payload.find({
-    collection: 'brands',
-    limit: 100,
-    sort: 'name',
-    depth: 0,
-  })
+  if (error) {
+    console.error('getAllBrands error:', error)
+    return []
+  }
 
-  const brands = result.docs as unknown as Brand[]
+  const brands = (data ?? []) as Brand[]
   await redis.setex(cacheKey, 3600, JSON.stringify(brands))
   return brands
 }
 
 export async function getFeaturedBrands(): Promise<Brand[]> {
   const cacheKey = 'brands:featured'
-  const cached = await redis.get(cacheKey)
-  const parsed = safeJsonParse<Brand[]>(cached)
-  if (parsed) return parsed
+  const cached = await redis.get(cacheKey).catch(() => null)
+  if (cached) return JSON.parse(cached as string)
 
-  const payload = await getPayload({ config })
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from('brands')
+    .select('*')
+    .eq('featured', true)
+    .order('name', { ascending: true })
 
-  const result = await payload.find({
-    collection: 'brands',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    where: { featured: { equals: true } } as any,
-    limit: 20,
-    sort: 'name',
-    depth: 0,
-  })
+  if (error) {
+    console.error('getFeaturedBrands error:', error)
+    return []
+  }
 
-  const brands = result.docs as unknown as Brand[]
+  const brands = (data ?? []) as Brand[]
   await redis.setex(cacheKey, 3600, JSON.stringify(brands))
   return brands
 }

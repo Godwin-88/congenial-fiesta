@@ -1,5 +1,5 @@
-import { getPayload } from 'payload'
-import config from '@payload-config'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { ArrowDown, Check, Download, Users, Eye, Clock, MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -12,38 +12,32 @@ export const metadata = {
   robots: process.env.ADVERTISE_PAGE_INDEXED === 'true' ? undefined : 'noindex',
 }
 
+async function getSupabase() {
+  const cookieStore = await cookies()
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll() {},
+      },
+    }
+  )
+}
+
 export default async function AdvertisePage() {
-  const [sponsors, packages, mediaKit] = await Promise.all([
-    getPayload({ config }).then((payload) =>
-      payload.find({
-        collection: 'sponsors',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        where: { active: { equals: true } } as any,
-        sort: 'displayOrder',
-        limit: 20,
-        depth: 0,
-      })
-    ).catch(() => ({ docs: [] })),
-    getPayload({ config }).then((payload) =>
-      payload.find({
-        collection: 'sponsorship-packages',
-        sort: 'displayOrder',
-        limit: 10,
-        depth: 0,
-      })
-    ).catch(() => ({ docs: [] })),
-    getPayload({ config }).then((payload) =>
-      payload.find({
-        collection: 'media-kit',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        where: { active: { equals: true } } as any,
-        limit: 1,
-        depth: 0,
-      })
-    ).catch(() => ({ docs: [] })),
+  const supabase = await getSupabase()
+
+  const [sponsorsResult, packagesResult, mediaKitResult] = await Promise.all([
+    supabase.from('sponsors').select('*').eq('active', true).order('display_order', { ascending: true }),
+    supabase.from('sponsorship_packages').select('*').order('display_order', { ascending: true }),
+    supabase.from('media_kit').select('*').eq('active', true).limit(1).maybeSingle(),
   ])
 
-  const mk = mediaKit.docs[0] as Record<string, unknown> | undefined
+  const sponsors = sponsorsResult.data ?? []
+  const packages = packagesResult.data ?? []
+  const mk = mediaKitResult.data ?? null
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -53,7 +47,7 @@ export default async function AdvertisePage() {
           Partner with <span className="text-[#0066FF]">FweezyTech</span>
         </h1>
         <p className="text-xl text-gray-400 max-w-2xl mx-auto mb-8">
-          Reach {mk ? String(mk.totalFollowers ?? '150K+') : '150K+'} tech enthusiasts across Kenya and East Africa.
+          Reach {mk ? String(mk.total_followers ?? '150K+') : '150K+'} tech enthusiasts across Kenya and East Africa.
         </p>
         <div className="flex gap-4 justify-center flex-wrap">
           <Link href="#packages">
@@ -75,9 +69,9 @@ export default async function AdvertisePage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
           {[
-            { icon: Users, label: 'Total Followers', value: mk ? String(mk.totalFollowers ?? '150K+') : '150K+' },
-            { icon: Eye, label: 'Total Views', value: mk ? String(mk.totalViews ?? '5M+') : '5M+' },
-            { icon: Clock, label: 'Years Creating', value: mk ? String(mk.yearsActive ?? '5') : '5' },
+            { icon: Users, label: 'Total Followers', value: mk ? String(mk.total_followers ?? '150K+') : '150K+' },
+            { icon: Eye, label: 'Total Views', value: mk ? String(mk.total_views ?? '5M+') : '5M+' },
+            { icon: Clock, label: 'Years Creating', value: mk ? String(mk.years_active ?? '5') : '5' },
             { icon: MapPin, label: 'Primary Market', value: 'Kenya + E.A.' },
           ].map((stat, i) => (
             <Card key={i} className="bg-gray-900 border-gray-800 text-center">
@@ -93,10 +87,10 @@ export default async function AdvertisePage() {
         {/* Platform breakdown */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[
-            { name: 'YouTube', followers: mk ? String(mk.youtubeFollowers ?? '100K') : '100K', color: 'bg-red-600' },
-            { name: 'TikTok', followers: mk ? String(mk.tiktokFollowers ?? '35K') : '35K', color: 'bg-gray-800' },
-            { name: 'Instagram', followers: mk ? String(mk.instagramFollowers ?? '10K') : '10K', color: 'bg-pink-600' },
-            { name: 'Facebook', followers: mk ? String(mk.facebookFollowers ?? '5K') : '5K', color: 'bg-blue-600' },
+            { name: 'YouTube', followers: mk ? String(mk.youtube_followers ?? '100K') : '100K', color: 'bg-red-600' },
+            { name: 'TikTok', followers: mk ? String(mk.tiktok_followers ?? '35K') : '35K', color: 'bg-gray-800' },
+            { name: 'Instagram', followers: mk ? String(mk.instagram_followers ?? '10K') : '10K', color: 'bg-pink-600' },
+            { name: 'Facebook', followers: mk ? String(mk.facebook_followers ?? '5K') : '5K', color: 'bg-blue-600' },
           ].map((pf, i) => (
             <Card key={i} className="bg-gray-900 border-gray-800">
               <CardContent className="pt-6 flex items-center gap-3">
@@ -122,13 +116,12 @@ export default async function AdvertisePage() {
       <section className="py-16 px-4 bg-gray-900/50">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-3xl font-bold mb-8 text-center">Brands We've Worked With</h2>
-          {sponsors.docs.length > 0 ? (
+          {sponsors.length > 0 ? (
             <div className="flex flex-wrap justify-center gap-8">
-              {sponsors.docs.map((sponsor) => {
-                const s = sponsor as Record<string, unknown>
-                const logoUrl = String(s.logo ?? '')
+              {sponsors.map((s: Record<string, unknown>) => {
+                const logoUrl = String(s.logo_url ?? '')
                 const website = String(s.website ?? '')
-                const videoId = String(s.associatedVideo ?? '')
+                const videoId = String(s.associated_video ?? '')
                 const linkUrl = videoId
                   ? `https://youtube.com/watch?v=${videoId}`
                   : website || '#'
@@ -144,11 +137,11 @@ export default async function AdvertisePage() {
                     {logoUrl ? (
                       <img
                         src={logoUrl}
-                        alt={String(s.companyName ?? '')}
+                        alt={String(s.company_name ?? '')}
                         className="max-w-full max-h-full object-contain"
                       />
                     ) : (
-                      <span className="text-gray-400 text-sm">{String(s.companyName ?? '')}</span>
+                      <span className="text-gray-400 text-sm">{String(s.company_name ?? '')}</span>
                     )}
                   </a>
                 )
@@ -164,10 +157,9 @@ export default async function AdvertisePage() {
       <section id="packages" className="py-16 px-4 max-w-6xl mx-auto">
         <h2 className="text-3xl font-bold mb-8 text-center">Partnership Options</h2>
         <div className="grid md:grid-cols-3 gap-6">
-          {packages.docs.length > 0 ? (
-            packages.docs.map((pkg) => {
-              const p = pkg as Record<string, unknown>
-              const deliverables = (p.deliverables as Array<{ item: string }>) ?? []
+          {packages.length > 0 ? (
+            packages.map((p: Record<string, unknown>) => {
+              const deliverables = (p.deliverables as string[]) ?? []
               const highlighted = Boolean(p.highlighted)
               const tier = String(p.tier ?? '')
               const tierLabel = tier === 'starter' ? 'Starter' : tier === 'pro' ? 'Pro' : 'Premium'
@@ -189,10 +181,10 @@ export default async function AdvertisePage() {
                     <h3 className="text-xl font-bold mb-3">{String(p.name ?? '')}</h3>
                     <p className="text-gray-400 text-sm mb-6">{String(p.description ?? '')}</p>
                     <ul className="space-y-2 mb-6">
-                      {deliverables.map((d, i) => (
+                      {deliverables.map((d: string, i: number) => (
                         <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
                           <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                          {d.item}
+                          {d}
                         </li>
                       ))}
                     </ul>
@@ -207,7 +199,7 @@ export default async function AdvertisePage() {
             })
           ) : (
             <>
-              {/* Default packages if none in Payload */}
+              {/* Default packages if none in database */}
               {[
                 {
                   tier: 'starter',

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useCallback } from 'react'
+import Script from 'next/script'
 
 type VideoModalProps = {
   videoId: string | null
@@ -77,7 +78,7 @@ export default function VideoModal({ videoId, platform, title, onClose }: VideoM
                   </a>
                 </section>
               </blockquote>
-              <script async src="https://www.tiktok.com/embed.js" />
+              <Script async src="https://www.tiktok.com/embed.js" />
             </div>
           ) : (
             <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-background/10">

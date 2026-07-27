@@ -1,5 +1,4 @@
-import { getPayload } from 'payload'
-import config from '@payload-config'
+import { createServerClient } from '@supabase/ssr'
 import Link from 'next/link'
 import { Download, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -7,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import PressInquiryForm from './PressInquiryForm'
 import CopyButton from './CopyButton'
+import { createClient } from '@/lib/supabase/server'
 
 export const metadata = {
   title: 'Press Room | FweezyTech',
@@ -14,19 +14,18 @@ export const metadata = {
 }
 
 export default async function PressPage() {
-  const mediaKit = await getPayload({ config }).then((payload) =>
-    payload.find({
-      collection: 'media-kit',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      where: { active: { equals: true } } as any,
-      limit: 1,
-      depth: 0,
-    })
-  ).catch(() => ({ docs: [] }))
+  const supabase = await createClient()
 
-  const mk = mediaKit.docs[0] as Record<string, unknown> | undefined
+  const { data: mediaKitData } = await supabase
+    .from('media_kit')
+    .select('*')
+    .eq('active', true)
+    .limit(1)
+    .single()
 
-  if (!mk) {
+  const mediaKit = mediaKitData as Record<string, unknown> | null
+
+  if (!mediaKit) {
     return (
       <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
         <div className="text-center">
@@ -37,8 +36,8 @@ export default async function PressPage() {
     )
   }
 
-  const headshots = (mk.headshots as Array<{ url: string; label?: string }>) ?? []
-  const brandColours = (mk.brandColours as Array<Record<string, string>>) ?? []
+  const headshots = (mediaKit.headshots as Array<{ url: string; label?: string }>) ?? []
+  const brandColours = (mediaKit.brandColours as Array<Record<string, string>>) ?? []
   const defaultColours: Array<Record<string, string>> = [
     { name: 'Electric Blue', hex: '#0066FF', rgb: '0, 102, 255' },
     { name: 'Amber', hex: '#F59E0B', rgb: '245, 158, 11' },
@@ -74,16 +73,16 @@ export default async function PressPage() {
             <TabsContent value="short" className="mt-4">
               <Card className="bg-gray-900 border-gray-800">
                 <CardContent className="pt-6">
-                  <p className="text-gray-300 mb-4">{String(mk.shortBio ?? '')}</p>
-                  <CopyButton text={String(mk.shortBio ?? '')} />
+                  <p className="text-gray-300 mb-4">{String(mediaKit.shortBio ?? '')}</p>
+                  <CopyButton text={String(mediaKit.shortBio ?? '')} />
                 </CardContent>
               </Card>
             </TabsContent>
             <TabsContent value="long" className="mt-4">
               <Card className="bg-gray-900 border-gray-800">
                 <CardContent className="pt-6">
-                  <p className="text-gray-300 mb-4">{String(mk.longBio ?? '')}</p>
-                  <CopyButton text={String(mk.longBio ?? '')} />
+                  <p className="text-gray-300 mb-4">{String(mediaKit.longBio ?? '')}</p>
+                  <CopyButton text={String(mediaKit.longBio ?? '')} />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -95,10 +94,10 @@ export default async function PressPage() {
           <h2 className="text-3xl font-bold mb-6">Logos</h2>
           <div className="grid md:grid-cols-2 gap-4 mb-4">
             {[
-              { label: 'Light PNG', url: String(mk.logoLight ?? ''), bg: 'bg-white' },
-              { label: 'Dark PNG', url: String(mk.logoDark ?? ''), bg: 'bg-gray-800' },
-              { label: 'Light SVG', url: String(mk.logoSvgLight ?? ''), bg: 'bg-white' },
-              { label: 'Dark SVG', url: String(mk.logoSvgDark ?? ''), bg: 'bg-gray-800' },
+              { label: 'Light PNG', url: String(mediaKit.logoLight ?? ''), bg: 'bg-white' },
+              { label: 'Dark PNG', url: String(mediaKit.logoDark ?? ''), bg: 'bg-gray-800' },
+              { label: 'Light SVG', url: String(mediaKit.logoSvgLight ?? ''), bg: 'bg-white' },
+              { label: 'Dark SVG', url: String(mediaKit.logoSvgDark ?? ''), bg: 'bg-gray-800' },
             ].filter((l) => l.url).map((logo, i) => (
               <Card key={i} className="bg-gray-900 border-gray-800">
                 <CardContent className="pt-6">

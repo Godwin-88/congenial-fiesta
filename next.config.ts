@@ -1,4 +1,3 @@
-import { withPayload } from '@payloadcms/next/withPayload'
 import withPWA from 'next-pwa'
 import withBundleAnalyzer from '@next/bundle-analyzer'
 import type { NextConfig } from 'next'
@@ -74,4 +73,4 @@ const nextConfig: NextConfig = {
   },
 }
 
-export default withBundleAnalyzerConfig(withPWAConfig(withPayload(nextConfig)))
+export default withBundleAnalyzerConfig(withPWAConfig(nextConfig))

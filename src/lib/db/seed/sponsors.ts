@@ -1,46 +1,45 @@
 import { config } from 'dotenv'
 config({ path: '.env.local' })
 
-import { getPayload } from 'payload'
+import { createClient } from '@supabase/supabase-js'
 
 async function seed() {
-  const { default: payloadConfig } = await import('@payload-config')
-  const payload = await getPayload({ config: payloadConfig })
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
 
   // Seed sponsors
   const sponsors = [
     {
-      companyName: 'Safaricom',
-      logo: 'https://placehold.co/200x80?text=Safaricom',
-      partnershipType: 'dedicated-video',
+      company_name: 'Safaricom',
+      logo_url: 'https://placehold.co/200x80?text=Safaricom',
+      partnership_type: 'dedicated-video',
       active: true,
-      displayOrder: 1,
+      display_order: 1,
     },
     {
-      companyName: 'Jumia Kenya',
-      logo: 'https://placehold.co/200x80?text=Jumia',
-      partnershipType: 'shoutout',
+      company_name: 'Jumia Kenya',
+      logo_url: 'https://placehold.co/200x80?text=Jumia',
+      partnership_type: 'shoutout',
       active: true,
-      displayOrder: 2,
+      display_order: 2,
     },
     {
-      companyName: 'Tecno Mobile',
-      logo: 'https://placehold.co/200x80?text=Tecno',
-      partnershipType: 'full-campaign',
+      company_name: 'Tecno Mobile',
+      logo_url: 'https://placehold.co/200x80?text=Tecno',
+      partnership_type: 'full-campaign',
       active: true,
-      displayOrder: 3,
+      display_order: 3,
     },
   ]
 
   for (const sponsor of sponsors) {
     try {
-      await payload.create({
-        collection: 'sponsors',
-        data: sponsor,
-      })
-      console.log(`✅ Created sponsor: ${sponsor.companyName}`)
+      await supabase.from('sponsors').insert(sponsor)
+      console.log(`✅ Created sponsor: ${sponsor.company_name}`)
     } catch (err) {
-      console.error(`❌ Failed to create sponsor ${sponsor.companyName}:`, err)
+      console.error(`❌ Failed to create sponsor ${sponsor.company_name}:`, err)
     }
   }
 
@@ -50,7 +49,7 @@ async function seed() {
       name: 'Shoutout',
       tier: 'starter',
       highlighted: false,
-      displayOrder: 1,
+      display_order: 1,
       description: "A dedicated mention in one of Fweezy's videos reaching his full audience.",
       deliverables: [
         { item: '30-second verbal shoutout' },
@@ -62,7 +61,7 @@ async function seed() {
       name: 'Dedicated Video',
       tier: 'pro',
       highlighted: true,
-      displayOrder: 2,
+      display_order: 2,
       description: 'A full video dedicated to your product or service, reviewed by Fweezy.',
       deliverables: [
         { item: '5–10 minute dedicated review' },
@@ -75,7 +74,7 @@ async function seed() {
       name: 'Full Campaign',
       tier: 'premium',
       highlighted: false,
-      displayOrder: 3,
+      display_order: 3,
       description: 'A complete multi-platform campaign across all FweezyTech channels.',
       deliverables: [
         { item: 'Dedicated video + 3 short-form clips' },
@@ -89,10 +88,7 @@ async function seed() {
 
   for (const pkg of packages) {
     try {
-      await payload.create({
-        collection: 'sponsorship-packages',
-        data: pkg,
-      })
+      await supabase.from('sponsorship_packages').insert(pkg)
       console.log(`✅ Created package: ${pkg.name}`)
     } catch (err) {
       console.error(`❌ Failed to create package ${pkg.name}:`, err)
@@ -101,27 +97,24 @@ async function seed() {
 
   // Seed MediaKit record
   try {
-    await payload.create({
-      collection: 'media-kit',
-      data: {
-        label: 'FweezyTech Media Kit 2026',
-        shortBio: "FweezyTech is Kenya's #1 tech content creator, delivering honest, in-depth reviews of smartphones, gadgets, and consumer electronics to a growing audience across East Africa.",
-        longBio: 'FweezyTech is a premier technology content creator based in Kenya, dedicated to providing honest, thorough, and accessible reviews of smartphones, gadgets, and consumer electronics. With a focus on the East African market, FweezyTech bridges the gap between global tech trends and local relevance, helping consumers make informed purchasing decisions. Known for detailed benchmarks, real-world camera tests, battery life evaluations, and value-for-money analysis, FweezyTech has become the go-to source for tech enthusiasts in Kenya, Uganda, Tanzania, and beyond. Content spans YouTube, TikTok, Instagram, and Facebook, reaching millions of viewers monthly.',
-        totalFollowers: '150K+',
-        totalViews: '5M+',
-        yearsActive: 5,
-        youtubeFollowers: '100K',
-        tiktokFollowers: '35K',
-        instagramFollowers: '10K',
-        facebookFollowers: '5K',
-        brandColours: [
-          { name: 'Electric Blue', hex: '#0066FF', rgb: '0, 102, 255' },
-          { name: 'Amber', hex: '#F59E0B', rgb: '245, 158, 11' },
-          { name: 'Charcoal', hex: '#111827', rgb: '17, 24, 39' },
-          { name: 'White', hex: '#FFFFFF', rgb: '255, 255, 255' },
-        ],
-        active: true,
-      },
+    await supabase.from('media_kit').insert({
+      label: 'FweezyTech Media Kit 2026',
+      short_bio: "FweezyTech is Kenya's #1 tech content creator, delivering honest, in-depth reviews of smartphones, gadgets, and consumer electronics to a growing audience across East Africa.",
+      long_bio: 'FweezyTech is a premier technology content creator based in Kenya, dedicated to providing honest, thorough, and accessible reviews of smartphones, gadgets, and consumer electronics. With a focus on the East African market, FweezyTech bridges the gap between global tech trends and local relevance, helping consumers make informed purchasing decisions. Known for detailed benchmarks, real-world camera tests, battery life evaluations, and value-for-money analysis, FweezyTech has become the go-to source for tech enthusiasts in Kenya, Uganda, Tanzania, and beyond. Content spans YouTube, TikTok, Instagram, and Facebook, reaching millions of viewers monthly.',
+      total_followers: '150K+',
+      total_views: '5M+',
+      years_active: 5,
+      youtube_followers: '100K',
+      tiktok_followers: '35K',
+      instagram_followers: '10K',
+      facebook_followers: '5K',
+      brand_colours: [
+        { name: 'Electric Blue', hex: '#0066FF', rgb: '0, 102, 255' },
+        { name: 'Amber', hex: '#F59E0B', rgb: '245, 158, 11' },
+        { name: 'Charcoal', hex: '#111827', rgb: '17, 24, 39' },
+        { name: 'White', hex: '#FFFFFF', rgb: '255, 255, 255' },
+      ],
+      active: true,
     })
     console.log('✅ Created MediaKit record')
   } catch (err) {

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Raleway } from "next/font/google";
-import { ThemeProvider } from "next-themes";
+import { ThemeProvider } from "@ecosy/next-themes";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { AuthProvider } from "@/context/AuthContext";
@@ -92,8 +92,9 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Detect if we're on a Payload CMS admin route.
-  // The middleware sets x-pathname, but we also check the URL as a fallback.
+  // Detect if we're on an admin route.
+  // Admin routes have their own layout (src/app/admin/layout.tsx) with sidebar.
+  // Skip the public site wrapper (Header, Footer, Chat, etc.) for admin routes.
   let pathname = "";
   try {
     const headerList = await headers();
@@ -102,13 +103,12 @@ export default async function RootLayout({
     // headers() may throw in some edge cases; fall back to empty string
   }
 
-  const isPayloadAdmin =
-    pathname === "/admin" ||
-    (pathname.startsWith("/admin/") && !pathname.startsWith("/admin/analytics"));
+  const isAdminRoute =
+    pathname === "/admin" || pathname.startsWith("/admin/");
 
-  // For Payload admin routes, skip the site wrapper entirely.
-  // Payload's own RootLayout in (payload)/layout.tsx provides <html>/<body>.
-  if (isPayloadAdmin) {
+  // For admin routes, skip the public site wrapper entirely.
+  // The admin layout provides its own <html>/<body> structure.
+  if (isAdminRoute) {
     return <>{children}</>;
   }
 
@@ -119,18 +119,6 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
-        <script
-          id="theme-init"
-          dangerouslySetInnerHTML={{
-            __html: `
-              try {
-                var t = localStorage.getItem('theme');
-                if (!t) t = 'dark';
-                document.documentElement.classList.add(t);
-              } catch(e) {}
-            `,
-          }}
-        />
         <SkipLink />
         <ThemeProvider
           attribute="class"

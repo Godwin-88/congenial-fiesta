@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getPayload } from 'payload'
-import config from '@payload-config'
+import { createClient } from '@supabase/supabase-js'
 import { getRedisOrThrow } from '@/lib/upstash/redis'
 import { Ratelimit } from '@upstash/ratelimit'
 
@@ -9,6 +8,13 @@ const ratelimit = new Ratelimit({
   limiter: Ratelimit.slidingWindow(3, '1 m'),
   analytics: true,
 })
+
+function getAdminSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,30 +36,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid email address' }, { status: 400 })
     }
 
-    const payload = await getPayload({ config })
+    const supabase = getAdminSupabase()
 
     // Find all active coming-soon items
-    const comingSoonItems = await payload.find({
-      collection: 'coming-soon',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      where: { active: { equals: true } } as any,
-      limit: 50,
-      depth: 0,
-    })
+    const { data: comingSoonItems } = await supabase
+      .from('coming_soon')
+      .select('*')
+      .eq('active', true)
+      .limit(50)
 
-    // Add email to each active item
-    for (const item of comingSoonItems.docs) {
-      const existingEmails = (item as unknown as { notifyEmails?: { email: string }[] }).notifyEmails ?? []
-      const alreadySubscribed = existingEmails.some((e: { email: string }) => e.email === email)
-      if (!alreadySubscribed) {
-        await payload.update({
-          collection: 'coming-soon',
-          id: item.id,
-          data: {
-            notifyEmails: [...existingEmails, { email }],
-            notifyCount: (item as unknown as { notifyCount: number }).notifyCount + 1,
-          },
-        })
+    if (comingSoonItems) {
+      for (const item of comingSoonItems) {
+        const existingEmails = (item.notify_emails as Array<{ email: string }>) ?? []
+        const alreadySubscribed = existingEmails.some((e: { email: string }) => e.email === email)
+        if (!alreadySubscribed) {
+          await supabase
+            .from('coming_soon')
+            .update({
+              notify_emails: [...existingEmails, { email }],
+              notify_count: (item.notify_count ?? 0) + 1,
+            })
+            .eq('id', item.id)
+        }
       }
     }
 

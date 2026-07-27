@@ -1,18 +1,13 @@
 import type { MetadataRoute } from 'next'
 import { getAllDevicePaths } from '@/lib/devices/queries'
 import { getAllArticlePaths } from '@/lib/articles/queries'
-import { getPayload } from 'payload'
-import config from '@payload-config'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:3000'
 
-  const [devicePaths, articlePaths, milestones] = await Promise.all([
+  const [devicePaths, articlePaths] = await Promise.all([
     getAllDevicePaths().catch(() => []),
     getAllArticlePaths().catch(() => []),
-    getPayload({ config })
-      .then((payload) => payload.find({ collection: 'milestones', limit: 1 }))
-      .catch(() => ({ docs: [] })),
   ])
 
   const now = new Date()

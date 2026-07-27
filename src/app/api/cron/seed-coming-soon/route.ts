@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server"
 import { verifySignatureAppRouter } from "@upstash/qstash/nextjs"
 import Parser from "rss-parser"
-import { getPayload } from "payload"
-import config from "@payload-config"
+import { createServerClient } from "@supabase/ssr"
 
 const parser = new Parser({
   timeout: 12000,
@@ -69,25 +68,29 @@ function inferExpectedWeek(pubDate: Date): string {
   return `Expected ${month} ${year}`
 }
 
+function getAdminClient() {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { cookies: { getAll: () => [], setAll: () => {} } }
+  )
+}
+
 export const GET = verifySignatureAppRouter(async () => {
   if (!process.env.QSTASH_CURRENT_SIGNING_KEY) {
     return NextResponse.json({ error: "Missing signing key" }, { status: 500 })
   }
 
-  const payload = await getPayload({ config })
+  const supabase = getAdminClient()
 
-  const existing = await payload.find({
-    collection: "coming-soon",
-    where: { active: { equals: true } },
-    limit: 200,
-    depth: 0,
-  })
-
-  type ComingSoonDoc = { deviceName: string }
+  // Fetch existing active coming-soon items
+  const { data: existing } = await supabase
+    .from("coming_soon")
+    .select("device_name")
+    .eq("active", true)
 
   const existingNames = new Set(
-    (existing.docs as unknown as ComingSoonDoc[])
-      .map((d) => d.deviceName.toLowerCase())
+    (existing ?? []).map((d: { device_name: string }) => d.device_name.toLowerCase())
   )
 
   let fetched = 0
@@ -115,14 +118,11 @@ export const GET = verifySignatureAppRouter(async () => {
         }
 
         try {
-          await payload.create({
-            collection: "coming-soon",
-            data: {
-              deviceName,
-              expectedWeek: inferExpectedWeek(new Date(item.pubDate || Date.now())),
-              teaser: contentSnippet.slice(0, 160).replace(/\s+/g, " ").trim(),
-              active: true,
-            },
+          await supabase.from("coming_soon").insert({
+            device_name: deviceName,
+            expected_week: inferExpectedWeek(new Date(item.pubDate || Date.now())),
+            teaser: contentSnippet.slice(0, 160).replace(/\s+/g, " ").trim(),
+            active: true,
           })
           existingNames.add(normalized)
           created++

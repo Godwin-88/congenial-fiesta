@@ -41,10 +41,15 @@ export async function GET(request: Request) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '40px' }}>
-          {validDevices.slice(0, 2).map((device, idx) => {
-            const primary = device.images?.find((img) => img.isPrimary)
+          {validDevices.slice(0, 2).map((device) => {
+            const dev = device as unknown as Record<string, unknown>
+            const images = dev.images as Array<Record<string, unknown>> | undefined
+            const primary = images?.find((img) => img.isPrimary)
+            const slug = String(dev.slug ?? '')
+            const name = String(dev.name ?? '')
+            const scoreValue = Number(dev.score_overall ?? 0)
             return (
-              <div key={device.slug} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+              <div key={slug} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
                 <div
                   style={{
                     width: '240px',
@@ -61,8 +66,8 @@ export async function GET(request: Request) {
                 >
                   {primary ? (
                     <img
-                      src={primary.url}
-                      alt={device.name}
+                      src={String(primary.url)}
+                      alt={name}
                       style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '24px' }}
                     />
                   ) : (
@@ -70,7 +75,7 @@ export async function GET(request: Request) {
                   )}
                 </div>
                 <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#FFFFFF', textAlign: 'center' }}>
-                  {device.name}
+                  {name}
                 </div>
                 <div
                   style={{
@@ -83,7 +88,7 @@ export async function GET(request: Request) {
                     fontWeight: 'bold',
                   }}
                 >
-                  {device.scores?.overall ?? 0}/100
+                  {scoreValue}/100
                 </div>
               </div>
             )
@@ -105,8 +110,11 @@ export async function GET(request: Request) {
           {validDevices.length === 3 && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
               {(() => {
-                const device = validDevices[2]
-                const primary = device.images?.find((img) => img.isPrimary)
+                const device = validDevices[2] as unknown as Record<string, unknown>
+                const images = device.images as Array<Record<string, unknown>> | undefined
+                const primary = images?.find((img) => img.isPrimary)
+                const name = String(device.name ?? '')
+                const scoreValue = Number(device.score_overall ?? 0)
                 return (
                   <>
                     <div
@@ -125,8 +133,8 @@ export async function GET(request: Request) {
                     >
                       {primary ? (
                         <img
-                          src={primary.url}
-                          alt={device.name}
+                          src={String(primary.url)}
+                          alt={name}
                           style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '16px' }}
                         />
                       ) : (
@@ -134,7 +142,7 @@ export async function GET(request: Request) {
                       )}
                     </div>
                     <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#FFFFFF', textAlign: 'center' }}>
-                      {device.name}
+                      {name}
                     </div>
                     <div
                       style={{
@@ -147,7 +155,7 @@ export async function GET(request: Request) {
                         fontWeight: 'bold',
                       }}
                     >
-                      {device.scores?.overall ?? 0}/100
+                      {scoreValue}/100
                     </div>
                   </>
                 )

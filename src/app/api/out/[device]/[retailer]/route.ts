@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server'
-import { getPayload } from 'payload'
-import config from '@payload-config'
-import { redis, getRedisOrThrow } from '@/lib/upstash/redis'
+import { createClient } from '@supabase/supabase-js'
+import { redis } from '@/lib/upstash/redis'
 import { outboundRateLimit as ratelimit } from '@/lib/upstash/ratelimit'
-import { createClient } from '@/lib/supabase/server'
+import { createClient as createSupabaseClient } from '@/lib/supabase/server'
+
+function getAdminSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+}
 
 export async function GET(
   _req: Request,
@@ -23,7 +29,7 @@ export async function GET(
   }
 
   // Look up the device
-  const payload = await getPayload({ config })
+  const supabase = getAdminSupabase()
 
   const cacheKey = `devices:slug:${deviceSlug}`
   let deviceId: string = ''
@@ -31,33 +37,32 @@ export async function GET(
   if (cached) {
     deviceId = cached as string
   } else {
-    const devices = await payload.find({
-      collection: 'devices',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      where: { slug: { equals: deviceSlug }, status: { equals: 'published' } } as any,
-      limit: 1,
-      depth: 0,
-    })
-    if (devices.docs.length === 0) {
+    const { data: devices } = await supabase
+      .from('devices')
+      .select('id')
+      .eq('slug', deviceSlug)
+      .eq('status', 'published')
+      .limit(1)
+
+    if (!devices || devices.length === 0) {
       return NextResponse.redirect(new URL('/', _req.url), 302)
     }
-    deviceId = String(devices.docs[0].id)
+    deviceId = String(devices[0].id)
     await redis.setex(cacheKey, 600, deviceId)
   }
 
   // Get the device with buy links
-   
-  const device = (await payload.findByID({
-    collection: 'devices',
-    id: deviceId,
-    depth: 0,
-  })) as Record<string, unknown> | null
+  const { data: device } = await supabase
+    .from('devices')
+    .select('*')
+    .eq('id', deviceId)
+    .single()
 
   if (!device) {
     return NextResponse.redirect(new URL('/', _req.url), 302)
   }
 
-  const buyLinks = (device.buyLinks as Array<{ retailer: string; url: string }>) ?? []
+  const buyLinks = (device.buy_links as Array<{ retailer: string; url: string }>) ?? []
   const buyLink = buyLinks.find((l) => l.retailer === retailer)
 
   if (!buyLink || !buyLink.url) {
@@ -66,8 +71,8 @@ export async function GET(
 
   // Log click to Supabase
   try {
-    const supabase = await createClient()
-    const { data: insertedClick } = await supabase
+    const supabaseClient = await createSupabaseClient()
+    const { data: insertedClick } = await supabaseClient
       .from('affiliate_clicks')
       .insert({
         device_slug: deviceSlug,
@@ -78,9 +83,9 @@ export async function GET(
       .select('id')
       .single()
 
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { session } } = await supabaseClient.auth.getSession()
     if (session?.user?.id && insertedClick?.id) {
-      await supabase
+      await supabaseClient
         .from('affiliate_clicks')
         .update({ user_id: session.user.id })
         .eq('id', insertedClick.id)

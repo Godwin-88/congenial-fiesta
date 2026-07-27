@@ -1,15 +1,23 @@
-import { getPayload } from 'payload'
-import config from '@payload-config'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
 import { redis } from '@/lib/upstash/redis'
-import type { Article } from '@/payload-types'
+import type { Article } from '@/types/cms'
+import { mapArticle } from '@/types/cms'
 
-function safeJsonParse<T>(data: unknown): T | null {
-  if (!data || typeof data !== 'string') return null
-  try {
-    return JSON.parse(data) as T
-  } catch {
-    return null
-  }
+function getSupabase() {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll: async () => (await cookies()).getAll(), setAll: () => {} } }
+  )
+}
+
+function getPublicSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  )
 }
 
 type GetArticlesParams = {
@@ -23,146 +31,119 @@ export async function getArticles(
 ): Promise<{ articles: Article[]; totalPages: number }> {
   const { category, page = 1, limit = 12 } = params
 
-  const cacheKey = `articles:list:${category ?? ''}:${page}`
-  const cached = await redis.get(cacheKey)
-  const parsed = safeJsonParse<{ articles: Article[]; totalPages: number }>(cached)
-  if (parsed) return parsed
+  const cacheKey = `articles:list:${category ?? 'all'}:${page}`
+  const cached = await redis.get(cacheKey).catch(() => null)
+  if (cached) return JSON.parse(cached as string)
 
-  const payload = await getPayload({ config })
+  const supabase = getSupabase()
+  const offset = (page - 1) * limit
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: Record<string, any> = {
-    status: { equals: 'published' },
-  }
-  if (category) {
-    where.category = { equals: category }
-  }
+  let query = supabase
+    .from('articles')
+    .select('*', { count: 'exact' })
+    .eq('status', 'published')
+    .order('published_at', { ascending: false })
+    .range(offset, offset + limit - 1)
 
-  const result = await payload.find({
-    collection: 'articles',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    where: where as any,
-    page,
-    limit,
-    sort: '-publishedAt',
-    depth: 2,
-  })
+  if (category) query = query.eq('category', category)
 
-  const output = {
-    articles: result.docs as unknown as Article[],
-    totalPages: result.totalPages,
+  const { data, error, count } = await query
+  if (error) {
+    console.error('getArticles error:', error)
+    return { articles: [], totalPages: 0 }
   }
 
-  await redis.setex(cacheKey, 300, JSON.stringify(output))
-  return output
+  const result = {
+    articles: data?.map(mapArticle) ?? [],
+    totalPages: Math.ceil((count ?? 0) / limit),
+  }
+
+  await redis.setex(cacheKey, 300, JSON.stringify(result))
+  return result
 }
 
 export async function getArticle(slug: string): Promise<Article | null> {
   const cacheKey = `articles:detail:${slug}`
-  const cached = await redis.get(cacheKey)
-  const parsed = safeJsonParse<Article>(cached)
-  if (parsed) return parsed
+  const cached = await redis.get(cacheKey).catch(() => null)
+  if (cached) return JSON.parse(cached as string)
 
-  const payload = await getPayload({ config })
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from('articles')
+    .select('*')
+    .eq('slug', slug)
+    .eq('status', 'published')
+    .single()
 
-  const result = await payload.find({
-    collection: 'articles',
-     
-    where: {
-      slug: { equals: slug },
-      status: { equals: 'published' },
-    } as any,
-    limit: 1,
-    depth: 2,
-  })
-
-  const article = (result.docs[0] ?? null) as unknown as Article | null
-  if (article) {
-    await redis.setex(cacheKey, 600, JSON.stringify(article))
+  if (error || !data) {
+    if (error) console.error('getArticle error:', error)
+    return null
   }
+
+  const article = mapArticle(data)
+  await redis.setex(cacheKey, 600, JSON.stringify(article))
   return article
 }
 
 export async function getAllArticlePaths(): Promise<Array<{ slug: string }>> {
   const cacheKey = 'articles:static-params'
-  const cached = await redis.get(cacheKey)
-  const parsed = safeJsonParse<Array<{ slug: string }>>(cached)
-  if (parsed) return parsed
+  const cached = await redis.get(cacheKey).catch(() => null)
+  if (cached) return JSON.parse(cached as string)
 
-  const payload = await getPayload({ config })
+  const supabase = getPublicSupabase()
+  const { data } = await supabase
+    .from('articles')
+    .select('slug')
+    .eq('status', 'published')
 
-  const result = await payload.find({
-    collection: 'articles',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    where: { status: { equals: 'published' } } as any,
-    limit: 500,
-    depth: 0,
-  })
-
-  const paths = (result.docs as unknown as Article[]).map((a) => ({
-    slug: (a as unknown as { slug: string }).slug,
-  }))
-
-  await redis.setex(cacheKey, 3600, JSON.stringify(paths))
-  return paths
+  const result = data?.map(r => ({ slug: r.slug })) ?? []
+  await redis.setex(cacheKey, 3600, JSON.stringify(result))
+  return result
 }
 
 export async function getRecentArticles(limit: number = 4): Promise<Article[]> {
   const cacheKey = `articles:recent:${limit}`
-  const cached = await redis.get(cacheKey)
-  const parsed = safeJsonParse<Article[]>(cached)
-  if (parsed) return parsed
+  const cached = await redis.get(cacheKey).catch(() => null)
+  if (cached) return JSON.parse(cached as string)
 
-  const payload = await getPayload({ config })
+  const supabase = getSupabase()
+  const { data } = await supabase
+    .from('articles')
+    .select('*')
+    .eq('status', 'published')
+    .order('published_at', { ascending: false })
+    .limit(limit)
 
-  const result = await payload.find({
-    collection: 'articles',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    where: { status: { equals: 'published' } } as any,
-    sort: '-publishedAt',
-    limit,
-    depth: 2,
-  })
-
-  const articles = result.docs as unknown as Article[]
-  await redis.setex(cacheKey, 300, JSON.stringify(articles))
-  return articles
+  const result = data?.map(mapArticle) ?? []
+  await redis.setex(cacheKey, 300, JSON.stringify(result))
+  return result
 }
 
 export async function getArticlesForDevice(deviceSlug: string): Promise<Article[]> {
   const cacheKey = `articles:device:${deviceSlug}`
-  const cached = await redis.get(cacheKey)
-  const parsed = safeJsonParse<Article[]>(cached)
-  if (parsed) return parsed
+  const cached = await redis.get(cacheKey).catch(() => null)
+  if (cached) return JSON.parse(cached as string)
 
-  const payload = await getPayload({ config })
+  const supabase = getSupabase()
 
   // First find the device
-  const deviceResult = await payload.find({
-    collection: 'devices',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    where: { slug: { equals: deviceSlug } } as any,
-    limit: 1,
-    depth: 0,
-  })
+  const { data: device } = await supabase
+    .from('devices')
+    .select('id')
+    .eq('slug', deviceSlug)
+    .single()
 
-  if (deviceResult.docs.length === 0) return []
+  if (!device) return []
 
-  const deviceId = deviceResult.docs[0].id
+  const { data } = await supabase
+    .from('articles')
+    .select('*')
+    .eq('status', 'published')
+    .eq('associated_device_id', device.id)
+    .order('published_at', { ascending: false })
+    .limit(10)
 
-  const result = await payload.find({
-    collection: 'articles',
-     
-    where: {
-      status: { equals: 'published' },
-      associatedDevice: { equals: deviceId },
-    } as any,
-    sort: '-publishedAt',
-    limit: 10,
-    depth: 2,
-  })
-
-  const articles = result.docs as unknown as Article[]
+  const articles = data?.map(mapArticle) ?? []
   await redis.setex(cacheKey, 600, JSON.stringify(articles))
   return articles
 }

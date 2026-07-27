@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation'
-import { getUser } from '@/lib/auth/actions'
 import {
   getTotalPageViews,
   getPageViewsOverTime,
@@ -20,8 +19,6 @@ import TrafficSourcesChart from './TrafficSourcesChart'
 import DeviceTypeChart from './DeviceTypeChart'
 import AffiliateTable from './AffiliateTable'
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? ''
-
 export default async function AnalyticsPage({
   searchParams,
 }: {
@@ -29,12 +26,6 @@ export default async function AnalyticsPage({
 }) {
   const { period: rawPeriod } = await searchParams
   const period = ['7d', '30d', '90d'].includes(rawPeriod ?? '') ? (rawPeriod as string) : '30d'
-
-  // Auth check
-  const user = await getUser()
-  if (!user || user.email !== ADMIN_EMAIL) {
-    redirect('/')
-  }
 
   const [
     totalViews,

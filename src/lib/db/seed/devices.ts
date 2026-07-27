@@ -1,6 +1,7 @@
-import type { Device } from '@/payload-types'
+import type { Device } from '@/types/cms'
 
-type SeedDevice = Omit<Device, 'id' | 'createdAt' | 'updatedAt'>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SeedDevice = any
 
 export const seedBrands = [
   {
@@ -40,7 +41,7 @@ export const seedBrands = [
   },
 ] as const
 
-function richTextText(text: string): Record<string, unknown> {
+function richTextText(text: string) {
   return {
     root: {
       children: [
@@ -49,26 +50,26 @@ function richTextText(text: string): Record<string, unknown> {
             {
               detail: 0,
               format: 0,
-              mode: 'normal',
+              mode: 'normal' as const,
               style: '',
               text,
-              type: 'text',
+              type: 'text' as const,
               version: 1,
             },
           ],
-          direction: 'ltr',
-          format: '',
+          direction: 'ltr' as const,
+          format: '' as const,
           indent: 0,
-          type: 'paragraph',
+          type: 'paragraph' as const,
           version: 1,
           textFormat: 0,
           textStyle: '',
         },
       ],
-      direction: 'ltr',
-      format: '',
+      direction: 'ltr' as const,
+      format: '' as const,
       indent: 0,
-      type: 'root',
+      type: 'root' as const,
       version: 1,
     },
   }
@@ -79,7 +80,7 @@ export const seedDevices: SeedDevice[] = [
   {
     name: 'Galaxy S25 Ultra',
     slug: 'galaxy-s25-ultra',
-    brand: 'samsung' as unknown as Device['brand'], // resolved to relationship ID at seed time
+    brand: 'samsung',
     releaseYear: 2025,
     category: 'ultra-premium',
     priceKES: 259999,
@@ -212,7 +213,7 @@ export const seedDevices: SeedDevice[] = [
   {
     name: 'iPhone 16 Pro Max',
     slug: 'iphone-16-pro-max',
-    brand: 'apple' as unknown as Device['brand'],
+    brand: 'apple',
     releaseYear: 2024,
     category: 'ultra-premium',
     priceKES: 229999,
@@ -344,7 +345,7 @@ export const seedDevices: SeedDevice[] = [
   {
     name: 'Pixel 9 Pro',
     slug: 'pixel-9-pro',
-    brand: 'google' as unknown as Device['brand'],
+    brand: 'google',
     releaseYear: 2024,
     category: 'flagship',
     priceKES: 159999,
@@ -470,7 +471,7 @@ export const seedDevices: SeedDevice[] = [
   {
     name: 'Phantom V Fold2',
     slug: 'phantom-v-fold2',
-    brand: 'tecno' as unknown as Device['brand'],
+    brand: 'tecno',
     releaseYear: 2025,
     category: 'flagship',
     priceKES: 149999,
@@ -602,7 +603,7 @@ export const seedDevices: SeedDevice[] = [
   {
     name: 'Zero 40 5G',
     slug: 'zero-40-5g',
-    brand: 'infinix' as unknown as Device['brand'],
+    brand: 'infinix',
     releaseYear: 2025,
     category: 'mid-range',
     priceKES: 49999,

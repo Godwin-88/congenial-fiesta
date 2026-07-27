@@ -6,7 +6,7 @@ Kenya's #1 Tech Review Destination — honest device reviews, comparisons, and t
 
 | Component | Technology | Version |
 |-----------|-----------|---------|
-| Framework | Next.js | 16.2.10 |
+| Framework | Next.js | 15.4.11 |
 | CMS | Payload CMS | 3.x |
 | Database | Supabase Postgres | — |
 | Cache / Search / Rate-limit | Upstash (Redis + QStash + Search + Vector) | — |
@@ -17,7 +17,307 @@ Kenya's #1 Tech Review Destination — honest device reviews, comparisons, and t
 | UI | Tailwind CSS v4 + shadcn/ui | — |
 | Deployment | Vercel (Free Tier) | — |
 
-## Prerequisites
+## Project Structure
+
+```
+fweezytech/
+├── .github/workflows/lighthouse.yml
+├── next.config.ts
+├── package.json
+├── tsconfig.json
+├── public/
+│   ├── favicon.png
+│   ├── manifest.json
+│   ├── sw.js
+│   ├── offline.html
+│   ├── screenshots/
+│   │   ├── device-mobile.png
+│   │   └── home-mobile.png
+│   ├── icons/          # PWA icons (8 sizes: 72–512px)
+│   └── workbox-87b8d583.js
+├── src/
+│   ├── app/
+│   │   ├── layout.tsx                  # Root layout
+│   │   ├── page.tsx                    # Homepage
+│   │   ├── favicon.ico
+│   │   ├── robots.ts
+│   │   ├── sitemap.ts
+│   │   ├── about/
+│   │   │   ├── page.tsx
+│   │   │   └── TimelineClient.tsx
+│   │   ├── advertise/page.tsx
+│   │   ├── articles/
+│   │   │   ├── page.tsx
+│   │   │   └── [slug]/page.tsx
+│   │   ├── auth/
+│   │   │   ├── callback/route.ts
+│   │   │   └── error/page.tsx
+│   │   ├── chat/
+│   │   │   ├── page.tsx
+│   │   │   ├── layout.tsx
+│   │   │   └── ChatPageClient.tsx
+│   │   ├── coming-soon/page.tsx
+│   │   ├── compare/page.tsx
+│   │   ├── devices/
+│   │   │   ├── page.tsx
+│   │   │   └── [brand]/[slug]/page.tsx
+│   │   ├── press/
+│   │   │   ├── page.tsx
+│   │   │   ├── CopyButton.tsx
+│   │   │   └── PressInquiryForm.tsx
+│   │   ├── search/page.tsx
+│   │   ├── videos/
+│   │   │   ├── page.tsx
+│   │   │   └── video-feed.tsx
+│   │   ├── admin/
+│   │   │   └── analytics/
+│   │   │       ├── page.tsx
+│   │   │       ├── AffiliateTable.tsx
+│   │   │       ├── DeviceTypeChart.tsx
+│   │   │       ├── PageViewsChart.tsx
+│   │   │       └── TrafficSourcesChart.tsx
+│   │   └── (payload)/
+│   │       ├── layout.tsx
+│   │       ├── admin/
+│   │       │   ├── importMap.js
+│   │       │   └── [[...segments]]/
+│   │       │       ├── page.tsx
+│   │       │       └── not-found.tsx
+│   ├── api/
+│   │   ├── admin/
+│   │   │   ├── chat/route.ts           # AI chat (streaming, Groq)
+│   │   │   └── export/[report]/route.ts # CSV/PDF export
+│   │   ├── award-package/route.ts      # Award submission PDF download
+│   │   ├── chat/route.ts               # Public AI chat (streaming)
+│   │   ├── chat/session/route.ts       # Chat session management
+│   │   ├── community/
+│   │   │   ├── comments/route.ts
+│   │   │   ├── comments/vote/route.ts
+│   │   │   ├── comments/report/route.ts
+│   │   │   ├── comparisons/save/route.ts
+│   │   │   └── ratings/
+│   │   │       ├── route.ts
+│   │   │       └── vote/route.ts
+│   │   ├── cron/
+│   │   │   ├── aggregate-analytics/route.ts
+│   │   │   ├── keep-alive/route.ts
+│   │   │   ├── seed-coming-soon/route.ts
+│   │   │   └── weekly-digest/route.ts
+│   │   ├── media-kit/download/route.ts # Media kit PDF download
+│   │   ├── notify/route.ts             # Notify Me form submission
+│   │   ├── og/                         # Open Graph image generators
+│   │   │   ├── article/route.tsx
+│   │   │   ├── compare/route.tsx
+│   │   │   ├── default/route.tsx
+│   │   │   ├── device/route.tsx
+│   │   │   └── video/route.tsx
+│   │   ├── out/[device]/[retailer]/route.ts  # Affiliate outbound
+│   │   ├── press-inquiry/route.ts
+│   │   ├── press/logos-zip/route.ts
+│   │   ├── search/route.ts
+│   │   ├── seed-admin/route.ts
+│   │   ├── sponsor-inquiry/route.ts
+│   │   ├── track/route.ts              # Analytics beacon
+│   │   └── [...slug]/route.ts          # Payload CMS REST API catch-all
+│   ├── components/
+│   │   ├── a11y/SkipLink.tsx
+│   │   ├── admin/
+│   │   │   ├── AiAssistant.tsx
+│   │   │   ├── AiAssistantWrapper.tsx
+│   │   │   ├── AnalyticsNavLink.tsx
+│   │   │   ├── Dashboard.tsx
+│   │   │   ├── Icon.tsx
+│   │   │   └── Logo.tsx
+│   │   ├── advertise/SponsorInquiryForm.tsx
+│   │   ├── analytics/PageViewBeacon.tsx
+│   │   ├── articles/ArticleBody.tsx, ArticleCard.tsx
+│   │   ├── auth/AuthButton.tsx, AuthModal.tsx
+│   │   ├── chat/
+│   │   │   ├── ChatBubble.tsx, ChatBubbleWrapper.tsx
+│   │   │   ├── ChatHeader.tsx, ChatInput.tsx
+│   │   │   ├── ChatMessage.tsx, ChatWindow.tsx
+│   │   │   ├── NavigationCard.tsx
+│   │   │   └── SuggestedQuestions.tsx
+│   │   ├── coming-soon/NotifyForm.tsx, TeaserCard.tsx
+│   │   ├── community/
+│   │   │   ├── CommentCard.tsx, CommentsSection.tsx
+│   │   │   ├── CommentsSkeleton.tsx
+│   │   │   ├── RatingCard.tsx, RatingsSection.tsx
+│   │   │   └── RatingsSkeleton.tsx
+│   │   ├── compare/
+│   │   │   ├── CompareDevicePicker.tsx
+│   │   │   ├── ComparePageSkeleton.tsx
+│   │   │   ├── CompareRadarChart.tsx
+│   │   │   ├── CompareSpecTable.tsx
+│   │   │   ├── ComparisonTray.tsx
+│   │   │   ├── SaveComparisonButton.tsx
+│   │   │   └── ShareComparisonButton.tsx
+│   │   ├── devices/
+│   │   │   ├── AddToCompareButton.tsx
+│   │   │   ├── BenchmarkChart.tsx
+│   │   │   ├── BuyBox.tsx, DeviceCard.tsx
+│   │   │   ├── RadarChart.tsx, ScoreBadge.tsx
+│   │   │   ├── SpecTable.tsx, VerdictBlock.tsx
+│   │   ├── icons/SocialIcons.tsx
+│   │   ├── layout/
+│   │   │   ├── AdminRouteGuard.tsx
+│   │   │   ├── Footer.tsx, Header.tsx
+│   │   │   └── IsAdminRoute.tsx
+│   │   ├── pwa/InstallPrompt.tsx
+│   │   ├── search/SearchBar.tsx
+│   │   ├── seo/JsonLd.tsx
+│   │   ├── ui/                      # shadcn/ui primitives
+│   │   │   ├── avatar.tsx, badge.tsx, button.tsx
+│   │   │   ├── card.tsx, dialog.tsx, input.tsx
+│   │   │   ├── separator.tsx, sheet.tsx
+│   │   │   ├── skeleton.tsx, tabs.tsx
+│   │   └── videos/
+│   │       ├── HeroCarousel.tsx
+│   │       ├── VideoCard.tsx
+│   │       └── VideoModal.tsx
+│   ├── context/
+│   │   ├── AuthContext.tsx
+│   │   ├── ChatContext.tsx
+│   │   └── ComparisonTrayContext.tsx
+│   ├── hooks/useFocusTrap.ts
+│   ├── lib/
+│   │   ├── admin/access.ts
+│   │   ├── analytics/
+│   │   │   ├── queries.ts
+│   │   │   └── tracker.ts
+│   │   ├── articles/queries.ts
+│   │   ├── auth/actions.ts
+│   │   ├── chat/
+│   │   │   ├── admin-system-prompt.ts
+│   │   │   ├── retrieval.ts
+│   │   │   ├── session-id.ts
+│   │   │   ├── session.ts
+│   │   │   ├── system-prompt.ts
+│   │   │   └── test-prompts.ts
+│   │   ├── community/
+│   │   │   ├── comments.ts
+│   │   │   ├── profanity.ts
+│   │   │   └── ratings.ts
+│   │   ├── db/
+│   │   │   ├── migrations/001_…009_*.sql
+│   │   │   └── seed/
+│   │   │       ├── run.ts, content.ts
+│   │   │       ├── devices.ts, sponsors.ts, about.ts
+│   │   ├── devices/queries.ts
+│   │   ├── images/cloudflare.ts
+│   │   ├── search/indexing.ts
+│   │   ├── seo/jsonld.ts
+│   │   ├── supabase/
+│   │   │   ├── client.ts, middleware.ts, server.ts
+│   │   ├── upstash/
+│   │   │   ├── qstash.ts, ratelimit.ts
+│   │   │   ├── redis.ts, search.ts, vector.ts
+│   │   ├── utils.ts
+│   │   └── videos/queries.ts
+│   ├── lib/youtube/client.ts
+│   ├── middleware.ts
+│   ├── payload.config.ts
+│   ├── payload-types.ts
+│   ├── scripts/
+│   │   ├── fix-locked-documents.ts
+│   │   ├── fix-user-schema.ts
+│   │   ├── generate-icons.ts
+│   │   ├── register-crons.ts
+│   │   ├── register-keepalive-cron.ts
+│   │   ├── reindex-all.ts
+│   │   ├── run-migrations.ts
+│   │   └── seed-admin.ts
+│   ├── styles/
+│   │   ├── admin.css
+│   │   └── globals.css
+│   └── types/
+│       ├── chat.ts
+│       └── next-pwa.d.ts
+├── .env.example
+├── .env.local
+├── eslint.config.mjs
+├── postcss.config.mjs
+└── vercel.json
+```
+
+## API Endpoints
+
+### AI Chat
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/chat` | Public AI chat with Groq streaming (rate-limited) |
+| POST | `/api/chat/session` | Fetch chat session history |
+| POST | `/api/admin/chat` | Admin-only AI chat with Groq streaming (no rate limit) |
+
+### Community
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/community/comments` | List comments |
+| POST | `/api/community/comments` | Post a comment |
+| POST | `/api/community/comments/vote` | Vote on a comment |
+| POST | `/api/community/comments/report` | Report a comment |
+| GET | `/api/community/ratings` | Get device ratings |
+| POST | `/api/community/ratings/vote` | Vote on a rating |
+| POST | `/api/community/comparisons/save` | Save a comparison (auth required) |
+
+### Analytics & Admin
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/export/[report]` | Export CSV reports (page views, top pages, affiliate clicks) |
+| GET | `/api/seed-admin` | Seed admin user |
+| POST | `/api/track` | Analytics beacon (privacy-first page view tracking) |
+
+### Media & Press
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/media-kit/download` | Download media kit PDF |
+| GET | `/api/press/logos-zip` | Download sponsor logos ZIP |
+| POST | `/api/press-inquiry` | Submit press inquiry |
+| POST | `/api/sponsor-inquiry` | Submit sponsor inquiry |
+| POST | `/api/award-package` | Download award submission PDF |
+
+### Outbound & Affiliate
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/out/[device]/[retailer]` | Affiliate outbound link (rate-limited, redirects to retailer) |
+
+### Search
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/search` | Search devices and articles (Upstash Search + Vector) |
+
+### Open Graph Images
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/og/article` | Article OG image |
+| GET | `/api/og/compare` | Comparison OG image |
+| GET | `/api/og/device` | Device OG image |
+| GET | `/api/og/video` | Video OG image |
+| GET | `/api/og/default` | Default OG image |
+
+### Cron Jobs (QStash-signed)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/cron/keep-alive` | Keep Supabase free tier DB awake |
+| GET | `/api/cron/aggregate-analytics` | Aggregate affiliate click analytics |
+| GET | `/api/cron/seed-coming-soon` | Seed coming-soon items from RSS feeds |
+| GET | `/api/cron/weekly-digest` | Send weekly digest email |
+
+### Notifications
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/notify` | Notify Me form submission (rate-limited) |
+
+### Payload CMS REST API
+| Method | Path | Description |
+|--------|------|-------------|
+| GET/POST/PATCH/DELETE/PUT | `/api/[...slug]` | Payload CMS REST API catch-all |
+
+### Auth
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/auth/callback` | OAuth callback (Google, Magic Link) |
+| GET | `/auth/error` | Auth error page |
 
 - Node.js 20+
 - Supabase account (free tier)

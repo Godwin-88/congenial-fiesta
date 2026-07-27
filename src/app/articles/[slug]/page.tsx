@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
+import Script from 'next/script'
 import { getArticle, getAllArticlePaths, getArticlesForDevice, getRecentArticles } from '@/lib/articles/queries'
 import { ArticleBody } from '@/components/articles/ArticleBody'
 import { ArticleCard } from '@/components/articles/ArticleCard'
@@ -176,7 +177,7 @@ export default async function ArticleDetailPage({
       </Suspense>
 
       {/* Schema.org JSON-LD */}
-      <script
+      <Script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({

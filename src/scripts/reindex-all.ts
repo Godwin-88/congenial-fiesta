@@ -4,28 +4,28 @@ import { config } from 'dotenv'
 config({ path: '.env.local' })
 
 async function reindexAll() {
-  const { getPayload } = await import('payload')
-  const payloadConfig = (await import('@payload-config')).default
+  const { createClient } = await import('@supabase/supabase-js')
   const { indexDevice, indexArticle } = await import('@/lib/search/indexing')
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
 
   console.log('Starting reindex of all content into Upstash Search + Vector...\n')
 
-  const payload = await getPayload({ config: payloadConfig })
-
   // ── Index Devices ─────────────────────────────────────────
   console.log('Fetching published devices...')
-  const deviceResult = await payload.find({
-    collection: 'devices',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    where: { status: { equals: 'published' } } as any,
-    limit: 500,
-    depth: 2,
-  })
+  const { data: devices } = await supabase
+    .from('devices')
+    .select('*')
+    .eq('status', 'published')
+    .limit(500)
 
-  const devices = deviceResult.docs as any[]
-  console.log(`Found ${devices.length} published devices. Indexing...`)
+  const deviceList = devices ?? []
+  console.log(`Found ${deviceList.length} published devices. Indexing...`)
 
-  for (const device of devices) {
+  for (const device of deviceList) {
     try {
       await indexDevice(device)
       console.log(`  ✓ Indexed device: ${device.name}`)
@@ -36,18 +36,16 @@ async function reindexAll() {
 
   // ── Index Articles ────────────────────────────────────────
   console.log('\nFetching published articles...')
-  const articleResult = await payload.find({
-    collection: 'articles',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    where: { status: { equals: 'published' } } as any,
-    limit: 500,
-    depth: 2,
-  })
+  const { data: articles } = await supabase
+    .from('articles')
+    .select('*')
+    .eq('status', 'published')
+    .limit(500)
 
-  const articles = articleResult.docs as any[]
-  console.log(`Found ${articles.length} published articles. Indexing...`)
+  const articleList = articles ?? []
+  console.log(`Found ${articleList.length} published articles. Indexing...`)
 
-  for (const article of articles) {
+  for (const article of articleList) {
     try {
       await indexArticle(article)
       console.log(`  ✓ Indexed article: ${article.title}`)
@@ -56,7 +54,7 @@ async function reindexAll() {
     }
   }
 
-  console.log(`\n✅ Reindex complete! Indexed ${devices.length} devices, ${articles.length} articles.`)
+  console.log(`\n✅ Reindex complete! Indexed ${deviceList.length} devices, ${articleList.length} articles.`)
 }
 
 reindexAll()

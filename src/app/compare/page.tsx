@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import Script from 'next/script'
 import type { Metadata } from 'next'
 import { getDeviceBySlug } from '@/lib/devices/queries'
-import type { Device } from '@/payload-types'
+import type { Device } from '@/types/cms'
 import { ScoreBadge } from '@/components/devices/ScoreBadge'
 import { BenchmarkChart } from '@/components/devices/BenchmarkChart'
 import { BuyBox } from '@/components/devices/BuyBox'
@@ -12,6 +13,11 @@ import CompareSpecTable from '@/components/compare/CompareSpecTable'
 import CompareDevicePicker from '@/components/compare/CompareDevicePicker'
 import ShareComparisonButton from '@/components/compare/ShareComparisonButton'
 import SaveComparisonButton from '@/components/compare/SaveComparisonButton'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toOld(d: Device): any {
+  return d as unknown as any
+}
 
 interface PageProps {
   searchParams: Promise<{ devices: string }>
@@ -60,7 +66,8 @@ export default async function ComparePage({ searchParams }: PageProps) {
   const deviceResults = await Promise.all(
     slugs.map((slug) => getDeviceBySlug(slug)),
   )
-  const devices = deviceResults.filter((d): d is Device => d !== null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const devices = deviceResults.filter((d): d is any => d !== null).map(toOld)
 
   if (devices.length < 2) {
     redirect('/devices?toast=compare-not-found')
@@ -75,24 +82,26 @@ export default async function ComparePage({ searchParams }: PageProps) {
           <li aria-hidden="true">›</li>
           <li><span className="text-foreground">Compare</span></li>
           <li aria-hidden="true">›</li>
-          <li className="text-foreground">{devices.map((d) => d.name).join(' vs ')}</li>
+          <li className="text-foreground">{devices.map((d: any) => d.name).join(' vs ')}</li>
         </ol>
       </nav>
 
       <h1 className="mb-6 font-heading text-3xl font-bold text-foreground">
-        {devices.map((d) => d.name).join(' vs ')}
+        {devices.map((d: any) => d.name).join(' vs ')}
       </h1>
 
       <CompareDevicePicker
         selectedSlugs={slugs}
-        deviceNames={devices.map((d) => d.name)}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        deviceNames={(devices as any[]).map((d: any) => d.name)}
         onAdd={() => {}}
         onRemove={() => {}}
       />
 
       <div className="mt-8 flex flex-col items-center">
         <CompareRadarChart
-          devices={devices.map((d) => ({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          devices={(devices as any[]).map((d: any) => ({
             name: d.name,
             scores: {
               display: d.scores?.display ?? 0,
@@ -108,7 +117,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
       <section className="mt-12">
         <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Fweezy Score</h2>
         <div className={`grid gap-6 ${devices.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
-          {devices.map((device) => (
+          {devices.map((device: any) => (
             <div key={device.slug} className="text-center">
               <p className="font-heading text-lg font-bold text-foreground mb-2">{device.name}</p>
               <ScoreBadge score={device.scores?.overall ?? 0} size="lg" />
@@ -120,7 +129,8 @@ export default async function ComparePage({ searchParams }: PageProps) {
       <section className="mt-12">
         <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Specifications</h2>
         <CompareSpecTable
-          devices={devices.map((d) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          devices={(devices as any[]).map((d: any) => {
             return {
               [d.name]: {
                 Dimensions: { label: 'Dimensions', value: d.specsDesign?.dimensions },
@@ -147,14 +157,14 @@ export default async function ComparePage({ searchParams }: PageProps) {
               },
             }
           })}
-          deviceNames={devices.map((d) => d.name)}
+          deviceNames={devices.map((d: any) => d.name)}
         />
       </section>
 
       <section className="mt-12">
         <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Performance Benchmarks</h2>
         <div className={`grid gap-6 ${devices.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
-          {devices.map((device) => (
+          {devices.map((device: any) => (
             <div key={device.slug} className="rounded-xl border border-border bg-card p-6">
               <h3 className="mb-4 font-heading text-lg font-bold text-foreground">{device.name}</h3>
               <BenchmarkChart benchmarks={device.benchmarks ?? null} />
@@ -166,7 +176,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
       <section className="mt-12">
         <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Fweezy's Take</h2>
         <div className={`grid gap-6 ${devices.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
-          {devices.map((device) => (
+          {devices.map((device: any) => (
             <VerdictBlock key={device.slug} verdict={device.verdict} />
           ))}
         </div>
@@ -175,7 +185,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
       <section className="mt-12">
         <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Where to Buy</h2>
         <div className={`grid gap-6 ${devices.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
-          {devices.map((device) => (
+          {devices.map((device: any) => (
             <BuyBox
               key={device.slug}
               buyLinks={device.buyLinks}
@@ -192,8 +202,8 @@ export default async function ComparePage({ searchParams }: PageProps) {
       </div>
 
       {/* Schema.org JSON-LD */}
-      {devices.map((device) => (
-        <script
+      {devices.map((device: any) => (
+        <Script
           key={device.slug}
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -210,4 +220,3 @@ export default async function ComparePage({ searchParams }: PageProps) {
     </div>
   )
 }
-

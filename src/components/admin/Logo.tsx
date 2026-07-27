@@ -12,7 +12,7 @@ export default function Logo() {
       }}>F</div>
       <span style={{
         fontWeight: 700, fontSize: 16,
-        color: '#F9FAFB',
+        color: 'var(--theme-elevation-800)',
         fontFamily: "'Raleway', sans-serif",
         letterSpacing: '-0.02em',
       }}>

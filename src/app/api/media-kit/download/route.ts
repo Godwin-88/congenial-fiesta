@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Fetch active MediaKit from Payload
+    // Default data (used as fallback if Supabase fetch fails)
     let mediaKitData: Record<string, unknown> = {
       shortBio: 'FweezyTech is Kenya\'s #1 tech content creator, delivering honest, in-depth reviews of smartphones, gadgets, and consumer electronics to a growing audience across East Africa.',
       longBio: 'FweezyTech is a premier technology content creator based in Kenya, dedicated to providing honest, thorough, and accessible reviews of smartphones, gadgets, and consumer electronics. With a focus on the East African market, FweezyTech bridges the gap between global tech trends and local relevance, helping consumers make informed purchasing decisions. Known for detailed benchmarks, real-world camera tests, battery life evaluations, and value-for-money analysis, FweezyTech has become the go-to source for tech enthusiasts in Kenya, Uganda, Tanzania, and beyond. Content spans YouTube, TikTok, Instagram, and Facebook, reaching millions of viewers monthly.',
@@ -44,26 +44,36 @@ export async function GET(request: Request) {
     }
 
     try {
-      const { getPayload } = await import('payload')
-      const config = (await import('@payload-config')).default
-      const payload = await getPayload({ config })
-      const result = await payload.find({
-        collection: 'media-kit',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        where: { active: { equals: true } } as any,
-        limit: 1,
-        depth: 0,
-      })
+      const { createClient } = await import('@/lib/supabase/server')
+      const supabase = await createClient()
+      const { data: kit } = await supabase
+        .from('media_kit')
+        .select('*')
+        .eq('active', true)
+        .limit(1)
+        .single()
 
-      if (result.docs.length > 0) {
-        const doc = result.docs[0] as Record<string, unknown>
+      if (kit) {
         mediaKitData = {
           ...mediaKitData,
-          ...doc,
+          shortBio: kit.short_bio ?? mediaKitData.shortBio,
+          longBio: kit.long_bio ?? mediaKitData.longBio,
+          totalFollowers: kit.total_followers ?? mediaKitData.totalFollowers,
+          totalViews: kit.total_views ?? mediaKitData.totalViews,
+          yearsActive: kit.years_active ?? mediaKitData.yearsActive,
+          youtubeFollowers: kit.youtube_followers ?? mediaKitData.youtubeFollowers,
+          tiktokFollowers: kit.tiktok_followers ?? mediaKitData.tiktokFollowers,
+          instagramFollowers: kit.instagram_followers ?? mediaKitData.instagramFollowers,
+          facebookFollowers: kit.facebook_followers ?? mediaKitData.facebookFollowers,
+          logoLight: kit.logo_light_url ?? '',
+          logoDark: kit.logo_dark_url ?? '',
+          logoSvgLight: kit.logo_svg_light_url ?? '',
+          logoSvgDark: kit.logo_svg_dark_url ?? '',
+          brandColours: kit.brand_colours ?? [],
         }
       }
     } catch {
-      // Use defaults if Payload fetch fails
+      // Use defaults
     }
 
     const year = new Date().getFullYear()

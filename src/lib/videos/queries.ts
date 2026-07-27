@@ -1,9 +1,6 @@
-import { getPayload } from 'payload'
-import config from '@payload-config'
+import { createClient } from '@supabase/supabase-js'
 import { redis } from '@/lib/upstash/redis'
-import type { Article } from '@/payload-types'
 
-// Re-using Article type for Video since Payload types aren't regenerated yet
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CmsVideo = any
 
@@ -14,6 +11,13 @@ function safeJsonParse<T>(data: unknown): T | null {
   } catch {
     return null
   }
+}
+
+function getAdminSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
 }
 
 type GetCmsVideosParams = {
@@ -32,27 +36,33 @@ export async function getCmsVideos(
   const parsed = safeJsonParse<{ videos: CmsVideo[]; totalPages: number }>(cached)
   if (parsed) return parsed
 
-  const payload = await getPayload({ config })
+  const supabase = getAdminSupabase()
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: Record<string, any> = {}
+  let query = supabase
+    .from('videos')
+    .select('*', { count: 'exact' })
+    .order('published_at', { ascending: false })
+
   if (platform) {
-    where.platform = { equals: platform }
+    query = query.eq('platform', platform)
   }
 
-  const result = await payload.find({
-    collection: 'videos',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    where: where as any,
-    page,
-    limit,
-    sort: '-publishedAt',
-    depth: 2,
-  })
+  const from = (page - 1) * limit
+  const to = from + limit - 1
+  query = query.range(from, to)
+
+  const { data, error, count } = await query
+
+  if (error) {
+    console.error('getCmsVideos error:', error)
+    return { videos: [], totalPages: 0 }
+  }
+
+  const totalPages = count ? Math.ceil(count / limit) : 1
 
   const output = {
-    videos: result.docs as unknown as CmsVideo[],
-    totalPages: result.totalPages,
+    videos: (data ?? []) as unknown as CmsVideo[],
+    totalPages,
   }
 
   await redis.setex(cacheKey, 300, JSON.stringify(output))
@@ -65,18 +75,21 @@ export async function getFeaturedCmsVideos(): Promise<CmsVideo[]> {
   const parsed = safeJsonParse<CmsVideo[]>(cached)
   if (parsed) return parsed
 
-  const payload = await getPayload({ config })
+  const supabase = getAdminSupabase()
 
-  const result = await payload.find({
-    collection: 'videos',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    where: { featured: { equals: true } } as any,
-    limit: 10,
-    sort: '-publishedAt',
-    depth: 2,
-  })
+  const { data, error } = await supabase
+    .from('videos')
+    .select('*')
+    .eq('featured', true)
+    .order('published_at', { ascending: false })
+    .limit(10)
 
-  const videos = result.docs as unknown as CmsVideo[]
+  if (error) {
+    console.error('getFeaturedCmsVideos error:', error)
+    return []
+  }
+
+  const videos = (data ?? []) as unknown as CmsVideo[]
   await redis.setex(cacheKey, 600, JSON.stringify(videos))
   return videos
 }
@@ -87,20 +100,21 @@ export async function getActiveComingSoon(): Promise<CmsVideo[]> {
   const parsed = safeJsonParse<CmsVideo[]>(cached)
   if (parsed) return parsed
 
-  const payload = await getPayload({ config })
+  const supabase = getAdminSupabase()
 
-  const result = await payload.find({
-    collection: 'coming-soon',
-     
-    where: {
-      active: { equals: true },
-    } as any,
-    limit: 20,
-    sort: 'createdAt',
-    depth: 1,
-  })
+  const { data, error } = await supabase
+    .from('coming_soon')
+    .select('*')
+    .eq('active', true)
+    .order('created_at', { ascending: true })
+    .limit(20)
 
-  const items = result.docs as unknown as CmsVideo[]
+  if (error) {
+    console.error('getActiveComingSoon error:', error)
+    return []
+  }
+
+  const items = (data ?? []) as unknown as CmsVideo[]
   await redis.setex(cacheKey, 300, JSON.stringify(items))
   return items
 }

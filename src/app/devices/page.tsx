@@ -57,9 +57,9 @@ export default async function DevicesPage({ searchParams }: DevicesPageProps) {
                   : 'border-border text-foreground'
               }`}
             >
-              {b.logo && (
+              {b.logo_url && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={b.logo} alt="" className="h-5 w-5 rounded-full object-contain" />
+                <img src={b.logo_url} alt="" className="h-5 w-5 rounded-full object-contain" />
               )}
               {b.name}
             </Link>

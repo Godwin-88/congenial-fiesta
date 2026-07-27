@@ -14,30 +14,27 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Fetch logo URLs from Payload
+    // Fetch logo URLs from Supabase
     let logoLight = ''
     let logoDark = ''
     let logoSvgLight = ''
     let logoSvgDark = ''
 
     try {
-      const { getPayload } = await import('payload')
-      const config = (await import('@payload-config')).default
-      const payload = await getPayload({ config })
-      const result = await payload.find({
-        collection: 'media-kit',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        where: { active: { equals: true } } as any,
-        limit: 1,
-        depth: 0,
-      })
+      const { createClient } = await import('@/lib/supabase/server')
+      const supabase = await createClient()
+      const { data: kit } = await supabase
+        .from('media_kit')
+        .select('logo_light_url, logo_dark_url, logo_svg_light_url, logo_svg_dark_url')
+        .eq('active', true)
+        .limit(1)
+        .single()
 
-      if (result.docs.length > 0) {
-        const doc = result.docs[0] as Record<string, unknown>
-        logoLight = String(doc.logoLight ?? '')
-        logoDark = String(doc.logoDark ?? '')
-        logoSvgLight = String(doc.logoSvgLight ?? '')
-        logoSvgDark = String(doc.logoSvgDark ?? '')
+      if (kit) {
+        logoLight = kit.logo_light_url ?? ''
+        logoDark = kit.logo_dark_url ?? ''
+        logoSvgLight = kit.logo_svg_light_url ?? ''
+        logoSvgDark = kit.logo_svg_dark_url ?? ''
       }
     } catch {
       // Use defaults if fetch fails

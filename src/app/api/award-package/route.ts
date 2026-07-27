@@ -1,38 +1,40 @@
 import { NextResponse } from 'next/server'
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
-import { getPayload } from 'payload'
-import config from '@payload-config'
+import { createClient } from '@supabase/supabase-js'
 import { getUser } from '@/lib/auth/actions'
 import { pdfRateLimit } from '@/lib/upstash/ratelimit'
 
 export const runtime = 'nodejs'
 
+function getAdminSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+}
+
 async function getTopDevices(limit: number) {
-  const payload = await getPayload({ config })
-  const result = await payload.find({
-    collection: 'devices',
-    where: { status: { equals: 'published' } },
-    sort: '-scores.overall',
-    limit,
-  })
-  return result.docs.map((d) => ({
+  const supabase = getAdminSupabase()
+  const { data } = await supabase
+    .from('devices')
+    .select('name, scores')
+    .eq('status', 'published')
+    .order('scores->>overall', { ascending: false })
+    .limit(limit)
+  return (data ?? []).map((d: Record<string, unknown>) => ({
     name: String(d.name ?? ''),
-    score: d.scores?.overall ?? null,
+    score: (d.scores as Record<string, unknown> | null)?.overall ?? null,
   }))
 }
 
 async function getTotalPageViews() {
   try {
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    )
-    const { data } = await supabase
+    const supabase = getAdminSupabase()
+    const { count } = await supabase
       .from('page_views')
       .select('*', { count: 'exact', head: true })
       .gte('created_at', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
-    return data?.length ?? 0
+    return count ?? 0
   } catch {
     return 0
   }
@@ -54,17 +56,19 @@ export async function GET() {
   }
 
   try {
-    const payload = await getPayload({ config })
+    const supabase = getAdminSupabase()
 
-    const [mediaKitResult, awards, milestones, topDevices, totalViews] = await Promise.all([
-      payload.find({ collection: 'media-kit', where: { active: { equals: true } }, limit: 1 }).catch(() => ({ docs: [] })),
-      payload.find({ collection: 'awards', sort: '-year', limit: 20 }).catch(() => ({ docs: [] })),
-      payload.find({ collection: 'milestones', sort: '-year,displayOrder', limit: 20 }).catch(() => ({ docs: [] })),
+    const [mediaKitResult, awardsResult, milestonesResult, topDevices, totalViews] = await Promise.all([
+      supabase.from('media_kit').select('*').eq('active', true).limit(1).maybeSingle(),
+      supabase.from('awards').select('*').order('year', { ascending: false }).limit(20),
+      supabase.from('milestones').select('*').order('year', { ascending: false }).order('display_order', { ascending: true }).limit(20),
       getTopDevices(5),
       getTotalPageViews(),
     ])
 
-    const mediaKit = mediaKitResult.docs[0] || null
+    const mediaKit = mediaKitResult.data ?? null
+    const awards = awardsResult.data ?? []
+    const milestones = milestonesResult.data ?? []
     const year = new Date().getFullYear()
 
     // Create PDF
@@ -115,7 +119,7 @@ export async function GET() {
       x: 40, y: yPos, size: 20, font: fontBold, color: rgb(0.07, 0.09, 0.15),
     })
     yPos -= 30
-    profile.drawText(mediaKit?.shortBio?.slice(0, 300) ?? "Kenya's premier tech review platform.", {
+    profile.drawText(String(mediaKit?.short_bio ?? "Kenya's premier tech review platform.").slice(0, 300), {
       x: 40, y: yPos, size: 11, font: font, color: rgb(0.3, 0.3, 0.3),
       maxWidth: 530, lineHeight: 16,
     })
@@ -127,24 +131,25 @@ export async function GET() {
     })
     yPos -= 25
 
-    const platforms = [
+    const kit = mediaKit as Record<string, unknown> | null
+    const platforms: [string, string][] = [
       ['Platform', 'Followers'],
-      ['YouTube', mediaKit?.youtubeFollowers ?? '—'],
-      ['TikTok', mediaKit?.tiktokFollowers ?? '—'],
-      ['Instagram', mediaKit?.instagramFollowers ?? '—'],
-      ['Facebook', mediaKit?.facebookFollowers ?? '—'],
-      ['Total', mediaKit?.totalFollowers ?? '—'],
+      ['YouTube', kit?.youtube_followers ? String(kit.youtube_followers) : '—'],
+      ['TikTok', kit?.tiktok_followers ? String(kit.tiktok_followers) : '—'],
+      ['Instagram', kit?.instagram_followers ? String(kit.instagram_followers) : '—'],
+      ['Facebook', kit?.facebook_followers ? String(kit.facebook_followers) : '—'],
+      ['Total', kit?.total_followers ? String(kit.total_followers) : '—'],
     ]
 
     for (const row of platforms) {
       profile.drawText(row[0], { x: 40, y: yPos, size: 11, font: row[0] === 'Platform' ? fontBold : font, color: rgb(0.2, 0.2, 0.2) })
-      profile.drawText(row[1], { x: 200, y: yPos, size: 11, font: row[1] === 'Followers' ? fontBold : font, color: rgb(0.2, 0.2, 0.2) })
+      profile.drawText(String(row[1]), { x: 200, y: yPos, size: 11, font: row[1] === 'Followers' ? fontBold : font, color: rgb(0.2, 0.2, 0.2) })
       yPos -= 18
     }
 
     yPos -= 20
-    if (mediaKit?.yearsActive) {
-      profile.drawText(`Years Active: ${mediaKit.yearsActive}`, {
+    if (kit?.years_active) {
+      profile.drawText(`Years Active: ${String(kit.years_active)}`, {
         x: 40, y: yPos, size: 11, font: font, color: rgb(0.3, 0.3, 0.3),
       })
     }
@@ -187,9 +192,9 @@ export async function GET() {
     })
     yPos -= 30
 
-    for (const m of milestones.docs) {
+    for (const m of milestones) {
       const title = String(m.title ?? '')
-      milePage.drawText(`${m.year} — ${title}`, {
+      milePage.drawText(`${String(m.year)} — ${title}`, {
         x: 45, y: yPos, size: 11, font: font, color: rgb(0.3, 0.3, 0.3),
         maxWidth: 520, lineHeight: 15,
       })
@@ -205,9 +210,9 @@ export async function GET() {
     })
     yPos -= 30
 
-    if (awards.docs.length > 0) {
-      for (const a of awards.docs) {
-        awardPage.drawText(`${a.year} — ${a.awardName} (${a.awardingBody})`, {
+    if (awards.length > 0) {
+      for (const a of awards) {
+        awardPage.drawText(`${String(a.year)} — ${String(a.award_name)} (${String(a.awarding_body)})`, {
           x: 45, y: yPos, size: 11, font: font, color: rgb(0.3, 0.3, 0.3),
           maxWidth: 520, lineHeight: 15,
         })

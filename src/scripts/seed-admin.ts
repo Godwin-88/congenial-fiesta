@@ -11,28 +11,70 @@ async function createAdminUser() {
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@fweezytech.com'
   const adminPassword = 'Admin123!'
 
-  // First check if user exists via the Payload REST API
-  const checkResponse = await fetch(`${serverUrl}/api/users?where[email][equals]=${encodeURIComponent(adminEmail)}&depth=0&limit=1`, {
-    headers: {
-      'Content-Type': 'application/json',
-    },
+  // First, create the initial admin by first logging in to get a session token.
+  // Payload's first-user bootstrapping allows creating a user with role: 'admin'
+  // via POST /api/users without auth, but only if no admin exists yet.
+  // After that, we must authenticate to modify users.
+
+  // 1. Try to log in first (in case user already exists but has wrong role)
+  const loginResponse = await fetch(`${serverUrl}/api/users/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: adminEmail,
+      password: adminPassword,
+    }),
   })
 
-  if (checkResponse.ok) {
-    const checkData = await checkResponse.json()
-    if (checkData.docs && checkData.docs.length > 0) {
-      console.log(`✓ Admin user "${adminEmail}" already exists`)
-      console.log(`  Login at ${serverUrl}/admin`)
-      process.exit(0)
+  if (loginResponse.ok) {
+    const loginData = await loginResponse.json()
+    const token = loginData.token
+    console.log(`✓ Logged in as "${adminEmail}"`)
+
+    // 2. Check the user's current role
+    const meResponse = await fetch(`${serverUrl}/api/users/me`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    })
+    if (meResponse.ok) {
+      const meData = await meResponse.json()
+      const currentRole = meData?.user?.role
+      if (currentRole === 'admin') {
+        console.log(`✓ User "${adminEmail}" already has admin role`)
+        console.log(`  Login at ${serverUrl}/admin`)
+        process.exit(0)
+      }
+      // 3. Upgrade role to admin using auth token
+      const userId = meData?.user?.id
+      if (userId) {
+        const updateResponse = await fetch(`${serverUrl}/api/users/${userId}`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ role: 'admin' }),
+        })
+        if (updateResponse.ok) {
+          console.log(`✓ Upgraded "${adminEmail}" from "${currentRole}" to admin`)
+          console.log(`  Login at ${serverUrl}/admin`)
+          process.exit(0)
+        } else {
+          const err = await updateResponse.text()
+          console.error(`✗ Failed to upgrade role: ${err}`)
+          process.exit(1)
+        }
+      }
     }
   }
 
-  // Create admin user via Payload REST API
+  // 4. User doesn't exist yet — create as admin via first-user bootstrap
+  console.log(`Creating admin user "${adminEmail}"...`)
   const createResponse = await fetch(`${serverUrl}/api/users`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       email: adminEmail,
       password: adminPassword,
@@ -41,13 +83,17 @@ async function createAdminUser() {
   })
 
   if (createResponse.ok) {
-    const data = await createResponse.json()
-    console.log(`✓ Created Payload admin user: ${adminEmail} / ${adminPassword}`)
+    console.log(`✓ Created admin user: ${adminEmail} / ${adminPassword}`)
     console.log(`  Login at ${serverUrl}/admin`)
     process.exit(0)
   } else {
     const errorData = await createResponse.text()
     console.error(`✗ Failed to create admin user: ${errorData}`)
+    console.error('')
+    console.error('Possible fixes:')
+    console.error('  1. Run the dev server first (npm run dev)')
+    console.error('  2. If the user exists with viewer role, the login step above should upgrade them')
+    console.error('  3. If login fails, delete the user from the database and re-run this script')
     process.exit(1)
   }
 }

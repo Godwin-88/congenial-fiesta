@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Moon, Sun, Menu, Search } from "lucide-react"
-import { useTheme } from "next-themes"
+import { useTheme } from "@ecosy/next-themes"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import SearchBar from "@/components/search/SearchBar"

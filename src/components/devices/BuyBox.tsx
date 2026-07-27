@@ -1,7 +1,8 @@
-import type { Device } from '@/payload-types'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 
 interface BuyBoxProps {
-  buyLinks: Device['buyLinks']
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  buyLinks: any
   deviceName: string
   deviceSlug: string
 }
@@ -23,7 +24,7 @@ export function BuyBox({ buyLinks, deviceName, deviceSlug }: BuyBoxProps) {
         Where to Buy {deviceName}
       </h3>
       <div className="space-y-2">
-        {buyLinks.map((link, i) => (
+        {buyLinks.map((link: any, i: number) => (
           <a
             key={i}
             href={`/api/out/${deviceSlug}/${link.retailer}`}
@@ -40,12 +41,12 @@ export function BuyBox({ buyLinks, deviceName, deviceSlug }: BuyBoxProps) {
           </a>
         ))}
       </div>
-      {buyLinks.some((l) => l.priceDate) && (
+      {buyLinks.some((l: any) => l.priceDate) && (
         <p className="mt-2 text-xs text-muted-foreground">
           Prices as of{' '}
           {buyLinks
-            .filter((l) => l.priceDate)
-            .map((l) => new Date(l.priceDate!).toLocaleDateString())
+            .filter((l: any) => l.priceDate)
+            .map((l: any) => new Date(l.priceDate!).toLocaleDateString())
             .join(', ')}
         </p>
       )}
