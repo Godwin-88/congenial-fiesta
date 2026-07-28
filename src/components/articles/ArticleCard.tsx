@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import SaveButton from './SaveButton'
 
 type ArticleCardProps = {
   slug: string
@@ -24,40 +25,46 @@ export function ArticleCard({ slug, title, excerpt, featuredImage, category, rea
   const catLabel = category ? category.replace('-', ' ') : ''
 
   return (
-    <Link
-      href={`/articles/${slug}`}
-      className="group rounded-xl border border-border bg-card overflow-hidden transition-shadow hover:shadow-lg"
-    >
-      <div className="relative aspect-video bg-muted overflow-hidden">
-        {featuredImage && (
-          <Image
-            src={featuredImage}
-            alt={title}
-            fill
-            className="object-cover transition-transform group-hover:scale-105"
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          />
-        )}
-      </div>
-      <div className="p-4">
-        {category && (
-          <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${catColor}`}>
-            {catLabel}
-          </span>
-        )}
-        <h3 className="mt-2 line-clamp-2 text-base font-semibold text-foreground group-hover:text-brand-primary transition-colors">
-          {title}
-        </h3>
-        {excerpt && (
-          <p className="mt-1 line-clamp-3 text-sm text-foreground/60">
-            {excerpt}
-          </p>
-        )}
-        <div className="mt-3 flex items-center gap-3 text-xs text-foreground/50">
-          {readingTimeMinutes && <span>{readingTimeMinutes} min read</span>}
-          {publishedAt && <span>{new Date(publishedAt).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric' })}</span>}
+    <div className="group rounded-xl border border-border bg-card overflow-hidden transition-shadow hover:shadow-lg">
+      <Link href={`/articles/${slug}`} className="block">
+        <div className="relative aspect-video bg-muted overflow-hidden">
+          {featuredImage && (
+            <Image
+              src={featuredImage}
+              alt={title}
+              fill
+              className="object-cover transition-transform group-hover:scale-105"
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            />
+          )}
         </div>
+        <div className="p-4">
+          {category && (
+            <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${catColor}`}>
+              {catLabel}
+            </span>
+          )}
+          <h3 className="mt-2 line-clamp-2 text-base font-semibold text-foreground group-hover:text-brand-primary transition-colors">
+            {title}
+          </h3>
+          {excerpt && (
+            <p className="mt-1 line-clamp-3 text-sm text-foreground/60">
+              {excerpt}
+            </p>
+          )}
+          <div className="mt-3 flex items-center gap-3 text-xs text-foreground/50">
+            {readingTimeMinutes && <span>{readingTimeMinutes} min read</span>}
+            {publishedAt && <span>{new Date(publishedAt).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric' })}</span>}
+          </div>
+        </div>
+      </Link>
+      <div className="px-4 pb-3">
+        <SaveButton
+          contentType="article"
+          contentId={slug}
+          metadata={{ title, excerpt, featuredImage, category }}
+        />
       </div>
-    </Link>
+    </div>
   )
 }

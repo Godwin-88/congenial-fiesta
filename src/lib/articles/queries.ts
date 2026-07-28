@@ -1,15 +1,12 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
 import { redis } from '@/lib/upstash/redis'
 import type { Article } from '@/types/cms'
 import { mapArticle } from '@/types/cms'
 
 function getSupabase() {
-  return createServerClient(
+  return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: async () => (await cookies()).getAll(), setAll: () => {} } }
   )
 }
 
@@ -33,7 +30,10 @@ export async function getArticles(
 
   const cacheKey = `articles:list:${category ?? 'all'}:${page}`
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) return JSON.parse(cached as string)
+  if (cached) {
+    if (typeof cached === 'string') return JSON.parse(cached)
+    return cached as { articles: Article[]; totalPages: number }
+  }
 
   const supabase = getSupabase()
   const offset = (page - 1) * limit
@@ -65,7 +65,10 @@ export async function getArticles(
 export async function getArticle(slug: string): Promise<Article | null> {
   const cacheKey = `articles:detail:${slug}`
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) return JSON.parse(cached as string)
+  if (cached) {
+    if (typeof cached === 'string') return JSON.parse(cached)
+    return cached as Article
+  }
 
   const supabase = getSupabase()
   const { data, error } = await supabase
@@ -88,7 +91,10 @@ export async function getArticle(slug: string): Promise<Article | null> {
 export async function getAllArticlePaths(): Promise<Array<{ slug: string }>> {
   const cacheKey = 'articles:static-params'
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) return JSON.parse(cached as string)
+  if (cached) {
+    if (typeof cached === 'string') return JSON.parse(cached)
+    return cached as Array<{ slug: string }>
+  }
 
   const supabase = getPublicSupabase()
   const { data } = await supabase
@@ -104,7 +110,10 @@ export async function getAllArticlePaths(): Promise<Array<{ slug: string }>> {
 export async function getRecentArticles(limit: number = 4): Promise<Article[]> {
   const cacheKey = `articles:recent:${limit}`
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) return JSON.parse(cached as string)
+  if (cached) {
+    if (typeof cached === 'string') return JSON.parse(cached)
+    return cached as Article[]
+  }
 
   const supabase = getSupabase()
   const { data } = await supabase
@@ -122,7 +131,10 @@ export async function getRecentArticles(limit: number = 4): Promise<Article[]> {
 export async function getArticlesForDevice(deviceSlug: string): Promise<Article[]> {
   const cacheKey = `articles:device:${deviceSlug}`
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) return JSON.parse(cached as string)
+  if (cached) {
+    if (typeof cached === 'string') return JSON.parse(cached)
+    return cached as Article[]
+  }
 
   const supabase = getSupabase()
 

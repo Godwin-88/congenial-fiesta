@@ -28,8 +28,8 @@ export async function generateMetadata({
   const a = article as any
 
   return {
-    title: a.seo?.metaTitle ?? `${a.title} | FweezyTech`,
-    description: a.seo?.metaDescription ?? a.excerpt ?? '',
+    title: a.seo_meta_title ?? `${a.title} | FweezyTech`,
+    description: a.seo_meta_description ?? a.excerpt ?? '',
     openGraph: a.featuredImage ? { images: [a.featuredImage] } : undefined,
   }
 }

@@ -2,6 +2,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { signUpWithEmail } from '@/lib/auth/actions'
 import Link from 'next/link'
 import Logo from '@/components/admin/Logo'
 import { Button } from '@/components/ui/button'
@@ -40,18 +41,14 @@ function LoginForm() {
     try {
       const supabase = createClient()
       if (mode === 'signup') {
-        const { error: signUpError } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-          },
-        })
-        if (signUpError) {
-          setError(signUpError.message)
+        const result = await signUpWithEmail(email.trim(), password, next)
+        if (result.error) {
+          setError(result.error)
         } else {
           setError('')
-          alert('Check your email for a verification link!')
+          // Auto-confirmed and signed in by the server action — refresh to pick up session cookies
+          router.refresh()
+          router.push(next)
         }
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({

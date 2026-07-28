@@ -1,12 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { Moon, Sun, Menu, Search } from "lucide-react"
+import { Moon, Sun, Menu, Search, Bookmark } from "lucide-react"
 import { useTheme } from "@ecosy/next-themes"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import SearchBar from "@/components/search/SearchBar"
 import AuthButton from "@/components/auth/AuthButton"
+import { useAuth } from "@/context/AuthContext"
 
 const navLinks = [
   { href: "/articles", label: "Articles" },
@@ -20,6 +21,7 @@ export default function Header() {
   const [open, setOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const { theme, setTheme } = useTheme()
+  const { user } = useAuth()
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -38,6 +40,15 @@ export default function Header() {
               {link.label}
             </a>
           ))}
+          {user && (
+            <a
+              href="/saved"
+              className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors flex items-center gap-1"
+            >
+              <Bookmark size={14} />
+              Saved
+            </a>
+          )}
         </nav>
 
         <div className="flex items-center gap-2">
@@ -93,6 +104,16 @@ export default function Header() {
                     {link.label}
                   </a>
                 ))}
+                {user && (
+                  <a
+                    href="/saved"
+                    onClick={() => setOpen(false)}
+                    className="text-lg font-medium text-foreground/70 hover:text-foreground transition-colors flex items-center gap-2"
+                  >
+                    <Bookmark size={16} />
+                    Saved
+                  </a>
+                )}
               </nav>
             </SheetContent>
           </Sheet>

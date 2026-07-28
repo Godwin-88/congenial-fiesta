@@ -4,7 +4,6 @@ import { getAdminUser } from '@/lib/admin/require-admin'
 import Sidebar from '@/components/admin/Sidebar'
 import { AdminProvider } from '@/context/AdminContext'
 import { ThemeProvider } from '@ecosy/next-themes'
-import '@/styles/globals.css'
 
 const ralewaySans = Raleway({
   variable: '--font-sans',
@@ -32,28 +31,22 @@ export default async function AdminLayout({
   }
 
   return (
-    <html
-      lang="en"
-      className={`${ralewaySans.variable} ${ralewayHeading.variable} antialiased`}
-      suppressHydrationWarning
-    >
-      <body className="bg-background text-foreground font-sans" suppressHydrationWarning>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem={false}
-          disableTransitionOnChange
-        >
-          <AdminProvider adminUser={adminUser}>
-            <div className="flex h-screen">
-              <Sidebar adminUser={adminUser} />
-              <main className="flex-1 overflow-y-auto p-6 lg:p-8 pt-16 lg:pt-8">
-                {children}
-              </main>
-            </div>
-          </AdminProvider>
-        </ThemeProvider>
-      </body>
-    </html>
+    <div className={`${ralewaySans.variable} ${ralewayHeading.variable} font-sans antialiased`}>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="dark"
+        enableSystem={false}
+        disableTransitionOnChange
+      >
+        <AdminProvider adminUser={adminUser}>
+          <div className="flex h-screen">
+            <Sidebar adminUser={adminUser} />
+            <main className="flex-1 overflow-y-auto p-6 lg:p-8 pt-16 lg:pt-8">
+              {children}
+            </main>
+          </div>
+        </AdminProvider>
+      </ThemeProvider>
+    </div>
   )
 }

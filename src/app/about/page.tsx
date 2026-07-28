@@ -8,11 +8,11 @@ import TimelineClient from './TimelineClient'
 const HIGHLIGHT_REEL_VIDEO_ID = 'dQw4w9WgXcQ' // placeholder — replace with real ID
 
 export const metadata = {
-  title: 'About Fweezy | FweezyTech',
+  title: 'About Millan Wafula (Fweezy Tech) | Tech Content Creator',
   description:
-    "Meet Fweezy — Kenya's top tech content creator covering smartphones, reviews, and comparisons on YouTube, TikTok, Instagram, and Facebook.",
+    "Meet Millan Wafula — Fweezy Tech. Kenya's top tech content creator covering smartphones, reviews, and comparisons on TikTok, Instagram, Facebook, and YouTube.",
   openGraph: {
-    images: [{ url: '/api/og/default?title=About+Fweezy', width: 1200, height: 630 }],
+    images: [{ url: '/api/og/default?title=About+Fweezy+Tech', width: 1200, height: 630 }],
   },
 }
 
@@ -85,8 +85,11 @@ export default async function AboutPage() {
 
               <div className="order-1 lg:order-2">
                 <h1 className="font-heading text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-                  Meet Fweezy
+                  Millan Wafula <span className="text-brand-primary">(Fweezy Tech)</span>
                 </h1>
+                <p className="mt-2 text-lg text-brand-primary font-medium">
+                  Tech Content Creator
+                </p>
                 <p className="mt-4 text-lg leading-relaxed text-foreground/70">
                   {(kit?.short_bio as string) ||
                     "Kenya's leading tech content creator, bringing you honest, in-depth reviews of the latest smartphones and gadgets."}
@@ -111,9 +114,6 @@ export default async function AboutPage() {
                 </div>
 
                 <div className="mt-6 flex flex-wrap gap-3">
-                  <a href="https://www.youtube.com/@fweezytech" target="_blank" rel="noopener noreferrer"
-                     className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
-                     aria-label="Follow on YouTube">YouTube</a>
                   <a href="https://www.tiktok.com/@fweezytech" target="_blank" rel="noopener noreferrer"
                      className="inline-flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
                      aria-label="Follow on TikTok">TikTok</a>
@@ -123,6 +123,9 @@ export default async function AboutPage() {
                   <a href="https://www.facebook.com/fweezytech" target="_blank" rel="noopener noreferrer"
                      className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
                      aria-label="Follow on Facebook">Facebook</a>
+                  <a href="https://www.youtube.com/@fweezytech" target="_blank" rel="noopener noreferrer"
+                     className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+                     aria-label="Follow on YouTube">YouTube</a>
                 </div>
               </div>
             </div>
@@ -145,10 +148,10 @@ export default async function AboutPage() {
           <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
             <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
               {[
-                { name: 'YouTube', count: kit?.youtube_followers ? String(kit.youtube_followers) : '—', color: 'text-red-500' },
                 { name: 'TikTok', count: kit?.tiktok_followers ? String(kit.tiktok_followers) : '—', color: 'text-foreground' },
                 { name: 'Instagram', count: kit?.instagram_followers ? String(kit.instagram_followers) : '—', color: 'text-pink-500' },
                 { name: 'Facebook', count: kit?.facebook_followers ? String(kit.facebook_followers) : '—', color: 'text-blue-500' },
+                { name: 'YouTube', count: kit?.youtube_followers ? String(kit.youtube_followers) : '—', color: 'text-red-500' },
               ].map((platform) => (
                 <div key={platform.name} className="flex flex-col items-center rounded-xl border border-border bg-card p-6 transition-transform hover:-translate-y-0.5">
                   <span className={`text-2xl font-bold ${platform.color}`}>{platform.count}</span>

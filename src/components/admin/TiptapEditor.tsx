@@ -9,7 +9,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import CharacterCount from '@tiptap/extension-character-count'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   Heading2, Heading3, Heading4, List, ListOrdered, Quote, Code,
@@ -101,9 +101,40 @@ export default function TiptapEditor({
     editor?.chain().focus().setLink({ href: url }).run()
   }, [editor])
 
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const addImage = useCallback(() => {
-    const url = window.prompt('Image URL (Cloudflare Images URL)')
+    const url = window.prompt('Image URL (paste any public image URL)')
     if (url) editor?.chain().focus().setImage({ src: url }).run()
+  }, [editor])
+
+  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    editor?.chain().focus().setImage({ src: '' }).run()
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json()
+      if (data.url) {
+        // Replace the placeholder with the actual image
+        editor?.chain().focus().setImage({ src: data.url }).run()
+      } else {
+        alert('Upload failed: ' + (data.error || 'Unknown error'))
+      }
+    } catch {
+      alert('Upload failed — check your connection')
+    } finally {
+      // Reset file input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
   }, [editor])
 
   if (!editor) return (
@@ -264,8 +295,19 @@ export default function TiptapEditor({
         ><LinkIcon size={16} /></ToolbarButton>
         <ToolbarButton
           onClick={addImage}
-          title="Insert image"
+          title="Insert image URL"
         ><ImageIcon size={16} /></ToolbarButton>
+        <label className="cursor-pointer p-1.5 rounded transition-colors text-gray-400 hover:text-white hover:bg-[#374151]">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+            className="hidden"
+            onChange={handleImageUpload}
+          />
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span className="sr-only">Upload image</span>
+        </label>
 
         {/* Word count */}
         <div className="ml-auto text-xs text-gray-500 pr-2">

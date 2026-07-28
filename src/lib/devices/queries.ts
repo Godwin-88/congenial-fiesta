@@ -1,15 +1,12 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
 import { redis } from '@/lib/upstash/redis'
 import type { Device, Brand } from '@/types/cms'
 import { mapDevice } from '@/types/cms'
 
 function getSupabase() {
-  return createServerClient(
+  return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: async () => (await cookies()).getAll(), setAll: () => {} } }
   )
 }
 
@@ -34,7 +31,10 @@ export async function getDevices(
 
   const cacheKey = `devices:list:${brand ?? ''}:${category ?? ''}:${page}`
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) return JSON.parse(cached as string)
+  if (cached) {
+    if (typeof cached === 'string') return JSON.parse(cached)
+    return cached as { devices: Device[]; totalPages: number }
+  }
 
   const supabase = getSupabase()
   const offset = (page - 1) * limit
@@ -154,7 +154,10 @@ export async function getAllDevicePaths(): Promise<
 export async function getTopDevices(limit: number = 6): Promise<Device[]> {
   const cacheKey = `devices:top:${limit}`
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) return JSON.parse(cached as string)
+  if (cached) {
+    if (typeof cached === 'string') return JSON.parse(cached)
+    return cached as Device[]
+  }
 
   const supabase = getSupabase()
   const { data, error } = await supabase
@@ -224,7 +227,10 @@ export async function getDeviceBySlug(deviceSlug: string): Promise<Device | null
 export async function getAllBrands(): Promise<Brand[]> {
   const cacheKey = 'brands:all'
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) return JSON.parse(cached as string)
+  if (cached) {
+    if (typeof cached === 'string') return JSON.parse(cached)
+    return cached as Brand[]
+  }
 
   const supabase = getSupabase()
   const { data, error } = await supabase
@@ -245,7 +251,10 @@ export async function getAllBrands(): Promise<Brand[]> {
 export async function getFeaturedBrands(): Promise<Brand[]> {
   const cacheKey = 'brands:featured'
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) return JSON.parse(cached as string)
+  if (cached) {
+    if (typeof cached === 'string') return JSON.parse(cached)
+    return cached as Brand[]
+  }
 
   const supabase = getSupabase()
   const { data, error } = await supabase
