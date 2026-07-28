@@ -135,11 +135,11 @@ export default function DevicesPage() {
 
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white font-['Space_Grotesk']">Devices</h1>
+        <h1 className="text-2xl font-bold text-white font-heading">Devices</h1>
         <a
           href="/admin/devices/create"
-          className="flex items-center gap-2 px-4 py-2 bg-[#0066FF] text-white rounded-lg
-                     hover:bg-blue-500 transition-colors text-sm font-medium"
+          className="flex items-center gap-2 px-4 py-2 bg-brand-primary text-white rounded-lg
+                     hover:bg-brand-primary/80 transition-colors text-sm font-medium"
         >
           <Plus size={16} />
           Add Device
@@ -147,7 +147,7 @@ export default function DevicesPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-[#1F2937] rounded-lg border border-[#374151] p-4 mb-4">
+      <div className="bg-card rounded-lg border border-border p-4 mb-4">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-2.5 text-gray-500" size={16} />
@@ -156,14 +156,14 @@ export default function DevicesPage() {
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1) }}
               placeholder="Search devices…"
-              className="w-full bg-[#111827] text-white rounded pl-9 pr-3 py-2 text-sm
-                         border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+              className="w-full bg-muted text-white rounded pl-9 pr-3 py-2 text-sm
+                         border border-border focus:border-brand-primary focus:outline-none"
             />
           </div>
           <select
             value={statusFilter}
             onChange={e => { setStatusFilter(e.target.value as any); setPage(1) }}
-            className="bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+            className="bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
           >
             <option value="all">All Status</option>
             <option value="draft">Draft</option>
@@ -172,7 +172,7 @@ export default function DevicesPage() {
           <select
             value={brandFilter}
             onChange={e => { setBrandFilter(e.target.value); setPage(1) }}
-            className="bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+            className="bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
           >
             <option value="">All Brands</option>
             {brands.map(b => (
@@ -183,11 +183,11 @@ export default function DevicesPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-[#1F2937] rounded-lg border border-[#374151] overflow-hidden">
+      <div className="bg-card rounded-lg border border-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#374151] text-gray-500 text-xs uppercase tracking-wider">
+              <tr className="border-b border-border text-gray-500 text-xs uppercase tracking-wider">
                 <th className="text-left px-4 py-3 font-medium">Image</th>
                 <th className="text-left px-4 py-3 font-medium">Name</th>
                 <th className="text-left px-4 py-3 font-medium">Brand</th>
@@ -203,7 +203,7 @@ export default function DevicesPage() {
                 <tr>
                   <td colSpan={8} className="px-4 py-8">
                     <div className="space-y-3 animate-pulse">
-                      {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-6 bg-[#111827] rounded" />)}
+                      {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-6 bg-muted rounded" />)}
                     </div>
                   </td>
                 </tr>
@@ -216,9 +216,9 @@ export default function DevicesPage() {
                 </tr>
               )}
               {!loading && filteredDevices.map(device => (
-                <tr key={device.id} className="hover:bg-[#111827]/50 transition-colors">
+                <tr key={device.id} className="hover:bg-muted/50 transition-colors">
                   <td className="px-4 py-3">
-                    <div className="w-10 h-10 bg-[#111827] rounded flex items-center justify-center text-xs text-gray-500">
+                    <div className="w-10 h-10 bg-muted rounded flex items-center justify-center text-xs text-gray-500">
                       {device.brand?.logo_url ? (
                         <Image src={device.brand.logo_url} alt={device.name} width={40} height={40} className="object-contain rounded" />
                       ) : (
@@ -280,7 +280,7 @@ export default function DevicesPage() {
           <button
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="px-3 py-1.5 text-sm border border-[#374151] rounded text-gray-400 hover:text-white disabled:opacity-40"
+            className="px-3 py-1.5 text-sm border border-border rounded text-gray-400 hover:text-white disabled:opacity-40"
           >
             Previous
           </button>
@@ -290,8 +290,8 @@ export default function DevicesPage() {
               onClick={() => setPage(p)}
               className={`w-8 h-8 rounded text-sm font-medium ${
                 p === page
-                  ? 'bg-[#0066FF] text-white'
-                  : 'border border-[#374151] text-gray-400 hover:text-white'
+                  ? 'bg-brand-primary text-white'
+                  : 'border border-border text-gray-400 hover:text-white'
               }`}
             >
               {p}
@@ -300,7 +300,7 @@ export default function DevicesPage() {
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="px-3 py-1.5 text-sm border border-[#374151] rounded text-gray-400 hover:text-white disabled:opacity-40"
+            className="px-3 py-1.5 text-sm border border-border rounded text-gray-400 hover:text-white disabled:opacity-40"
           >
             Next
           </button>
@@ -310,7 +310,7 @@ export default function DevicesPage() {
       {/* Delete confirmation */}
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#1F2937] rounded-lg border border-[#374151] p-6 max-w-md w-full">
+          <div className="bg-card rounded-lg border border-border p-6 max-w-md w-full">
             <h3 className="text-lg font-semibold text-white mb-2">Delete Device</h3>
             <p className="text-sm text-gray-400 mb-4">
               Are you sure you want to delete &ldquo;{deleteName}&rdquo;? This cannot be undone.
@@ -319,7 +319,7 @@ export default function DevicesPage() {
               <button
                 type="button"
                 onClick={() => { setDeleteId(null); setDeleteName('') }}
-                className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-[#374151] rounded-lg"
+                className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-border rounded-lg"
               >
                 Cancel
               </button>

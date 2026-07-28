@@ -189,22 +189,22 @@ export default function VideosPage() {
       )}
 
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white font-['Space_Grotesk']">Videos</h1>
+        <h1 className="text-2xl font-bold text-white font-heading">Videos</h1>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-[#0066FF] text-white rounded-lg
-                     hover:bg-blue-500 transition-colors text-sm font-medium"
+          className="flex items-center gap-2 px-4 py-2 bg-brand-primary text-white rounded-lg
+                     hover:bg-brand-primary/80 transition-colors text-sm font-medium"
         >
           <Plus size={16} />
           Add Video
         </button>
       </div>
 
-      <div className="bg-[#1F2937] rounded-lg border border-[#374151] overflow-hidden">
+      <div className="bg-card rounded-lg border border-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#374151] text-gray-500 text-xs uppercase tracking-wider">
+              <tr className="border-b border-border text-gray-500 text-xs uppercase tracking-wider">
                 <th className="text-left px-4 py-3 font-medium">Thumbnail</th>
                 <th className="text-left px-4 py-3 font-medium">Title</th>
                 <th className="text-left px-4 py-3 font-medium">Platform</th>
@@ -218,7 +218,7 @@ export default function VideosPage() {
                 <tr>
                   <td colSpan={6} className="px-4 py-8">
                     <div className="space-y-3 animate-pulse">
-                      {[1, 2, 3].map(i => <div key={i} className="h-6 bg-[#111827] rounded" />)}
+                      {[1, 2, 3].map(i => <div key={i} className="h-6 bg-muted rounded" />)}
                     </div>
                   </td>
                 </tr>
@@ -231,12 +231,12 @@ export default function VideosPage() {
                 </tr>
               )}
               {!loading && videos.map(video => (
-                <tr key={video.id} className="hover:bg-[#111827]/50 transition-colors">
+                <tr key={video.id} className="hover:bg-muted/50 transition-colors">
                   <td className="px-4 py-3">
                     {video.thumbnail_url ? (
                       <img src={video.thumbnail_url} alt={video.title} className="w-20 h-12 object-cover rounded" />
                     ) : (
-                      <div className="w-20 h-12 bg-[#111827] rounded flex items-center justify-center text-xs text-gray-500">
+                      <div className="w-20 h-12 bg-muted rounded flex items-center justify-center text-xs text-gray-500">
                         No thumb
                       </div>
                     )}
@@ -311,7 +311,7 @@ export default function VideosPage() {
                 value={formTitle}
                 onChange={e => setFormTitle(e.target.value)}
                 placeholder="Video title"
-                className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+                className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
             </div>
             <div>
@@ -319,7 +319,7 @@ export default function VideosPage() {
               <select
                 value={formPlatform}
                 onChange={e => setFormPlatform(e.target.value)}
-                className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+                className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               >
                 <option value="youtube">YouTube</option>
                 <option value="tiktok">TikTok</option>
@@ -339,7 +339,7 @@ export default function VideosPage() {
                 value={formEmbedId}
                 onChange={e => setFormEmbedId(e.target.value)}
                 placeholder={formPlatform === 'youtube' ? 'dQw4w9WgXcQ' : 'https://…'}
-                className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+                className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
             </div>
             <div>
@@ -349,7 +349,7 @@ export default function VideosPage() {
                 value={formThumbnailUrl}
                 onChange={e => setFormThumbnailUrl(e.target.value)}
                 placeholder="https://…"
-                className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+                className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -360,7 +360,7 @@ export default function VideosPage() {
                   value={formViewCount}
                   onChange={e => setFormViewCount(e.target.value)}
                   placeholder="0"
-                  className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
                 />
               </div>
               <div>
@@ -370,7 +370,7 @@ export default function VideosPage() {
                   value={formDuration}
                   onChange={e => setFormDuration(e.target.value)}
                   placeholder="10:24"
-                  className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
                 />
               </div>
             </div>
@@ -379,7 +379,7 @@ export default function VideosPage() {
               <select
                 value={formDeviceId}
                 onChange={e => setFormDeviceId(e.target.value)}
-                className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+                className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               >
                 <option value="">None</option>
                 {devices.map(d => (
@@ -393,7 +393,7 @@ export default function VideosPage() {
                 type="datetime-local"
                 value={formPublishedAt}
                 onChange={e => setFormPublishedAt(e.target.value)}
-                className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+                className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
             </div>
             <div className="flex items-center gap-2">
@@ -402,7 +402,7 @@ export default function VideosPage() {
                 id="featured"
                 checked={formFeatured}
                 onChange={e => setFormFeatured(e.target.checked)}
-                className="rounded border-[#374151] bg-[#111827]"
+                className="rounded border-border bg-muted"
               />
               <label htmlFor="featured" className="text-sm text-gray-400 cursor-pointer">Featured</label>
             </div>
@@ -410,14 +410,14 @@ export default function VideosPage() {
           <div className="flex justify-end gap-3 mt-4">
             <button
               onClick={() => setDialogOpen(false)}
-              className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-[#374151] rounded-lg"
+              className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-border rounded-lg"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
-              className="px-4 py-2 text-sm bg-[#0066FF] text-white rounded-lg hover:bg-blue-500 disabled:opacity-40"
+              className="px-4 py-2 text-sm bg-brand-primary text-white rounded-lg hover:bg-brand-primary/80 disabled:opacity-40"
             >
               {saving ? 'Saving…' : 'Save'}
             </button>
@@ -427,7 +427,7 @@ export default function VideosPage() {
 
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#1F2937] rounded-lg border border-[#374151] p-6 max-w-md w-full">
+          <div className="bg-card rounded-lg border border-border p-6 max-w-md w-full">
             <h3 className="text-lg font-semibold text-white mb-2">Delete Video</h3>
             <p className="text-sm text-gray-400 mb-4">
               Are you sure you want to delete &ldquo;{deleteTitle}&rdquo;?
@@ -436,7 +436,7 @@ export default function VideosPage() {
               <button
                 type="button"
                 onClick={() => { setDeleteId(null); setDeleteTitle('') }}
-                className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-[#374151] rounded-lg"
+                className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-border rounded-lg"
               >
                 Cancel
               </button>

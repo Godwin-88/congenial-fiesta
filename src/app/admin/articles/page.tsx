@@ -119,11 +119,11 @@ export default function ArticleListPage() {
 
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white font-['Space_Grotesk']">Articles</h1>
+        <h1 className="text-2xl font-bold text-foreground font-heading">Articles</h1>
         <Link
           href="/admin/articles/create"
-          className="flex items-center gap-2 px-4 py-2 bg-[#0066FF] text-white rounded-lg
-                     hover:bg-blue-500 transition-colors text-sm font-medium"
+          className="flex items-center gap-2 px-4 py-2 bg-brand-primary text-white rounded-lg
+                     hover:bg-brand-primary/80 transition-colors text-sm font-medium"
         >
           <Plus size={16} />
           New Article
@@ -141,8 +141,8 @@ export default function ArticleListPage() {
               href={href}
               className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
                 isActive
-                  ? 'bg-[#0066FF]/10 text-[#0066FF] font-medium'
-                  : 'text-gray-400 hover:text-white hover:bg-[#1F2937]'
+                  ? 'bg-brand-primary/10 text-brand-primary font-medium'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
             >
               {tab.label}
@@ -150,24 +150,24 @@ export default function ArticleListPage() {
           )
         })}
         <div className="ml-auto relative">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="Search articles…"
-            className="bg-[#1F2937] text-gray-300 text-sm rounded-lg pl-8 pr-3 py-1.5
-                       border border-[#374151] focus:border-[#0066FF] focus:outline-none w-48"
+            className="bg-card text-foreground text-sm rounded-lg pl-8 pr-3 py-1.5
+                       border border-border focus:border-brand-primary focus:outline-none w-48"
           />
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-[#1F2937] rounded-lg border border-[#374151] overflow-hidden">
+      <div className="bg-card rounded-lg border border-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#374151] text-gray-500 text-xs uppercase tracking-wider">
+              <tr className="border-b border-border text-muted-foreground text-xs uppercase tracking-wider">
                 <th className="text-left px-4 py-3 font-medium">Title</th>
                 <th className="text-left px-4 py-3 font-medium">Category</th>
                 <th className="text-left px-4 py-3 font-medium">Status</th>
@@ -176,13 +176,13 @@ export default function ArticleListPage() {
                 <th className="text-right px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#374151]">
+            <tbody className="divide-y divide-border">
               {loading && (
                 <tr>
                   <td colSpan={6} className="px-4 py-8">
                     <div className="space-y-3 animate-pulse">
                       {[1, 2, 3].map(i => (
-                        <div key={i} className="h-6 bg-[#111827] rounded" />
+                        <div key={i} className="h-6 bg-muted rounded" />
                       ))}
                     </div>
                   </td>
@@ -191,11 +191,11 @@ export default function ArticleListPage() {
               {!loading && filteredArticles.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-12 text-center">
-                    <FileText size={32} className="mx-auto text-gray-600 mb-2" />
-                    <p className="text-gray-500">No articles yet</p>
+                    <FileText size={32} className="mx-auto text-muted-foreground mb-2" />
+                    <p className="text-muted-foreground">No articles yet</p>
                     <Link
                       href="/admin/articles/create"
-                      className="text-[#0066FF] text-sm hover:underline mt-1 inline-block"
+                      className="text-brand-primary text-sm hover:underline mt-1 inline-block"
                     >
                       Write your first article →
                     </Link>
@@ -203,16 +203,16 @@ export default function ArticleListPage() {
                 </tr>
               )}
               {!loading && filteredArticles.map(article => (
-                <tr key={article.id} className="hover:bg-[#111827]/50 transition-colors">
+                <tr key={article.id} className="hover:bg-accent/50 transition-colors">
                   <td className="px-4 py-3">
                     <Link
                       href={`/admin/articles/${article.id}/edit`}
-                      className="text-white hover:text-[#0066FF] font-medium"
+                      className="text-foreground hover:text-brand-primary font-medium"
                     >
                       {article.title}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-gray-400 capitalize">
+                  <td className="px-4 py-3 text-muted-foreground capitalize">
                     {article.category ?? '—'}
                   </td>
                   <td className="px-4 py-3">
@@ -224,17 +224,17 @@ export default function ArticleListPage() {
                       {article.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-400">
+                  <td className="px-4 py-3 text-muted-foreground">
                     {article.reading_time_minutes ? `${article.reading_time_minutes} min` : '—'}
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">
+                  <td className="px-4 py-3 text-muted-foreground/60 text-xs">
                     {timeAgo(article.updated_at)}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Link
                         href={`/admin/articles/${article.id}/edit`}
-                        className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-[#374151]"
+                        className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent"
                         title="Edit"
                       >
                         <Edit2 size={14} />
@@ -245,7 +245,7 @@ export default function ArticleListPage() {
                           setDeleteId(article.id)
                           setDeleteTitle(article.title)
                         }}
-                        className="p-1.5 rounded text-gray-400 hover:text-red-400 hover:bg-[#374151]"
+                        className="p-1.5 rounded text-muted-foreground hover:text-red-400 hover:bg-accent"
                         title="Delete"
                       >
                         <Trash2 size={14} />
@@ -260,15 +260,15 @@ export default function ArticleListPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-[#374151]">
-            <p className="text-xs text-gray-500">
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+            <p className="text-xs text-muted-foreground">
               Page {currentPage} of {totalPages} ({total} total)
             </p>
             <div className="flex gap-1">
               {currentPage > 1 && (
                 <Link
                   href={`/admin/articles?page=${currentPage - 1}${currentStatus ? `&status=${currentStatus}` : ''}`}
-                  className="px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-[#374151] rounded"
+                  className="px-3 py-1 text-sm text-muted-foreground hover:text-foreground hover:bg-accent rounded"
                 >
                   Previous
                 </Link>
@@ -276,7 +276,7 @@ export default function ArticleListPage() {
               {currentPage < totalPages && (
                 <Link
                   href={`/admin/articles?page=${currentPage + 1}${currentStatus ? `&status=${currentStatus}` : ''}`}
-                  className="px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-[#374151] rounded"
+                  className="px-3 py-1 text-sm text-muted-foreground hover:text-foreground hover:bg-accent rounded"
                 >
                   Next
                 </Link>
@@ -289,16 +289,16 @@ export default function ArticleListPage() {
       {/* Delete confirmation dialog */}
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#1F2937] rounded-lg border border-[#374151] p-6 max-w-md w-full">
-            <h3 className="text-lg font-semibold text-white mb-2">Delete Article</h3>
-            <p className="text-sm text-gray-400 mb-4">
+          <div className="bg-card rounded-lg border border-border p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold text-foreground mb-2">Delete Article</h3>
+            <p className="text-sm text-muted-foreground mb-4">
               Are you sure you want to delete &ldquo;{deleteTitle}&rdquo;? This action cannot be undone.
             </p>
             <div className="flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => { setDeleteId(null); setDeleteTitle('') }}
-                className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-[#374151] rounded-lg"
+                className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg"
               >
                 Cancel
               </button>

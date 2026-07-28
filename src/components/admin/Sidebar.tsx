@@ -106,7 +106,7 @@ export default function Sidebar({ adminUser }: SidebarProps) {
   const sidebarContent = (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="p-4 border-b border-[#374151]">
+      <div className="p-4 border-b border-border">
         <Link href="/admin">
           <Logo />
         </Link>
@@ -127,7 +127,7 @@ export default function Sidebar({ adminUser }: SidebarProps) {
                   [section.label]: !prev[section.label],
                 }))}
                 className="flex items-center justify-between w-full px-2 py-1 text-xs
-                           text-gray-500 uppercase tracking-wider hover:text-gray-300"
+                           text-muted-foreground uppercase tracking-wider hover:text-foreground"
               >
                 {section.label}
                 <ChevronDown
@@ -145,11 +145,11 @@ export default function Sidebar({ adminUser }: SidebarProps) {
                       className={[
                         'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
                         active
-                          ? 'bg-[#0066FF]/10 text-[#0066FF] font-medium'
-                          : 'text-gray-400 hover:text-white hover:bg-[#1F2937]',
+                          ? 'bg-brand-primary/10 text-brand-primary font-medium'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-accent',
                       ].join(' ')}
                     >
-                      <span className={active ? 'text-[#0066FF]' : 'text-gray-500'}>
+                      <span className={active ? 'text-brand-primary' : 'text-muted-foreground'}>
                         {item.icon}
                       </span>
                       {item.label}
@@ -163,14 +163,14 @@ export default function Sidebar({ adminUser }: SidebarProps) {
       </nav>
 
       {/* User section */}
-      <div className="p-4 border-t border-[#374151]">
+      <div className="p-4 border-t border-border">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-9 h-9 rounded-full bg-[#0066FF] flex items-center justify-center
-                          text-white text-sm font-bold shrink-0">
+          <div className="w-9 h-9 rounded-full bg-brand-primary flex items-center justify-center
+                          text-primary-foreground text-sm font-bold shrink-0">
             {getInitials(adminUser.display_name)}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm text-white font-medium truncate">
+            <p className="text-sm text-foreground font-medium truncate">
               {adminUser.display_name}
             </p>
             <span className={`inline-block text-xs px-1.5 py-0.5 rounded ${roleBadgeColor[adminUser.role]}`}>
@@ -181,8 +181,8 @@ export default function Sidebar({ adminUser }: SidebarProps) {
         <button
           type="button"
           onClick={handleSignOut}
-          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-400
-                     hover:text-white hover:bg-[#1F2937] rounded-lg transition-colors"
+          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-muted-foreground
+                     hover:text-foreground hover:bg-accent rounded-lg transition-colors"
         >
           <LogOut size={16} />
           Sign Out
@@ -197,8 +197,8 @@ export default function Sidebar({ adminUser }: SidebarProps) {
       <button
         type="button"
         onClick={() => setMobileOpen(!mobileOpen)}
-        className="fixed top-4 left-4 z-50 lg:hidden p-2 rounded-lg bg-[#111827]
-                   border border-[#374151] text-gray-400 hover:text-white"
+        className="fixed top-4 left-4 z-50 lg:hidden p-2 rounded-lg bg-card
+                   border border-border text-muted-foreground hover:text-foreground"
         aria-label={mobileOpen ? 'Close sidebar' : 'Open sidebar'}
       >
         {mobileOpen ? <X size={20} /> : <Menu size={20} />}
@@ -215,7 +215,7 @@ export default function Sidebar({ adminUser }: SidebarProps) {
       {/* Sidebar */}
       <aside
         className={[
-          'fixed top-0 left-0 z-40 h-full w-64 bg-[#111827] border-r border-[#374151]',
+          'fixed top-0 left-0 z-40 h-full w-64 bg-card border-r border-border',
           'transition-transform duration-200',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
           'lg:translate-x-0 lg:static lg:z-auto',

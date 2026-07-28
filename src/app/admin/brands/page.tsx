@@ -178,11 +178,11 @@ export default function BrandsPage() {
 
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white font-['Space_Grotesk']">Brands</h1>
+        <h1 className="text-2xl font-bold text-white font-heading">Brands</h1>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-[#0066FF] text-white rounded-lg
-                     hover:bg-blue-500 transition-colors text-sm font-medium"
+          className="flex items-center gap-2 px-4 py-2 bg-brand-primary text-white rounded-lg
+                     hover:bg-brand-primary/80 transition-colors text-sm font-medium"
         >
           <Plus size={16} />
           Add Brand
@@ -190,11 +190,11 @@ export default function BrandsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-[#1F2937] rounded-lg border border-[#374151] overflow-hidden">
+      <div className="bg-card rounded-lg border border-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#374151] text-gray-500 text-xs uppercase tracking-wider">
+              <tr className="border-b border-border text-gray-500 text-xs uppercase tracking-wider">
                 <th className="text-left px-4 py-3 font-medium">Logo</th>
                 <th className="text-left px-4 py-3 font-medium">Name</th>
                 <th className="text-left px-4 py-3 font-medium">Slug</th>
@@ -207,7 +207,7 @@ export default function BrandsPage() {
                 <tr>
                   <td colSpan={5} className="px-4 py-8">
                     <div className="space-y-3 animate-pulse">
-                      {[1, 2, 3].map(i => <div key={i} className="h-6 bg-[#111827] rounded" />)}
+                      {[1, 2, 3].map(i => <div key={i} className="h-6 bg-muted rounded" />)}
                     </div>
                   </td>
                 </tr>
@@ -220,12 +220,12 @@ export default function BrandsPage() {
                 </tr>
               )}
               {!loading && brands.map(brand => (
-                <tr key={brand.id} className="hover:bg-[#111827]/50 transition-colors">
+                <tr key={brand.id} className="hover:bg-muted/50 transition-colors">
                   <td className="px-4 py-3">
                     {brand.logo_url ? (
                       <img src={brand.logo_url} alt={brand.name} className="w-8 h-8 object-contain rounded" />
                     ) : (
-                      <div className="w-8 h-8 bg-[#111827] rounded flex items-center justify-center text-xs text-gray-500">
+                      <div className="w-8 h-8 bg-muted rounded flex items-center justify-center text-xs text-gray-500">
                         {brand.name[0]}
                       </div>
                     )}
@@ -289,8 +289,8 @@ export default function BrandsPage() {
                 value={formName}
                 onChange={e => handleNameChange(e.target.value)}
                 placeholder="Brand name"
-                className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm
-                           border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+                className="w-full bg-muted text-white rounded px-3 py-2 text-sm
+                           border border-border focus:border-brand-primary focus:outline-none"
               />
             </div>
             <div>
@@ -300,8 +300,8 @@ export default function BrandsPage() {
                 value={formSlug}
                 onChange={e => setFormSlug(e.target.value)}
                 placeholder="brand-slug"
-                className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm
-                           border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+                className="w-full bg-muted text-white rounded px-3 py-2 text-sm
+                           border border-border focus:border-brand-primary focus:outline-none"
               />
             </div>
             <div>
@@ -311,8 +311,8 @@ export default function BrandsPage() {
                 value={formLogoUrl}
                 onChange={e => setFormLogoUrl(e.target.value)}
                 placeholder="https://…"
-                className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm
-                           border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+                className="w-full bg-muted text-white rounded px-3 py-2 text-sm
+                           border border-border focus:border-brand-primary focus:outline-none"
               />
             </div>
             <div>
@@ -322,8 +322,8 @@ export default function BrandsPage() {
                 value={formWebsite}
                 onChange={e => setFormWebsite(e.target.value)}
                 placeholder="https://…"
-                className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm
-                           border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+                className="w-full bg-muted text-white rounded px-3 py-2 text-sm
+                           border border-border focus:border-brand-primary focus:outline-none"
               />
             </div>
             <div className="flex items-center gap-2">
@@ -332,7 +332,7 @@ export default function BrandsPage() {
                 id="featured"
                 checked={formFeatured}
                 onChange={e => setFormFeatured(e.target.checked)}
-                className="rounded border-[#374151] bg-[#111827]"
+                className="rounded border-border bg-muted"
               />
               <label htmlFor="featured" className="text-sm text-gray-400 cursor-pointer">Featured</label>
             </div>
@@ -340,14 +340,14 @@ export default function BrandsPage() {
           <div className="flex justify-end gap-3 mt-4">
             <button
               onClick={() => setDialogOpen(false)}
-              className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-[#374151] rounded-lg"
+              className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-border rounded-lg"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
-              className="px-4 py-2 text-sm bg-[#0066FF] text-white rounded-lg hover:bg-blue-500 disabled:opacity-40"
+              className="px-4 py-2 text-sm bg-brand-primary text-white rounded-lg hover:bg-brand-primary/80 disabled:opacity-40"
             >
               {saving ? 'Saving…' : 'Save'}
             </button>
@@ -358,7 +358,7 @@ export default function BrandsPage() {
       {/* Delete confirmation */}
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#1F2937] rounded-lg border border-[#374151] p-6 max-w-md w-full">
+          <div className="bg-card rounded-lg border border-border p-6 max-w-md w-full">
             <h3 className="text-lg font-semibold text-white mb-2">Delete Brand</h3>
             <p className="text-sm text-gray-400 mb-4">
               Are you sure you want to delete &ldquo;{deleteName}&rdquo;?
@@ -367,7 +367,7 @@ export default function BrandsPage() {
               <button
                 type="button"
                 onClick={() => { setDeleteId(null); setDeleteName('') }}
-                className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-[#374151] rounded-lg"
+                className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-border rounded-lg"
               >
                 Cancel
               </button>

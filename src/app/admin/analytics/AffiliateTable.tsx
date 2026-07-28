@@ -23,7 +23,7 @@ export default function AffiliateTable({ data }: Props) {
         return (
           <tr key={item.deviceSlug} className="border-b border-gray-800/50 hover:bg-gray-800/30">
             <td className="py-2 pr-4 text-gray-500">{i + 1}</td>
-            <td className="py-2 pr-4 text-[#0066FF]">{item.deviceSlug}</td>
+            <td className="py-2 pr-4 text-brand-primary">{item.deviceSlug}</td>
             <td className="py-2 pr-4 text-gray-300">All retailers</td>
             <td className="py-2 pr-4 text-right">{item.clicks.toLocaleString()}</td>
             <td className="py-2 pr-4 text-right">{item.views.toLocaleString()}</td>

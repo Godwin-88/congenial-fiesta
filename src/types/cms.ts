@@ -74,15 +74,13 @@ export interface Article {
   excerpt: string | null
   featured_image: string | null
   body: Record<string, unknown> | null
-  body_html: string | null
   category: 'review' | 'comparison' | 'news' | 'buying-guide' | 'opinion' | null
   associated_device_id: number | null
-  tags: string[]
   status: 'draft' | 'published'
   published_at: string | null
   reading_time_minutes: number | null
-  seo_title: string | null
-  seo_description: string | null
+  seo_meta_title: string | null
+  seo_meta_description: string | null
   created_at: string
   updated_at: string
   // Joined fields
@@ -206,15 +204,13 @@ export function mapArticle(row: Record<string, unknown>): Article {
     excerpt: (row.excerpt as string) ?? null,
     featured_image: (row.featured_image as string) ?? null,
     body: (row.body as Record<string, unknown>) ?? null,
-    body_html: (row.body_html as string) ?? null,
     category: (row.category as Article['category']) ?? null,
     associated_device_id: (row.associated_device_id as number) ?? null,
-    tags: (row.tags as string[]) ?? [],
     status: (row.status as 'draft' | 'published'),
     published_at: (row.published_at as string) ?? null,
     reading_time_minutes: (row.reading_time_minutes as number) ?? null,
-    seo_title: (row.seo_title as string) ?? null,
-    seo_description: (row.seo_description as string) ?? null,
+    seo_meta_title: (row.seo_meta_title as string) ?? null,
+    seo_meta_description: (row.seo_meta_description as string) ?? null,
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,
     associated_device: row.associated_device as Device | null ?? null,

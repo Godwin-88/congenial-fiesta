@@ -55,10 +55,11 @@ export async function PATCH(
       }
     }
 
-    // Compute reading time from body_html if present
+    // Compute reading time from body JSON if present
     let readingTimeMinutes = body.reading_time_minutes
-    if (body.body_html) {
-      const wordCount = body.body_html.replace(/<[^>]*>/g, '').split(/\s+/).filter(Boolean).length
+    if (body.bodyJson) {
+      const rawText = JSON.stringify(body.bodyJson)
+      const wordCount = rawText.replace(/<[^>]*>/g, '').split(/\s+/).filter(Boolean).length
       readingTimeMinutes = Math.max(1, Math.ceil(wordCount / 200))
     }
 
@@ -68,18 +69,16 @@ export async function PATCH(
     if (body.excerpt !== undefined) payload.excerpt = body.excerpt?.trim() ?? null
     if (body.featuredImage !== undefined) payload.featured_image = body.featuredImage?.trim() ?? null
     if (body.bodyJson !== undefined) payload.body = body.bodyJson
-    if (body.bodyHtml !== undefined) payload.body_html = body.bodyHtml
     if (body.category !== undefined) payload.category = body.category ?? null
     if (body.associatedDeviceId !== undefined) payload.associated_device_id = body.associatedDeviceId ?? null
-    if (body.tags !== undefined) payload.tags = body.tags
     if (body.status !== undefined) {
       payload.status = body.status
       if (body.status === 'published') {
         payload.published_at = new Date().toISOString()
       }
     }
-    if (body.seoTitle !== undefined) payload.seo_title = body.seoTitle?.trim() ?? null
-    if (body.seoDescription !== undefined) payload.seo_description = body.seoDescription?.trim() ?? null
+    if (body.seoTitle !== undefined) payload.seo_meta_title = body.seoTitle?.trim() ?? null
+    if (body.seoDescription !== undefined) payload.seo_meta_description = body.seoDescription?.trim() ?? null
     payload.reading_time_minutes = readingTimeMinutes
 
     const { data, error } = await supabase

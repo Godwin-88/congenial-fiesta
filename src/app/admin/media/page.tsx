@@ -112,9 +112,9 @@ export default function MediaPage() {
       )}
 
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white font-['Space_Grotesk']">Media Library</h1>
-        <label className="flex items-center gap-2 px-4 py-2 bg-[#0066FF] text-white rounded-lg
-                         hover:bg-blue-500 transition-colors text-sm font-medium cursor-pointer">
+        <h1 className="text-2xl font-bold text-white font-heading">Media Library</h1>
+        <label className="flex items-center gap-2 px-4 py-2 bg-brand-primary text-white rounded-lg
+                         hover:bg-brand-primary/80 transition-colors text-sm font-medium cursor-pointer">
           <Upload size={16} />
           {uploading ? 'Uploading…' : 'Upload Image'}
           <input
@@ -127,7 +127,7 @@ export default function MediaPage() {
         </label>
       </div>
 
-      <div className="bg-[#1F2937] rounded-lg border border-[#374151] p-4 mb-6">
+      <div className="bg-card rounded-lg border border-border p-4 mb-6">
         <div className="relative">
           <Search className="absolute left-3 top-2.5 text-gray-500" size={16} />
           <input
@@ -135,8 +135,8 @@ export default function MediaPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search by filename…"
-            className="w-full bg-[#111827] text-white rounded pl-9 pr-3 py-2 text-sm
-                       border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+            className="w-full bg-muted text-white rounded pl-9 pr-3 py-2 text-sm
+                       border border-border focus:border-brand-primary focus:outline-none"
           />
         </div>
       </div>
@@ -144,7 +144,7 @@ export default function MediaPage() {
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {Array.from({ length: 10 }).map((_, i) => (
-            <div key={i} className="aspect-square bg-[#111827] rounded-lg animate-pulse" />
+            <div key={i} className="aspect-square bg-muted rounded-lg animate-pulse" />
           ))}
         </div>
       ) : filteredImages.length === 0 ? (
@@ -157,7 +157,7 @@ export default function MediaPage() {
           {filteredImages.map(img => (
             <div
               key={img.id}
-              className="group relative aspect-square bg-[#111827] rounded-lg border border-[#374151] overflow-hidden"
+              className="group relative aspect-square bg-muted rounded-lg border border-border overflow-hidden"
             >
               <Image
                 src={img.url}
@@ -193,7 +193,7 @@ export default function MediaPage() {
 
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#1F2937] rounded-lg border border-[#374151] p-6 max-w-md w-full">
+          <div className="bg-card rounded-lg border border-border p-6 max-w-md w-full">
             <h3 className="text-lg font-semibold text-white mb-2">Delete Image</h3>
             <p className="text-sm text-gray-400 mb-4">
               Are you sure you want to delete &ldquo;{deleteFilename}&rdquo;?
@@ -202,7 +202,7 @@ export default function MediaPage() {
               <button
                 type="button"
                 onClick={() => { setDeleteId(null); setDeleteFilename('') }}
-                className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-[#374151] rounded-lg"
+                className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-border rounded-lg"
               >
                 Cancel
               </button>

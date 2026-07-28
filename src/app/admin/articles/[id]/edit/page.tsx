@@ -7,7 +7,7 @@ import Link from 'next/link'
 const TiptapEditor = dynamic(
   () => import('@/components/admin/TiptapEditor'),
   { ssr: false, loading: () => (
-    <div className="h-[500px] bg-[#1F2937] rounded-lg animate-pulse" />
+    <div className="h-[500px] bg-muted rounded-lg animate-pulse" />
   )}
 )
 
@@ -219,8 +219,8 @@ export default function EditArticlePage() {
   if (loading) {
     return (
       <div className="animate-pulse space-y-4">
-        <div className="h-8 bg-[#1F2937] rounded w-64" />
-        <div className="h-[500px] bg-[#1F2937] rounded-lg" />
+        <div className="h-8 bg-muted rounded w-64" />
+        <div className="h-[500px] bg-muted rounded-lg" />
       </div>
     )
   }
@@ -228,9 +228,9 @@ export default function EditArticlePage() {
   if (notFound) {
     return (
       <div className="text-center py-12">
-        <h1 className="text-2xl font-bold text-white mb-2">Article not found</h1>
-        <p className="text-gray-400 mb-4">This article doesn't exist or has been deleted.</p>
-        <Link href="/admin/articles" className="text-[#0066FF] hover:underline">
+        <h1 className="text-2xl font-bold text-foreground mb-2">Article not found</h1>
+        <p className="text-muted-foreground mb-4">This article doesn't exist or has been deleted.</p>
+        <Link href="/admin/articles" className="text-brand-primary hover:underline">
           ← Back to Articles
         </Link>
       </div>
@@ -246,15 +246,15 @@ export default function EditArticlePage() {
         <div>
           <button
             onClick={() => router.push('/admin/articles')}
-            className="text-sm text-gray-400 hover:text-white mb-1 flex items-center gap-1"
+            className="text-sm text-muted-foreground hover:text-foreground mb-1 flex items-center gap-1"
           >
             ← Articles
           </button>
-          <h1 className="text-2xl font-bold text-white font-['Space_Grotesk']">
+          <h1 className="text-2xl font-bold text-foreground font-heading">
             Edit Article
           </h1>
           {updatedAt && (
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-muted-foreground/60 mt-1">
               Last updated {timeAgo(updatedAt)}
             </p>
           )}
@@ -262,7 +262,7 @@ export default function EditArticlePage() {
 
         <div className="flex items-center gap-3">
           {/* Save status */}
-          <div className="text-sm text-gray-400">
+          <div className="text-sm text-muted-foreground">
             {saveStatus === 'saving' && <span className="text-blue-400">Saving…</span>}
             {saveStatus === 'saved' && <span className="text-green-400">✓ Saved</span>}
             {saveStatus === 'error' && <span className="text-red-400">Save failed</span>}
@@ -292,7 +292,7 @@ export default function EditArticlePage() {
 
       {/* Form error */}
       {errors.form && (
-        <div className="mb-4 p-3 bg-red-900/30 border border-red-500/50 rounded-lg text-red-400 text-sm">
+        <div className="mb-4 p-3 bg-destructive/10 border border-destructive/50 rounded-lg text-destructive text-sm">
           {errors.form}
         </div>
       )}
@@ -308,24 +308,24 @@ export default function EditArticlePage() {
               onChange={e => setTitle(e.target.value)}
               placeholder="Article title…"
               className={[
-                'w-full bg-transparent text-3xl font-bold text-white',
-                'placeholder-gray-600 border-0 border-b pb-2 focus:outline-none',
-                "font-['Space_Grotesk']",
-                errors.title ? 'border-red-500' : 'border-[#374151] focus:border-[#0066FF]',
+                'w-full bg-transparent text-3xl font-bold text-foreground',
+                'placeholder-muted-foreground/40 border-0 border-b pb-2 focus:outline-none',
+                'font-heading',
+                errors.title ? 'border-destructive' : 'border-border focus:border-brand-primary',
               ].join(' ')}
             />
-            {errors.title && <p className="text-red-400 text-xs mt-1">{errors.title}</p>}
+            {errors.title && <p className="text-destructive text-xs mt-1">{errors.title}</p>}
           </div>
 
           {/* Slug */}
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-500 shrink-0">fweezytech.com/articles/</span>
+            <span className="text-muted-foreground shrink-0">fweezytech.com/articles/</span>
             <input
               type="text"
               value={slug}
               onChange={e => { setSlug(e.target.value); setSlugManuallyEdited(true) }}
-              className="bg-[#1F2937] text-gray-300 px-2 py-1 rounded border border-[#374151]
-                         focus:border-[#0066FF] focus:outline-none font-mono text-xs flex-1"
+              className="bg-card text-foreground px-2 py-1 rounded border border-border
+                         focus:border-brand-primary focus:outline-none font-mono text-xs flex-1"
             />
           </div>
 
@@ -336,10 +336,10 @@ export default function EditArticlePage() {
             placeholder="Short summary… (max 300 chars)"
             maxLength={300}
             rows={2}
-            className="w-full bg-[#1F2937] text-gray-300 placeholder-gray-600 rounded-lg px-3 py-2
-                       border border-[#374151] focus:border-[#0066FF] focus:outline-none resize-none text-sm"
+            className="w-full bg-card text-foreground placeholder-muted-foreground/40 rounded-lg px-3 py-2
+                       border border-border focus:border-brand-primary focus:outline-none resize-none text-sm"
           />
-          <div className="text-xs text-gray-600 text-right -mt-2">{excerpt.length}/300</div>
+          <div className="text-xs text-muted-foreground/60 text-right -mt-2">{excerpt.length}/300</div>
 
           {/* Rich text editor */}
           <TiptapEditor
@@ -353,19 +353,19 @@ export default function EditArticlePage() {
         {/* Sidebar */}
         <div className="w-72 shrink-0 space-y-4">
           {/* Actions */}
-          <div className="bg-[#1F2937] rounded-lg p-4 space-y-3 border border-[#374151]">
+          <div className="bg-card rounded-lg p-4 space-y-3 border border-border">
             <button
               onClick={() => handleSave('draft')}
               disabled={!canSave || isSaving}
-              className="w-full py-2 px-4 rounded-lg border border-[#374151] text-gray-300
-                         hover:border-[#0066FF] hover:text-white transition-colors text-sm font-medium disabled:opacity-40"
+              className="w-full py-2 px-4 rounded-lg border border-border text-foreground
+                         hover:border-brand-primary hover:text-foreground transition-colors text-sm font-medium disabled:opacity-40"
             >
               Save Draft
             </button>
             <button
               onClick={() => handleSave('published')}
               disabled={!canSave || isSaving}
-              className="w-full py-2 px-4 rounded-lg bg-[#0066FF] text-white hover:bg-blue-500
+              className="w-full py-2 px-4 rounded-lg bg-brand-primary text-white hover:bg-brand-primary/80
                          transition-colors text-sm font-medium disabled:opacity-40"
             >
               Publish
@@ -375,22 +375,22 @@ export default function EditArticlePage() {
                 href={`/articles/${slug}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block text-center text-xs text-gray-500 hover:text-[#0066FF]"
+                className="block text-center text-xs text-muted-foreground hover:text-brand-primary"
               >
                 Preview on site ↗
               </a>
             )}
-            <p className="text-xs text-gray-600 text-center">Cmd+S to save draft</p>
+            <p className="text-xs text-muted-foreground/60 text-center">Cmd+S to save draft</p>
           </div>
 
           {/* Status */}
-          <div className="bg-[#1F2937] rounded-lg p-4 border border-[#374151]">
-            <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider">Status</label>
+          <div className="bg-card rounded-lg p-4 border border-border">
+            <label className="block text-xs text-muted-foreground mb-2 uppercase tracking-wider">Status</label>
             <select
               value={status}
               onChange={e => setStatus(e.target.value as 'draft' | 'published')}
-              className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm
-                         border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+              className="w-full bg-muted text-foreground rounded px-3 py-2 text-sm
+                         border border-border focus:border-brand-primary focus:outline-none"
             >
               <option value="draft">📝 Draft</option>
               <option value="published">✅ Published</option>
@@ -398,13 +398,13 @@ export default function EditArticlePage() {
           </div>
 
           {/* Category */}
-          <div className="bg-[#1F2937] rounded-lg p-4 border border-[#374151]">
-            <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider">Category</label>
+          <div className="bg-card rounded-lg p-4 border border-border">
+            <label className="block text-xs text-muted-foreground mb-2 uppercase tracking-wider">Category</label>
             <select
               value={category}
               onChange={e => setCategory(e.target.value)}
-              className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm
-                         border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+              className="w-full bg-muted text-foreground rounded px-3 py-2 text-sm
+                         border border-border focus:border-brand-primary focus:outline-none"
             >
               {CATEGORIES.map(c => (
                 <option key={c.value} value={c.value}>{c.label}</option>
@@ -413,15 +413,15 @@ export default function EditArticlePage() {
           </div>
 
           {/* Featured Image */}
-          <div className="bg-[#1F2937] rounded-lg p-4 border border-[#374151]">
-            <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider">Featured Image</label>
+          <div className="bg-card rounded-lg p-4 border border-border">
+            <label className="block text-xs text-muted-foreground mb-2 uppercase tracking-wider">Featured Image</label>
             <input
               type="url"
               value={featuredImage}
               onChange={e => setFeaturedImage(e.target.value)}
               placeholder="Cloudflare Images URL…"
-              className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm
-                         border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+              className="w-full bg-muted text-foreground rounded px-3 py-2 text-sm
+                         border border-border focus:border-brand-primary focus:outline-none"
             />
             {featuredImage && (
               <img
@@ -434,49 +434,49 @@ export default function EditArticlePage() {
           </div>
 
           {/* Tags */}
-          <div className="bg-[#1F2937] rounded-lg p-4 border border-[#374151]">
-            <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider">Tags</label>
+          <div className="bg-card rounded-lg p-4 border border-border">
+            <label className="block text-xs text-muted-foreground mb-2 uppercase tracking-wider">Tags</label>
             <input
               type="text"
               value={tags}
               onChange={e => setTags(e.target.value)}
               placeholder="samsung, android, flagship…"
-              className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm
-                         border border-[#374151] focus:border-[#0066FF] focus:outline-none"
+              className="w-full bg-muted text-foreground rounded px-3 py-2 text-sm
+                         border border-border focus:border-brand-primary focus:outline-none"
             />
-            <p className="text-xs text-gray-600 mt-1">Comma-separated</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Comma-separated</p>
           </div>
 
           {/* SEO */}
-          <div className="bg-[#1F2937] rounded-lg border border-[#374151] overflow-hidden">
+          <div className="bg-card rounded-lg border border-border overflow-hidden">
             <button
               type="button"
               onClick={() => setSeoOpen(!seoOpen)}
-              className="w-full px-4 py-3 text-left text-xs text-gray-400 uppercase tracking-wider
-                         flex justify-between items-center hover:text-white"
+              className="w-full px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider
+                         flex justify-between items-center hover:text-foreground"
             >
               🔍 SEO <span>{seoOpen ? '▲' : '▼'}</span>
             </button>
             {seoOpen && (
               <div className="px-4 pb-4 space-y-3">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Meta Title</label>
+                  <label className="block text-xs text-muted-foreground/60 mb-1">Meta Title</label>
                   <input
                     type="text"
                     value={seoTitle}
                     onChange={e => setSeoTitle(e.target.value)}
-                    className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm
-                               border border-[#374151] focus:outline-none focus:border-[#0066FF]"
+                    className="w-full bg-muted text-foreground rounded px-3 py-2 text-sm
+                               border border-border focus:outline-none focus:border-brand-primary"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Meta Description</label>
+                  <label className="block text-xs text-muted-foreground/60 mb-1">Meta Description</label>
                   <textarea
                     value={seoDescription}
                     onChange={e => setSeoDescription(e.target.value)}
                     rows={3}
-                    className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm
-                               border border-[#374151] focus:outline-none focus:border-[#0066FF] resize-none"
+                    className="w-full bg-muted text-foreground rounded px-3 py-2 text-sm
+                               border border-border focus:outline-none focus:border-brand-primary resize-none"
                   />
                 </div>
               </div>
@@ -488,16 +488,16 @@ export default function EditArticlePage() {
       {/* Delete confirmation */}
       {showDelete && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#1F2937] rounded-lg border border-[#374151] p-6 max-w-md w-full">
-            <h3 className="text-lg font-semibold text-white mb-2">Delete Article</h3>
-            <p className="text-sm text-gray-400 mb-4">
+          <div className="bg-card rounded-lg border border-border p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold text-foreground mb-2">Delete Article</h3>
+            <p className="text-sm text-muted-foreground mb-4">
               Are you sure you want to delete &ldquo;{title}&rdquo;? This cannot be undone.
             </p>
             <div className="flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setShowDelete(false)}
-                className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-[#374151] rounded-lg"
+                className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg"
               >
                 Cancel
               </button>

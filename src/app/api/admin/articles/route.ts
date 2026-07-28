@@ -69,28 +69,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Slug already exists' }, { status: 409 })
     }
 
-    // Compute reading time from body_html if present
+    // Compute reading time from body JSON text content
     let readingTimeMinutes = null
-    if (body.body_html) {
-      const wordCount = body.body_html.replace(/<[^>]*>/g, '').split(/\s+/).filter(Boolean).length
+    if (body.bodyJson) {
+      const rawText = JSON.stringify(body.bodyJson)
+      const wordCount = rawText.replace(/<[^>]*>/g, '').split(/\s+/).filter(Boolean).length
       readingTimeMinutes = Math.max(1, Math.ceil(wordCount / 200))
     }
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       title: body.title.trim(),
       slug: body.slug.trim(),
       excerpt: body.excerpt?.trim() ?? null,
       featured_image: body.featuredImage?.trim() ?? null,
       body: body.bodyJson ?? null,
-      body_html: body.bodyHtml ?? null,
       category: body.category ?? null,
       associated_device_id: body.associatedDeviceId ?? null,
-      tags: body.tags ?? [],
       status: body.status ?? 'draft',
       published_at: body.status === 'published' ? new Date().toISOString() : null,
       reading_time_minutes: readingTimeMinutes,
-      seo_title: body.seoTitle?.trim() ?? null,
-      seo_description: body.seoDescription?.trim() ?? null,
+      seo_meta_title: body.seoTitle?.trim() ?? null,
+      seo_meta_description: body.seoDescription?.trim() ?? null,
     }
 
     const { data, error } = await supabase

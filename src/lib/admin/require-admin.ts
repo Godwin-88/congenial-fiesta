@@ -1,5 +1,3 @@
-'use server'
-
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { AdminUser } from '@/types/cms'
@@ -46,7 +44,7 @@ export async function requireAdminAuth(): Promise<AdminUser> {
     .from('admin_users')
     .select('*')
     .eq('id', session.user.id)
-    .single()
+    .maybeSingle()
 
   if (!adminUser) {
     throw new Error('Forbidden')
@@ -93,7 +91,7 @@ export async function getAdminUser(): Promise<AdminUser | null> {
     .from('admin_users')
     .select('*')
     .eq('id', session.user.id)
-    .single()
+    .maybeSingle()
 
   return adminUser as AdminUser | null
 }

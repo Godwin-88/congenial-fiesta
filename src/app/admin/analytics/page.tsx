@@ -65,7 +65,7 @@ export default async function AnalyticsPage({
             <Link key={p} href={`/admin/analytics?period=${p}`}>
               <Button
                 variant={period === p ? 'default' : 'outline'}
-                className={period === p ? 'bg-[#0066FF]' : 'border-gray-700 text-gray-300'}
+                className={period === p ? 'bg-brand-primary' : 'border-gray-700 text-gray-300'}
               >
                 {p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : '90 Days'}
               </Button>
@@ -79,7 +79,7 @@ export default async function AnalyticsPage({
         <Card className="bg-gray-900 border-gray-800">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-gray-400 flex items-center gap-2">
-              <Eye className="h-4 w-4 text-[#0066FF]" /> Page Views
+              <Eye className="h-4 w-4 text-brand-primary" /> Page Views
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -90,7 +90,7 @@ export default async function AnalyticsPage({
         <Card className="bg-gray-900 border-gray-800">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-gray-400 flex items-center gap-2">
-              <Users className="h-4 w-4 text-[#0066FF]" /> Top Source
+              <Users className="h-4 w-4 text-brand-primary" /> Top Source
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -184,7 +184,7 @@ export default async function AnalyticsPage({
                       <td className="py-2 pr-4">
                         <a
                           href={page.path}
-                          className={`hover:underline ${isDevice ? 'text-[#0066FF]' : isArticle ? 'text-amber-400' : 'text-gray-300'}`}
+                          className={`hover:underline ${isDevice ? 'text-brand-primary' : isArticle ? 'text-amber-400' : 'text-gray-300'}`}
                         >
                           {page.path}
                         </a>
@@ -242,7 +242,7 @@ export default async function AnalyticsPage({
                   <span className="w-24 text-sm text-gray-400 capitalize">{item.retailer}</span>
                   <div className="flex-1 bg-gray-800 rounded-full h-5 overflow-hidden">
                     <div
-                      className="bg-[#0066FF] h-full rounded-full flex items-center px-2 text-xs text-white font-medium"
+                      className="bg-brand-primary h-full rounded-full flex items-center px-2 text-xs text-white font-medium"
                       style={{ width: `${Math.max(barWidth, 5)}%` }}
                     >
                       {item.clicks.toLocaleString()}
@@ -262,7 +262,7 @@ export default async function AnalyticsPage({
       <Card className="bg-gray-900 border-gray-800 mb-8">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
-            <Search className="h-5 w-5 text-[#0066FF]" /> Top Internal Searches
+            <Search className="h-5 w-5 text-brand-primary" /> Top Internal Searches
           </CardTitle>
         </CardHeader>
         <CardContent>

@@ -7,7 +7,7 @@ import { ChevronDown, ChevronUp, Eye, Save, Upload, Trash2 } from 'lucide-react'
 const TiptapEditor = dynamic(
   () => import('@/components/admin/TiptapEditor'),
   { ssr: false, loading: () => (
-    <div className="h-[300px] bg-[#1F2937] rounded-lg animate-pulse" />
+    <div className="h-[300px] bg-card rounded-lg animate-pulse" />
   )}
 )
 
@@ -44,7 +44,7 @@ interface CollapsibleSectionProps {
 function CollapsibleSection({ title, children, defaultOpen = false }: CollapsibleSectionProps) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="bg-[#1F2937] rounded-lg border border-[#374151] mb-4">
+    <div className="bg-card rounded-lg border border-border mb-4">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -313,8 +313,8 @@ export default function EditDevicePage() {
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto">
-        <div className="h-8 bg-[#1F2937] rounded w-64 animate-pulse mb-6" />
-        <div className="h-[500px] bg-[#1F2937] rounded-lg animate-pulse" />
+        <div className="h-8 bg-card rounded w-64 animate-pulse mb-6" />
+        <div className="h-[500px] bg-card rounded-lg animate-pulse" />
       </div>
     )
   }
@@ -323,7 +323,7 @@ export default function EditDevicePage() {
     return (
       <div className="max-w-5xl mx-auto text-center py-20">
         <h1 className="text-2xl font-bold text-white mb-4">Device Not Found</h1>
-        <a href="/admin/devices" className="text-[#0066FF] hover:text-blue-400">Back to Devices</a>
+        <a href="/admin/devices" className="text-brand-primary hover:text-blue-400">Back to Devices</a>
       </div>
     )
   }
@@ -342,7 +342,7 @@ export default function EditDevicePage() {
       <div className="flex gap-8">
         {/* Main Content */}
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold text-white font-['Space_Grotesk'] mb-6">Edit Device</h1>
+          <h1 className="text-2xl font-bold text-white font-heading mb-6">Edit Device</h1>
 
           {/* Identity */}
           <CollapsibleSection title="Identity" defaultOpen>
@@ -350,17 +350,17 @@ export default function EditDevicePage() {
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Name *</label>
                 <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Device name"
-                  className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Slug *</label>
                 <input type="text" value={slug} onChange={e => { setSlugManuallyEdited(true); setSlug(e.target.value) }} placeholder="device-slug"
-                  className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Brand</label>
                 <select value={brandId ?? ''} onChange={e => setBrandId(e.target.value ? parseInt(e.target.value) : null)}
-                  className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none">
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none">
                   <option value="">Select brand…</option>
                   {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
@@ -368,29 +368,29 @@ export default function EditDevicePage() {
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Release Year</label>
                 <input type="number" value={releaseYear} onChange={e => setReleaseYear(e.target.value)} placeholder="2025"
-                  className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Category</label>
                 <select value={category} onChange={e => setCategory(e.target.value)}
-                  className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none">
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none">
                   {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Tagline</label>
                 <input type="text" value={tagline} onChange={e => setTagline(e.target.value)} placeholder="Short tagline"
-                  className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Price (KES)</label>
                 <input type="number" value={priceKes} onChange={e => setPriceKes(e.target.value)} placeholder="150000"
-                  className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Price (USD)</label>
                 <input type="number" value={priceUsd} onChange={e => setPriceUsd(e.target.value)} placeholder="1000"
-                  className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
               </div>
             </div>
           </CollapsibleSection>
@@ -404,20 +404,20 @@ export default function EditDevicePage() {
                   <input type="url" value={img.url} onChange={e => {
                     setImages(prev => prev.map((item, idx) => idx === i ? { ...item, url: e.target.value } : item))
                   }} placeholder="https://…"
-                    className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                    className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Alt text</label>
                   <input type="text" value={img.alt} onChange={e => {
                     setImages(prev => prev.map((item, idx) => idx === i ? { ...item, alt: e.target.value } : item))
                   }} placeholder="Image description"
-                    className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                    className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
                 </div>
                 <div className="flex items-end gap-2">
                   <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
                     <input type="checkbox" checked={img.isPrimary} onChange={e => {
                       setImages(prev => prev.map((item, idx) => idx === i ? { ...item, isPrimary: e.target.checked } : item))
-                    }} className="rounded border-[#374151] bg-[#111827]" />
+                    }} className="rounded border-border bg-muted" />
                     Primary
                   </label>
                   <button type="button" onClick={() => setImages(prev => prev.filter((_, idx) => idx !== i))}
@@ -426,7 +426,7 @@ export default function EditDevicePage() {
               </div>
             ))}
             <button type="button" onClick={() => setImages(prev => [...prev, { url: '', alt: '', isPrimary: false }])}
-              className="text-sm text-[#0066FF] hover:text-blue-400">+ Add Image</button>
+              className="text-sm text-brand-primary hover:text-blue-400">+ Add Image</button>
           </CollapsibleSection>
 
           {/* Fweezy Score */}
@@ -442,7 +442,7 @@ export default function EditDevicePage() {
                 <div key={field.label}>
                   <label className="block text-xs text-gray-500 mb-1">{field.label} (0–10)</label>
                   <input type="number" min="0" max="10" step="0.1" value={field.value} onChange={e => field.setter(e.target.value)}
-                    className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                    className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
                 </div>
               ))}
             </div>
@@ -462,27 +462,27 @@ export default function EditDevicePage() {
                 {verdictPros.map((pro, i) => (
                   <div key={i} className="flex gap-2 mb-2">
                     <input type="text" value={pro} onChange={e => updateArrayField(setVerdictPros, i, e.target.value)} placeholder="Pro…"
-                      className="flex-1 bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                      className="flex-1 bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
                     <button type="button" onClick={() => removeArrayField(setVerdictPros, i)} className="text-red-400 text-xs">Remove</button>
                   </div>
                 ))}
-                <button type="button" onClick={() => addArrayField(setVerdictPros)} className="text-sm text-[#0066FF] hover:text-blue-400">+ Add Pro</button>
+                <button type="button" onClick={() => addArrayField(setVerdictPros)} className="text-sm text-brand-primary hover:text-blue-400">+ Add Pro</button>
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Cons</label>
                 {verdictCons.map((con, i) => (
                   <div key={i} className="flex gap-2 mb-2">
                     <input type="text" value={con} onChange={e => updateArrayField(setVerdictCons, i, e.target.value)} placeholder="Con…"
-                      className="flex-1 bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                      className="flex-1 bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
                     <button type="button" onClick={() => removeArrayField(setVerdictCons, i)} className="text-red-400 text-xs">Remove</button>
                   </div>
                 ))}
-                <button type="button" onClick={() => addArrayField(setVerdictCons)} className="text-sm text-[#0066FF] hover:text-blue-400">+ Add Con</button>
+                <button type="button" onClick={() => addArrayField(setVerdictCons)} className="text-sm text-brand-primary hover:text-blue-400">+ Add Con</button>
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Bottom Line</label>
                 <input type="text" value={verdictBottomLine} onChange={e => setVerdictBottomLine(e.target.value)} placeholder="One-line summary"
-                  className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Full Verdict</label>
@@ -508,7 +508,7 @@ export default function EditDevicePage() {
                   <div key={field}>
                     <label className="block text-xs text-gray-500 mb-1">{field}</label>
                     <input type="text" value={section.data[field] ?? ''} onChange={e => section.setter(prev => ({ ...prev, [field]: e.target.value }))} placeholder={field}
-                      className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                      className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
                   </div>
                 ))}
               </div>
@@ -527,7 +527,7 @@ export default function EditDevicePage() {
                 <div key={field.label}>
                   <label className="block text-xs text-gray-500 mb-1">{field.label}</label>
                   <input type="number" value={field.value} onChange={e => field.setter(e.target.value)} placeholder="0"
-                    className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                    className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
                 </div>
               ))}
             </div>
@@ -541,7 +541,7 @@ export default function EditDevicePage() {
                   <label className="block text-xs text-gray-500 mb-1">Retailer</label>
                   <select value={link.retailer} onChange={e => {
                     setBuyLinks(prev => prev.map((item, idx) => idx === i ? { ...item, retailer: e.target.value } : item))
-                  }} className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none">
+                  }} className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none">
                     {RETAILERS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                   </select>
                 </div>
@@ -550,14 +550,14 @@ export default function EditDevicePage() {
                   <input type="url" value={link.url} onChange={e => {
                     setBuyLinks(prev => prev.map((item, idx) => idx === i ? { ...item, url: e.target.value } : item))
                   }} placeholder="https://…"
-                    className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                    className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Price</label>
                   <input type="text" value={link.price} onChange={e => {
                     setBuyLinks(prev => prev.map((item, idx) => idx === i ? { ...item, price: e.target.value } : item))
                   }} placeholder="KSh 150,000"
-                    className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                    className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
                 </div>
                 <div className="flex items-end gap-2">
                   <button type="button" onClick={() => setBuyLinks(prev => prev.filter((_, idx) => idx !== i))}
@@ -566,7 +566,7 @@ export default function EditDevicePage() {
               </div>
             ))}
             <button type="button" onClick={() => setBuyLinks(prev => [...prev, { retailer: '', url: '', price: '', priceDate: '' }])}
-              className="text-sm text-[#0066FF] hover:text-blue-400">+ Add Buy Link</button>
+              className="text-sm text-brand-primary hover:text-blue-400">+ Add Buy Link</button>
           </CollapsibleSection>
 
           {/* Related Content */}
@@ -575,12 +575,12 @@ export default function EditDevicePage() {
               <div>
                 <label className="block text-xs text-gray-500 mb-1">YouTube Video ID</label>
                 <input type="text" value={relatedVideoId} onChange={e => setRelatedVideoId(e.target.value)} placeholder="dQw4w9WgXcQ"
-                  className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">TikTok URL</label>
                 <input type="url" value={relatedTiktokUrl} onChange={e => setRelatedTiktokUrl(e.target.value)} placeholder="https://…"
-                  className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
               </div>
             </div>
           </CollapsibleSection>
@@ -591,12 +591,12 @@ export default function EditDevicePage() {
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Meta Title</label>
                 <input type="text" value={seoTitle} onChange={e => setSeoTitle(e.target.value)} placeholder="SEO title"
-                  className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none" />
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Meta Description</label>
                 <textarea value={seoDescription} onChange={e => setSeoDescription(e.target.value)} placeholder="SEO description" rows={3}
-                  className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none resize-none" />
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none resize-none" />
               </div>
             </div>
           </CollapsibleSection>
@@ -605,10 +605,10 @@ export default function EditDevicePage() {
         {/* Sidebar */}
         <div className="w-72 shrink-0">
           <div className="sticky top-8 space-y-4">
-            <div className="bg-[#1F2937] rounded-lg border border-[#374151] p-4">
+            <div className="bg-card rounded-lg border border-border p-4">
               <h3 className="text-sm font-medium text-white mb-3">Status</h3>
               <select value={status} onChange={e => setStatus(e.target.value as 'draft' | 'published')}
-                className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none">
+                className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none">
                 <option value="draft">Draft</option>
                 <option value="published">Published</option>
               </select>
@@ -620,16 +620,16 @@ export default function EditDevicePage() {
               )}
             </div>
 
-            <div className="bg-[#1F2937] rounded-lg border border-[#374151] p-4">
+            <div className="bg-card rounded-lg border border-border p-4">
               <h3 className="text-sm font-medium text-white mb-3">Brand</h3>
               <select value={brandId ?? ''} onChange={e => setBrandId(e.target.value ? parseInt(e.target.value) : null)}
-                className="w-full bg-[#111827] text-white rounded px-3 py-2 text-sm border border-[#374151] focus:border-[#0066FF] focus:outline-none">
+                className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none">
                 <option value="">Select brand…</option>
                 {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
 
-            <div className="bg-[#1F2937] rounded-lg border border-[#374151] p-4 text-center">
+            <div className="bg-card rounded-lg border border-border p-4 text-center">
               <h3 className="text-sm font-medium text-white mb-2">Overall Score</h3>
               <p className={`text-4xl font-bold ${overallScore >= 80 ? 'text-score-high' : overallScore >= 60 ? 'text-score-mid' : 'text-score-low'}`}>
                 {overallScore || '—'}
@@ -638,7 +638,7 @@ export default function EditDevicePage() {
 
             <div className="space-y-2">
               <button type="button" onClick={() => handleSave(false)} disabled={saving}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#0066FF] text-white rounded-lg hover:bg-blue-500 disabled:opacity-40 text-sm font-medium">
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-primary text-white rounded-lg hover:bg-brand-primary/80 disabled:opacity-40 text-sm font-medium">
                 <Save size={16} /> {saving ? 'Saving…' : 'Save Draft'}
               </button>
               <button type="button" onClick={() => handleSave(true)} disabled={saving}
@@ -647,7 +647,7 @@ export default function EditDevicePage() {
               </button>
               {previewUrl && (
                 <a href={previewUrl} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 px-4 py-2.5 border border-[#374151] text-gray-400 rounded-lg hover:text-white text-sm">
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 border border-border text-gray-400 rounded-lg hover:text-white text-sm">
                   <Eye size={16} /> Preview
                 </a>
               )}
@@ -663,14 +663,14 @@ export default function EditDevicePage() {
       {/* Delete confirmation */}
       {deleteOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#1F2937] rounded-lg border border-[#374151] p-6 max-w-md w-full">
+          <div className="bg-card rounded-lg border border-border p-6 max-w-md w-full">
             <h3 className="text-lg font-semibold text-white mb-2">Delete Device</h3>
             <p className="text-sm text-gray-400 mb-4">
               Are you sure you want to delete &ldquo;{name}&rdquo;? This cannot be undone.
             </p>
             <div className="flex justify-end gap-3">
               <button type="button" onClick={() => setDeleteOpen(false)}
-                className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-[#374151] rounded-lg">
+                className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-border rounded-lg">
                 Cancel
               </button>
               <button type="button" onClick={handleDelete}

@@ -2,22 +2,13 @@
 
 export default function Logo() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 4px' }}>
-      <div style={{
-        width: 32, height: 32, borderRadius: 8,
-        background: '#0066FF',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontWeight: 'bold', color: 'white', fontSize: 18,
-        fontFamily: "'Raleway', sans-serif",
-      }}>F</div>
-      <span style={{
-        fontWeight: 700, fontSize: 16,
-        color: 'var(--theme-elevation-800)',
-        fontFamily: "'Raleway', sans-serif",
-        letterSpacing: '-0.02em',
-      }}>
+    <div className="flex items-center gap-2.5 px-0.5">
+      <div className="w-8 h-8 rounded-lg bg-brand-primary flex items-center justify-center font-bold text-white text-lg font-heading shrink-0">
+        F
+      </div>
+      <span className="font-bold text-base text-foreground font-heading tracking-tight">
         FweezyTech
-        <span style={{ color: '#0066FF' }}> CMS</span>
+        <span className="text-brand-primary"> CMS</span>
       </span>
     </div>
   )

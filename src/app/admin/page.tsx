@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { FileText, Smartphone, Video, Clock, ArrowRight } from 'lucide-react'
+import { FileText, Smartphone, Video, Clock, Eye, MousePointerClick, ArrowRight } from 'lucide-react'
 
 type AdminUser = {
   id: string
@@ -26,6 +26,11 @@ export default function AdminDashboardPage() {
     draftDevices: number
     activeTeasers: number
   } | null>(null)
+  const [analytics, setAnalytics] = useState<{
+    pageViewsToday: number
+    topDevicePage: string | null
+    affiliateClicksWeek: number
+  } | null>(null)
   const [recentActivity, setRecentActivity] = useState<Array<{
     type: string
     title: string
@@ -42,23 +47,22 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     async function load() {
       try {
-        // Fetch admin user
-        const res = await fetch('/api/admin/auth/me')
-        if (res.ok) {
-          const data = await res.json()
+        const [meRes, articlesRes, devicesRes, teasersRes, analyticsRes] = await Promise.all([
+          fetch('/api/admin/auth/me').catch(() => null),
+          fetch('/api/admin/articles?status=draft&limit=0').catch(() => null),
+          fetch('/api/admin/devices?status=draft&limit=0').catch(() => null),
+          fetch('/api/admin/coming-soon?active=true&limit=0').catch(() => null),
+          fetch('/api/admin/analytics-summary').catch(() => null),
+        ])
+
+        if (meRes?.ok) {
+          const data = await meRes.json()
           setUser(data.user as AdminUser)
         }
 
-        // Fetch stats
-        const [articlesRes, devicesRes, teasersRes] = await Promise.all([
-          fetch('/api/admin/articles?status=draft&limit=0'),
-          fetch('/api/admin/devices?status=draft&limit=0').catch(() => ({ ok: false, json: async () => ({ total: 0 }) } as Response)),
-          fetch('/api/admin/coming-soon?active=true&limit=0').catch(() => ({ ok: false, json: async () => ({ total: 0 }) } as Response)),
-        ])
-
-        const articles = articlesRes.ok ? await articlesRes.json() : { total: 0 }
-        const devices = devicesRes.ok ? await devicesRes.json() : { total: 0 }
-        const teasers = teasersRes.ok ? await teasersRes.json() : { total: 0 }
+        const articles = articlesRes?.ok ? await articlesRes.json() : { total: 0 }
+        const devices = devicesRes?.ok ? await devicesRes.json() : { total: 0 }
+        const teasers = teasersRes?.ok ? await teasersRes.json() : { total: 0 }
 
         setStats({
           draftArticles: articles.total ?? 0,
@@ -66,18 +70,39 @@ export default function AdminDashboardPage() {
           activeTeasers: teasers.total ?? 0,
         })
 
-        // Fetch recent activity (last 5 updated articles)
-        const recentRes = await fetch('/api/admin/articles?limit=5')
-        if (recentRes.ok) {
-          const recentData = await recentRes.json()
-          const items = (recentData.data ?? []).map((a: any) => ({
-            type: 'article' as const,
-            title: a.title,
-            updatedAt: a.updated_at,
-            href: `/admin/articles/${a.id}/edit`,
-          }))
-          setRecentActivity(items)
+        if (analyticsRes?.ok) {
+          const analyticsData = await analyticsRes.json()
+          setAnalytics(analyticsData)
         }
+
+        const activityItems: Array<{ type: string; title: string; updatedAt: string; href: string }> = []
+
+        if (articlesRes?.ok) {
+          const recentArticles = await fetch('/api/admin/articles?limit=5&page=1').then(r => r.json()).catch(() => ({ data: [] }))
+          for (const a of (recentArticles.data ?? []).slice(0, 3)) {
+            activityItems.push({
+              type: 'article',
+              title: a.title,
+              updatedAt: a.updated_at,
+              href: `/admin/articles/${a.id}/edit`,
+            })
+          }
+        }
+
+        if (devicesRes?.ok) {
+          const recentDevices = await fetch('/api/admin/devices?limit=5&page=1').then(r => r.json()).catch(() => ({ data: [] }))
+          for (const d of (recentDevices.data ?? []).slice(0, 2)) {
+            activityItems.push({
+              type: 'device',
+              title: d.name,
+              updatedAt: d.updated_at,
+              href: `/admin/devices/${d.id}/edit`,
+            })
+          }
+        }
+
+        activityItems.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        setRecentActivity(activityItems.slice(0, 5))
       } catch (e) {
         console.error('Dashboard load error:', e)
       } finally {
@@ -90,104 +115,125 @@ export default function AdminDashboardPage() {
   if (loading) {
     return (
       <div className="space-y-6 animate-pulse">
-        <div className="h-8 bg-[#1F2937] rounded w-64" />
+        <div className="h-8 bg-muted rounded w-64" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-24 bg-[#1F2937] rounded-lg" />
+            <div key={i} className="h-24 bg-muted rounded-lg" />
           ))}
         </div>
-        <div className="h-48 bg-[#1F2937] rounded-lg" />
+        <div className="h-48 bg-muted rounded-lg" />
       </div>
     )
   }
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
-      {/* Greeting */}
       <div>
-        <h1 className="text-2xl font-bold text-white font-['Space_Grotesk']">
+        <h1 className="text-2xl font-bold text-foreground font-heading">
           {greeting}, {user?.display_name ?? 'there'}!
         </h1>
-        <p className="text-gray-400 mt-1">Here's what's happening at FweezyTech.</p>
+        <p className="text-muted-foreground mt-1">Here's what's happening at FweezyTech.</p>
       </div>
 
-      {/* Quick Action Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Link
           href="/admin/articles/create"
-          className="bg-[#1F2937] rounded-lg p-4 border border-[#374151] hover:border-[#0066FF] transition-colors group"
+          className="bg-card rounded-lg p-4 border border-border hover:border-brand-primary transition-colors group"
         >
-          <FileText className="text-[#0066FF] mb-2" size={24} />
-          <p className="text-sm text-white font-medium">Write Article</p>
-          <p className="text-xs text-gray-500 mt-1">Create new content</p>
+          <FileText className="text-brand-primary mb-2" size={24} />
+          <p className="text-sm text-foreground font-medium">Write Article</p>
+          <p className="text-xs text-muted-foreground mt-1">Create new content</p>
         </Link>
         <Link
           href="/admin/devices/create"
-          className="bg-[#1F2937] rounded-lg p-4 border border-[#374151] hover:border-[#0066FF] transition-colors group"
+          className="bg-card rounded-lg p-4 border border-border hover:border-brand-primary transition-colors group"
         >
           <Smartphone className="text-green-400 mb-2" size={24} />
-          <p className="text-sm text-white font-medium">Add Device</p>
-          <p className="text-xs text-gray-500 mt-1">New device review</p>
+          <p className="text-sm text-foreground font-medium">Add Device</p>
+          <p className="text-xs text-muted-foreground mt-1">New device review</p>
         </Link>
         <Link
           href="/admin/videos/create"
-          className="bg-[#1F2937] rounded-lg p-4 border border-[#374151] hover:border-[#0066FF] transition-colors group"
+          className="bg-card rounded-lg p-4 border border-border hover:border-brand-primary transition-colors group"
         >
           <Video className="text-amber-400 mb-2" size={24} />
-          <p className="text-sm text-white font-medium">Add Video</p>
-          <p className="text-xs text-gray-500 mt-1">YouTube / TikTok</p>
+          <p className="text-sm text-foreground font-medium">Add Video</p>
+          <p className="text-xs text-muted-foreground mt-1">YouTube / TikTok</p>
         </Link>
         <Link
           href="/admin/coming-soon/create"
-          className="bg-[#1F2937] rounded-lg p-4 border border-[#374151] hover:border-[#0066FF] transition-colors group"
+          className="bg-card rounded-lg p-4 border border-border hover:border-brand-primary transition-colors group"
         >
           <Clock className="text-purple-400 mb-2" size={24} />
-          <p className="text-sm text-white font-medium">Add Teaser</p>
-          <p className="text-xs text-gray-500 mt-1">Upcoming content</p>
+          <p className="text-sm text-foreground font-medium">Add Teaser</p>
+          <p className="text-xs text-muted-foreground mt-1">Upcoming content</p>
         </Link>
       </div>
 
-      {/* Content Status Chips */}
       {stats && (
         <div className="flex flex-wrap gap-3">
           <div className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
             stats.draftArticles > 0
               ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-              : 'bg-gray-800/50 text-gray-500 border-gray-700'
+              : 'bg-muted text-muted-foreground border-border'
           }`}>
             {stats.draftArticles} draft articles
           </div>
           <div className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
             stats.draftDevices > 0
               ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-              : 'bg-gray-800/50 text-gray-500 border-gray-700'
+              : 'bg-muted text-muted-foreground border-border'
           }`}>
             {stats.draftDevices} draft devices
           </div>
           <div className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
             stats.activeTeasers > 0
               ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-              : 'bg-gray-800/50 text-gray-500 border-gray-700'
+              : 'bg-muted text-muted-foreground border-border'
           }`}>
             {stats.activeTeasers} active teasers
           </div>
         </div>
       )}
 
-      {/* Recent Activity */}
-      <div className="bg-[#1F2937] rounded-lg border border-[#374151]">
-        <div className="px-4 py-3 border-b border-[#374151] flex justify-between items-center">
-          <h2 className="text-sm font-medium text-white">Recent Activity</h2>
+      {analytics && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-card rounded-lg border border-border p-4">
+            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-2">
+              <Eye size={14} className="text-brand-primary" /> Page Views Today
+            </p>
+            <p className="text-2xl font-bold text-foreground">{analytics.pageViewsToday.toLocaleString()}</p>
+          </div>
+          <div className="bg-card rounded-lg border border-border p-4">
+            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-2">
+              <Eye size={14} className="text-amber-400" /> Top Device Page Today
+            </p>
+            <p className="text-sm font-bold text-foreground truncate">
+              {analytics.topDevicePage ?? 'N/A'}
+            </p>
+          </div>
+          <div className="bg-card rounded-lg border border-border p-4">
+            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-2">
+              <MousePointerClick size={14} className="text-green-500" /> Affiliate Clicks
+            </p>
+            <p className="text-2xl font-bold text-foreground">{analytics.affiliateClicksWeek.toLocaleString()}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-card rounded-lg border border-border">
+        <div className="px-4 py-3 border-b border-border flex justify-between items-center">
+          <h2 className="text-sm font-medium text-foreground">Recent Activity</h2>
           <Link
             href="/admin/articles"
-            className="text-xs text-[#0066FF] hover:text-blue-400 flex items-center gap-1"
+            className="text-xs text-brand-primary hover:text-brand-primary/80 flex items-center gap-1"
           >
             View all <ArrowRight size={12} />
           </Link>
         </div>
-        <div className="divide-y divide-[#374151]">
+        <div className="divide-y divide-border">
           {recentActivity.length === 0 && (
-            <p className="px-4 py-6 text-sm text-gray-500 text-center">
+            <p className="px-4 py-6 text-sm text-muted-foreground text-center">
               No recent activity
             </p>
           )}
@@ -195,11 +241,15 @@ export default function AdminDashboardPage() {
             <Link
               key={i}
               href={item.href}
-              className="flex items-center gap-3 px-4 py-3 hover:bg-[#111827] transition-colors"
+              className="flex items-center gap-3 px-4 py-3 hover:bg-accent transition-colors"
             >
-              <FileText size={16} className="text-gray-500 shrink-0" />
-              <span className="text-sm text-gray-300 truncate flex-1">{item.title}</span>
-              <span className="text-xs text-gray-600 shrink-0">
+              {item.type === 'article' ? (
+                <FileText size={16} className="text-muted-foreground shrink-0" />
+              ) : (
+                <Smartphone size={16} className="text-muted-foreground shrink-0" />
+              )}
+              <span className="text-sm text-foreground/80 truncate flex-1">{item.title}</span>
+              <span className="text-xs text-muted-foreground/60 shrink-0">
                 {timeAgo(item.updatedAt)}
               </span>
             </Link>
@@ -207,10 +257,9 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Daily Tip */}
-      <div className="bg-gradient-to-r from-[#0066FF]/10 to-transparent rounded-lg p-4 border border-[#0066FF]/20">
-        <p className="text-xs text-[#0066FF] uppercase tracking-wider mb-1">💡 Daily Tip</p>
-        <p className="text-sm text-gray-300">{DAILY_TIPS[tipIndex]}</p>
+      <div className="bg-gradient-to-r from-brand-primary/10 to-transparent rounded-lg p-4 border border-brand-primary/20">
+        <p className="text-xs text-brand-primary uppercase tracking-wider mb-1">Daily Tip</p>
+        <p className="text-sm text-foreground/80">{DAILY_TIPS[tipIndex]}</p>
       </div>
     </div>
   )
