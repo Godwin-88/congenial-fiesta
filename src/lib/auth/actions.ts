@@ -3,21 +3,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-
-export async function signInWithGoogle(redirectTo?: string): Promise<void> {
-  const supabase = await createClient()
-  const { data } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: `${process.env.NEXT_PUBLIC_SERVER_URL}/auth/callback?next=${encodeURIComponent(redirectTo ?? '/')}`,
-    },
-  })
-
-  if (data.url) {
-    redirect(data.url)
-  }
-}
 
 export async function signInWithMagicLink(email: string, redirectTo?: string): Promise<{ error?: string }> {
   const supabase = await createClient()
@@ -95,6 +80,19 @@ export async function signInWithEmail(email: string, password: string): Promise<
   const { error } = await supabase.auth.signInWithPassword({
     email,
     password,
+  })
+
+  if (error) {
+    return { error: error.message }
+  }
+  return {}
+}
+
+export async function resetPassword(email: string): Promise<{ error?: string }> {
+  const supabase = await createClient()
+  const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${serverUrl}/auth/reset-password`,
   })
 
   if (error) {
