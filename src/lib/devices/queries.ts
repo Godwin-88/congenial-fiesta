@@ -6,14 +6,7 @@ import { mapDevice } from '@/types/cms'
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  )
-}
-
-function getPublicSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 }
 
@@ -168,7 +161,10 @@ export async function getTopDevices(limit: number = 6): Promise<Device[]> {
     .limit(limit)
 
   if (error) {
-    console.error('getTopDevices error:', error)
+    console.error(
+      'getTopDevices error:',
+      error instanceof Error ? error.message : JSON.stringify(error),
+    )
     return []
   }
 

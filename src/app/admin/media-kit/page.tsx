@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { Save, Trash2 } from 'lucide-react'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 
 type MediaKit = {
   id: number
@@ -28,6 +30,7 @@ export default function MediaKitPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
 
   const [form, setForm] = useState({
     short_bio: '',
@@ -107,6 +110,7 @@ export default function MediaKitPage() {
 
       if (res.ok) {
         setToast({ message: 'Media kit saved', type: 'success' })
+        resetDirty()
         fetchData()
       } else {
         const data = await res.json()
@@ -124,6 +128,7 @@ export default function MediaKitPage() {
       ...prev,
       headshots: [...prev.headshots, { url: '', label: '' }],
     }))
+    setDirty(true)
   }
 
   const updateHeadshot = (index: number, field: 'url' | 'label', value: string) => {
@@ -132,6 +137,7 @@ export default function MediaKitPage() {
       next.headshots[index] = { ...next.headshots[index], [field]: value }
       return next
     })
+    setDirty(true)
   }
 
   const removeHeadshot = (index: number) => {
@@ -139,6 +145,7 @@ export default function MediaKitPage() {
       ...prev,
       headshots: prev.headshots.filter((_, i) => i !== index),
     }))
+    setDirty(true)
   }
 
   const addColour = () => {
@@ -146,6 +153,7 @@ export default function MediaKitPage() {
       ...prev,
       brand_colours: [...prev.brand_colours, { name: '', hex: '', rgb: '', cmyk: '' }],
     }))
+    setDirty(true)
   }
 
   const updateColour = (index: number, field: string, value: string) => {
@@ -154,6 +162,7 @@ export default function MediaKitPage() {
       next.brand_colours[index] = { ...next.brand_colours[index], [field]: value }
       return next
     })
+    setDirty(true)
   }
 
   const removeColour = (index: number) => {
@@ -161,6 +170,7 @@ export default function MediaKitPage() {
       ...prev,
       brand_colours: prev.brand_colours.filter((_, i) => i !== index),
     }))
+    setDirty(true)
   }
 
   if (loading) {
@@ -174,6 +184,16 @@ export default function MediaKitPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
+      <UnsavedChangesModal
+        isOpen={showModal}
+        onSave={() => {
+          handleSave()
+          handleCancel()
+        }}
+        onDiscard={handleDiscard}
+        onCancel={handleCancel}
+      />
+
       {toast && (
         <div className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-lg text-sm shadow-lg ${
           toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
@@ -208,7 +228,7 @@ export default function MediaKitPage() {
               <label className="block text-xs text-gray-500 mb-1">Short Bio (max 100 words)</label>
               <textarea
                 value={form.short_bio}
-                onChange={e => setForm(prev => ({ ...prev, short_bio: e.target.value }))}
+                onChange={e => { setForm(prev => ({ ...prev, short_bio: e.target.value })); setDirty(true) }}
                 rows={3}
                 maxLength={600}
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none resize-none"
@@ -219,7 +239,7 @@ export default function MediaKitPage() {
               <label className="block text-xs text-gray-500 mb-1">Long Bio (max 300 words)</label>
               <textarea
                 value={form.long_bio}
-                onChange={e => setForm(prev => ({ ...prev, long_bio: e.target.value }))}
+                onChange={e => { setForm(prev => ({ ...prev, long_bio: e.target.value })); setDirty(true) }}
                 rows={6}
                 maxLength={1800}
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none resize-none"
@@ -237,7 +257,7 @@ export default function MediaKitPage() {
               <input
                 type="text"
                 value={form.youtube_followers}
-                onChange={e => setForm(prev => ({ ...prev, youtube_followers: e.target.value }))}
+                onChange={e => { setForm(prev => ({ ...prev, youtube_followers: e.target.value })); setDirty(true) }}
                 placeholder="150K+"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -247,7 +267,7 @@ export default function MediaKitPage() {
               <input
                 type="text"
                 value={form.tiktok_followers}
-                onChange={e => setForm(prev => ({ ...prev, tiktok_followers: e.target.value }))}
+                onChange={e => { setForm(prev => ({ ...prev, tiktok_followers: e.target.value })); setDirty(true) }}
                 placeholder="200K+"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -257,7 +277,7 @@ export default function MediaKitPage() {
               <input
                 type="text"
                 value={form.instagram_followers}
-                onChange={e => setForm(prev => ({ ...prev, instagram_followers: e.target.value }))}
+                onChange={e => { setForm(prev => ({ ...prev, instagram_followers: e.target.value })); setDirty(true) }}
                 placeholder="100K+"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -267,7 +287,7 @@ export default function MediaKitPage() {
               <input
                 type="text"
                 value={form.facebook_followers}
-                onChange={e => setForm(prev => ({ ...prev, facebook_followers: e.target.value }))}
+                onChange={e => { setForm(prev => ({ ...prev, facebook_followers: e.target.value })); setDirty(true) }}
                 placeholder="50K+"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -279,7 +299,7 @@ export default function MediaKitPage() {
               <input
                 type="text"
                 value={form.total_followers}
-                onChange={e => setForm(prev => ({ ...prev, total_followers: e.target.value }))}
+                onChange={e => { setForm(prev => ({ ...prev, total_followers: e.target.value })); setDirty(true) }}
                 placeholder="500K+"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -289,7 +309,7 @@ export default function MediaKitPage() {
               <input
                 type="text"
                 value={form.total_views}
-                onChange={e => setForm(prev => ({ ...prev, total_views: e.target.value }))}
+                onChange={e => { setForm(prev => ({ ...prev, total_views: e.target.value })); setDirty(true) }}
                 placeholder="50M+"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -300,7 +320,7 @@ export default function MediaKitPage() {
             <input
               type="number"
               value={form.years_active}
-              onChange={e => setForm(prev => ({ ...prev, years_active: e.target.value }))}
+                onChange={e => { setForm(prev => ({ ...prev, years_active: e.target.value })); setDirty(true) }}
               className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
             />
           </div>
@@ -314,7 +334,7 @@ export default function MediaKitPage() {
               <input
                 type="url"
                 value={form.logo_light_url}
-                onChange={e => setForm(prev => ({ ...prev, logo_light_url: e.target.value }))}
+                onChange={e => { setForm(prev => ({ ...prev, logo_light_url: e.target.value })); setDirty(true) }}
                 placeholder="https://…"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -324,7 +344,7 @@ export default function MediaKitPage() {
               <input
                 type="url"
                 value={form.logo_dark_url}
-                onChange={e => setForm(prev => ({ ...prev, logo_dark_url: e.target.value }))}
+                onChange={e => { setForm(prev => ({ ...prev, logo_dark_url: e.target.value })); setDirty(true) }}
                 placeholder="https://…"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -334,7 +354,7 @@ export default function MediaKitPage() {
               <input
                 type="url"
                 value={form.logo_svg_light_url}
-                onChange={e => setForm(prev => ({ ...prev, logo_svg_light_url: e.target.value }))}
+                onChange={e => { setForm(prev => ({ ...prev, logo_svg_light_url: e.target.value })); setDirty(true) }}
                 placeholder="https://…"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -344,7 +364,7 @@ export default function MediaKitPage() {
               <input
                 type="url"
                 value={form.logo_svg_dark_url}
-                onChange={e => setForm(prev => ({ ...prev, logo_svg_dark_url: e.target.value }))}
+                onChange={e => { setForm(prev => ({ ...prev, logo_svg_dark_url: e.target.value })); setDirty(true) }}
                 placeholder="https://…"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />

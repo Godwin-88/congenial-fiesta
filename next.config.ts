@@ -69,6 +69,8 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       { protocol: 'https', hostname: 'imagedelivery.net' },
       { protocol: 'https', hostname: 'placehold.co' },
+      { protocol: 'https', hostname: 'img.youtube.com' },
+      { protocol: 'https', hostname: '*.ytimg.com' },
     ],
   },
 }

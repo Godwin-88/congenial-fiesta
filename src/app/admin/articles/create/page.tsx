@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 
 const TiptapEditor = dynamic(
   () => import('@/components/admin/TiptapEditor'),
@@ -54,6 +56,14 @@ export default function CreateArticlePage() {
   const [articleId, setArticleId] = useState<number | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [seoOpen, setSeoOpen] = useState(false)
+  const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
+
+  // Track dirty state when any form field changes
+  useEffect(() => {
+    if (title || slug || excerpt || featuredImage || bodyHtml || category || tags || seoTitle || seoDescription) {
+      setDirty(true)
+    }
+  }, [title, slug, excerpt, featuredImage, bodyHtml, category, tags, seoTitle, seoDescription])
 
   // Auto-generate slug from title
   useEffect(() => {
@@ -145,6 +155,7 @@ export default function CreateArticlePage() {
 
       lastSavedContent.current = JSON.stringify({ title, bodyHtml, excerpt })
       setSaveStatus('saved')
+      resetDirty()
       setErrors({})
 
       if (!isAutoSave && saveStatusParam === 'published') {
@@ -180,7 +191,13 @@ export default function CreateArticlePage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <button
-            onClick={() => router.push('/admin/articles')}
+            onClick={() => {
+              if (isDirty) {
+                setDirty(true)
+                return
+              }
+              router.push('/admin/articles')
+            }}
             className="text-sm text-muted-foreground hover:text-foreground mb-1 flex items-center gap-1"
           >
             ← Articles
@@ -437,6 +454,16 @@ export default function CreateArticlePage() {
 
         </div>
       </div>
+
+      <UnsavedChangesModal
+        isOpen={showModal}
+        onSave={() => {
+          handleSave('draft')
+          handleCancel()
+        }}
+        onDiscard={handleDiscard}
+        onCancel={handleCancel}
+      />
     </div>
   )
 }

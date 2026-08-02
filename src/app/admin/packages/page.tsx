@@ -8,6 +8,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 
 type Package = {
   id: number
@@ -34,6 +36,7 @@ export default function PackagesPage() {
   const [deleteName, setDeleteName] = useState('')
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [saving, setSaving] = useState(false)
+  const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
 
   const [formName, setFormName] = useState('')
   const [formTier, setFormTier] = useState('starter')
@@ -74,6 +77,7 @@ export default function PackagesPage() {
     setFormDeliverables([])
     setFormHighlighted(false)
     setFormDisplayOrder('0')
+    resetDirty()
     setDialogOpen(true)
   }
 
@@ -85,6 +89,7 @@ export default function PackagesPage() {
     setFormDeliverables([...pkg.deliverables])
     setFormHighlighted(pkg.highlighted)
     setFormDisplayOrder(String(pkg.display_order))
+    resetDirty()
     setDialogOpen(true)
   }
 
@@ -132,6 +137,7 @@ export default function PackagesPage() {
 
       if (res.ok) {
         setToast({ message: editingPackage ? 'Package updated' : 'Package created', type: 'success' })
+        resetDirty()
         setDialogOpen(false)
         fetchPackages()
       } else {
@@ -273,7 +279,15 @@ export default function PackagesPage() {
         </div>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) setDialogOpen(false) }}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          if (isDirty) {
+            setDirty(true)
+            return
+          }
+          setDialogOpen(false)
+        }
+      }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingPackage ? 'Edit Package' : 'Add Package'}</DialogTitle>
@@ -287,7 +301,7 @@ export default function PackagesPage() {
               <input
                 type="text"
                 value={formName}
-                onChange={e => setFormName(e.target.value)}
+                onChange={e => { setFormName(e.target.value); setDirty(true) }}
                 placeholder="Package name"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -296,7 +310,7 @@ export default function PackagesPage() {
               <label className="block text-xs text-gray-500 mb-1">Tier</label>
               <select
                 value={formTier}
-                onChange={e => setFormTier(e.target.value)}
+                onChange={e => { setFormTier(e.target.value); setDirty(true) }}
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               >
                 {TIERS.map(t => (
@@ -308,7 +322,7 @@ export default function PackagesPage() {
               <label className="block text-xs text-gray-500 mb-1">Description</label>
               <textarea
                 value={formDescription}
-                onChange={e => setFormDescription(e.target.value)}
+                onChange={e => { setFormDescription(e.target.value); setDirty(true) }}
                 rows={3}
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none resize-none"
               />
@@ -330,7 +344,7 @@ export default function PackagesPage() {
                     <input
                       type="text"
                       value={d}
-                      onChange={e => updateDeliverable(i, e.target.value)}
+                      onChange={e => { updateDeliverable(i, e.target.value); setDirty(true) }}
                       placeholder="Deliverable"
                       className="flex-1 bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
                     />
@@ -351,7 +365,7 @@ export default function PackagesPage() {
                 <input
                   type="number"
                   value={formDisplayOrder}
-                  onChange={e => setFormDisplayOrder(e.target.value)}
+                  onChange={e => { setFormDisplayOrder(e.target.value); setDirty(true) }}
                   className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
                 />
               </div>
@@ -361,7 +375,7 @@ export default function PackagesPage() {
                     type="checkbox"
                     id="highlighted"
                     checked={formHighlighted}
-                    onChange={e => setFormHighlighted(e.target.checked)}
+                    onChange={e => { setFormHighlighted(e.target.checked); setDirty(true) }}
                     className="rounded border-border bg-muted"
                   />
                   <label htmlFor="highlighted" className="text-sm text-gray-400 cursor-pointer">Highlighted</label>
@@ -371,7 +385,13 @@ export default function PackagesPage() {
           </div>
           <div className="flex justify-end gap-3 mt-4">
             <button
-              onClick={() => setDialogOpen(false)}
+              onClick={() => {
+                if (isDirty) {
+                  setDirty(true)
+                  return
+                }
+                setDialogOpen(false)
+              }}
               className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-border rounded-lg"
             >
               Cancel
@@ -386,6 +406,16 @@ export default function PackagesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <UnsavedChangesModal
+        isOpen={showModal}
+        onSave={() => {
+          handleSave()
+          handleCancel()
+        }}
+        onDiscard={handleDiscard}
+        onCancel={handleCancel}
+      />
 
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

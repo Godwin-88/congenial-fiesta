@@ -8,6 +8,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 
 type Sponsor = {
   id: number
@@ -36,6 +38,7 @@ export default function SponsorsPage() {
   const [deleteName, setDeleteName] = useState('')
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [saving, setSaving] = useState(false)
+  const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
 
   const [formCompanyName, setFormCompanyName] = useState('')
   const [formLogoUrl, setFormLogoUrl] = useState('')
@@ -78,6 +81,7 @@ export default function SponsorsPage() {
     setFormPartnershipType('')
     setFormDisplayOrder('0')
     setFormActive(true)
+    resetDirty()
     setDialogOpen(true)
   }
 
@@ -90,6 +94,7 @@ export default function SponsorsPage() {
     setFormPartnershipType(sponsor.partnership_type ?? '')
     setFormDisplayOrder(String(sponsor.display_order))
     setFormActive(sponsor.active)
+    resetDirty()
     setDialogOpen(true)
   }
 
@@ -122,6 +127,7 @@ export default function SponsorsPage() {
 
       if (res.ok) {
         setToast({ message: editingSponsor ? 'Sponsor updated' : 'Sponsor created', type: 'success' })
+        resetDirty()
         setDialogOpen(false)
         fetchSponsors()
       } else {
@@ -275,7 +281,15 @@ export default function SponsorsPage() {
         </div>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) setDialogOpen(false) }}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          if (isDirty) {
+            setDirty(true)
+            return
+          }
+          setDialogOpen(false)
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingSponsor ? 'Edit Sponsor' : 'Add Sponsor'}</DialogTitle>
@@ -289,7 +303,7 @@ export default function SponsorsPage() {
               <input
                 type="text"
                 value={formCompanyName}
-                onChange={e => setFormCompanyName(e.target.value)}
+                onChange={e => { setFormCompanyName(e.target.value); setDirty(true) }}
                 placeholder="Company name"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -299,7 +313,7 @@ export default function SponsorsPage() {
               <input
                 type="url"
                 value={formLogoUrl}
-                onChange={e => setFormLogoUrl(e.target.value)}
+                onChange={e => { setFormLogoUrl(e.target.value); setDirty(true) }}
                 placeholder="https://…"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -309,7 +323,7 @@ export default function SponsorsPage() {
               <input
                 type="url"
                 value={formWebsite}
-                onChange={e => setFormWebsite(e.target.value)}
+                onChange={e => { setFormWebsite(e.target.value); setDirty(true) }}
                 placeholder="https://…"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -319,7 +333,7 @@ export default function SponsorsPage() {
               <input
                 type="text"
                 value={formAssociatedVideo}
-                onChange={e => setFormAssociatedVideo(e.target.value)}
+                onChange={e => { setFormAssociatedVideo(e.target.value); setDirty(true) }}
                 placeholder="YouTube video ID"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -328,7 +342,7 @@ export default function SponsorsPage() {
               <label className="block text-xs text-gray-500 mb-1">Partnership Type</label>
               <select
                 value={formPartnershipType}
-                onChange={e => setFormPartnershipType(e.target.value)}
+                onChange={e => { setFormPartnershipType(e.target.value); setDirty(true) }}
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               >
                 <option value="">None</option>
@@ -342,7 +356,7 @@ export default function SponsorsPage() {
               <input
                 type="number"
                 value={formDisplayOrder}
-                onChange={e => setFormDisplayOrder(e.target.value)}
+                onChange={e => { setFormDisplayOrder(e.target.value); setDirty(true) }}
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
             </div>
@@ -351,7 +365,7 @@ export default function SponsorsPage() {
                 type="checkbox"
                 id="active"
                 checked={formActive}
-                onChange={e => setFormActive(e.target.checked)}
+                onChange={e => { setFormActive(e.target.checked); setDirty(true) }}
                 className="rounded border-border bg-muted"
               />
               <label htmlFor="active" className="text-sm text-gray-400 cursor-pointer">Active</label>
@@ -359,7 +373,13 @@ export default function SponsorsPage() {
           </div>
           <div className="flex justify-end gap-3 mt-4">
             <button
-              onClick={() => setDialogOpen(false)}
+              onClick={() => {
+                if (isDirty) {
+                  setDirty(true)
+                  return
+                }
+                setDialogOpen(false)
+              }}
               className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-border rounded-lg"
             >
               Cancel
@@ -374,6 +394,16 @@ export default function SponsorsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <UnsavedChangesModal
+        isOpen={showModal}
+        onSave={() => {
+          handleSave()
+          handleCancel()
+        }}
+        onDiscard={handleDiscard}
+        onCancel={handleCancel}
+      />
 
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

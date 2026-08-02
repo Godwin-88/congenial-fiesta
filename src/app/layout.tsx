@@ -29,6 +29,9 @@ const ralewayHeading = Raleway({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SERVER_URL ?? "https://fweezytech.com",
+  ),
   title: {
     template: "%s | FweezyTech",
     default: "FweezyTech",
@@ -106,12 +109,6 @@ export default async function RootLayout({
   const isAdminRoute =
     pathname === "/admin" || pathname.startsWith("/admin/");
 
-  // For admin routes, skip the public site wrapper entirely.
-  // The admin layout provides its own <html>/<body> structure.
-  if (isAdminRoute) {
-    return <>{children}</>;
-  }
-
   return (
     <html
       lang="en"
@@ -131,11 +128,17 @@ export default async function RootLayout({
               <ChatProvider>
                 <Header />
                 <PageViewBeacon />
-                <main id="main-content" className="flex-1">{children}</main>
-                <ComparisonTray />
-                <InstallPrompt />
-                <ChatBubbleWrapper />
-                <Footer />
+                {isAdminRoute ? (
+                  children
+                ) : (
+                  <>
+                    <main id="main-content" className="flex-1">{children}</main>
+                    <ComparisonTray />
+                    <InstallPrompt />
+                    <ChatBubbleWrapper />
+                    <Footer />
+                  </>
+                )}
               </ChatProvider>
             </ComparisonTrayProvider>
           </AuthProvider>

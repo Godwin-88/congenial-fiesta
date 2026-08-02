@@ -3,10 +3,10 @@ import { Separator } from "@/components/ui/separator"
 import { YoutubeIcon, TiktokIcon, InstagramIcon, FacebookIcon } from "@/components/icons/SocialIcons"
 
 const socials = [
-  { name: "YouTube", icon: YoutubeIcon, href: "#" },
-  { name: "TikTok", icon: TiktokIcon, href: "#" },
-  { name: "Instagram", icon: InstagramIcon, href: "#" },
-  { name: "Facebook", icon: FacebookIcon, href: "#" },
+  { name: "YouTube", icon: YoutubeIcon, href: "https://youtube.com/@fweezytech" },
+  { name: "TikTok", icon: TiktokIcon, href: "https://tiktok.com/@fweezytech" },
+  { name: "Instagram", icon: InstagramIcon, href: "https://instagram.com/fweezytech" },
+  { name: "Facebook", icon: FacebookIcon, href: "https://facebook.com/fweezytech" },
 ]
 
 export default function Footer() {
@@ -15,11 +15,15 @@ export default function Footer() {
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row md:justify-between gap-8">
           <div className="max-w-sm">
-            <Link href="/" className="font-heading text-xl font-bold text-brand-primary">
-              FweezyTech
+            <Link href="/" className="block">
+              <img
+                src="/images/logo.jpeg"
+                alt="FweezyTech"
+                className="h-10 w-auto"
+              />
             </Link>
             <p className="mt-2 text-sm text-foreground/60">
-              Honest device reviews, comparisons, and tech insights for Kenya and beyond.
+              Honest device reviews, comparisons, and tech insights.
             </p>
           </div>
 

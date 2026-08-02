@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { Save, RefreshCw } from 'lucide-react'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 
 type SiteSettings = {
   id: number
@@ -30,6 +32,7 @@ export default function SettingsPage() {
   })
   const [adminEmail, setAdminEmail] = useState('')
   const [advertiseIndexed, setAdvertiseIndexed] = useState(false)
+  const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
 
   const fetchSettings = useCallback(async () => {
     setLoading(true)
@@ -90,6 +93,7 @@ export default function SettingsPage() {
 
       if (res.ok) {
         setToast({ message: 'Settings saved', type: 'success' })
+        resetDirty()
         fetchSettings()
       } else {
         const data = await res.json()
@@ -121,6 +125,7 @@ export default function SettingsPage() {
 
   const updateWeight = (field: keyof typeof weights, value: number) => {
     setWeights(prev => ({ ...prev, [field]: Math.max(0, Math.min(1, value)) }))
+    setDirty(true)
   }
 
   if (loading) {
@@ -134,6 +139,16 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
+      <UnsavedChangesModal
+        isOpen={showModal}
+        onSave={() => {
+          handleSave()
+          handleCancel()
+        }}
+        onDiscard={handleDiscard}
+        onCancel={handleCancel}
+      />
+
       {toast && (
         <div className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-lg text-sm shadow-lg ${
           toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
@@ -187,7 +202,7 @@ export default function SettingsPage() {
               <input
                 type="email"
                 value={adminEmail}
-                onChange={e => setAdminEmail(e.target.value)}
+                onChange={e => { setAdminEmail(e.target.value); setDirty(true) }}
                 placeholder="admin@fweezytech.com"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -197,7 +212,7 @@ export default function SettingsPage() {
                 type="checkbox"
                 id="advertise-indexed"
                 checked={advertiseIndexed}
-                onChange={e => setAdvertiseIndexed(e.target.checked)}
+                onChange={e => { setAdvertiseIndexed(e.target.checked); setDirty(true) }}
                 className="rounded border-border bg-muted"
               />
               <label htmlFor="advertise-indexed" className="text-sm text-gray-400 cursor-pointer">

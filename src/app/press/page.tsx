@@ -93,6 +93,28 @@ export default async function PressPage() {
         <section>
           <h2 className="text-3xl font-bold mb-6">Logos</h2>
           <div className="grid md:grid-cols-2 gap-4 mb-4">
+            {/* Official brand logo (always shown) */}
+            <Card className="bg-gray-900 border-gray-800">
+              <CardContent className="pt-6">
+                <div className="bg-white rounded-lg h-24 flex items-center justify-center mb-3 p-4">
+                  <img
+                    src="/images/logo.jpeg"
+                    alt="FweezyTech Official Logo"
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-400">Official Logo</span>
+                  <a
+                    href="/images/logo.jpeg"
+                    download
+                    className="text-[#0066FF] hover:text-[#0052CC] text-sm"
+                  >
+                    Download
+                  </a>
+                </div>
+              </CardContent>
+            </Card>
             {[
               { label: 'Light PNG', url: String(mediaKit.logoLight ?? ''), bg: 'bg-white' },
               { label: 'Dark PNG', url: String(mediaKit.logoDark ?? ''), bg: 'bg-gray-800' },

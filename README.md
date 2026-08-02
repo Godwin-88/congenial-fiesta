@@ -349,14 +349,19 @@ fweezytech/
    - `004_ratings.sql` — Device rating system
    - `005_comments.sql` — Comment system
    - `006_verified_owner.sql` — Verified owner badge system
-   - `007_page_views.sql` — Privacy-first page view analytics
-   - `008_sponsor_inquiries.sql` — Sponsor inquiry submissions
-   - `009_analytics_aggregate.sql` — Analytics aggregate tables
+    - `007_page_views.sql` — Privacy-first page view analytics
+    - `007_saved_comparisons.sql` — Saved comparisons feature
+    - `008_sponsor_inquiries.sql` — Sponsor inquiry submissions
+    - `009_analytics_aggregate.sql` — Analytics aggregate tables
+    - `010_admin_cms.sql` — Admin CMS tables (devices, brands, articles, etc.)
+    - `011_user_features.sql` — User features (saved items, ratings)
+    - `012_storage_buckets.sql` — Storage buckets for article images
+    - `013_add_package_interest.sql` — Add package_interest column to sponsor_inquiries
 
-   Or use the migration script:
-   ```bash
-   npm run db:migrate
-   ```
+    Or use the migration script:
+    ```bash
+    npm run db:migrate
+    ```
 
 4. **Generate PWA icons**
    ```bash

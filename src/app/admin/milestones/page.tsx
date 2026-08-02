@@ -8,6 +8,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 
 type Milestone = {
   id: number
@@ -26,6 +28,7 @@ export default function MilestonesPage() {
   const [deleteTitle, setDeleteTitle] = useState('')
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [saving, setSaving] = useState(false)
+  const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
 
   const [formYear, setFormYear] = useState('')
   const [formTitle, setFormTitle] = useState('')
@@ -62,6 +65,7 @@ export default function MilestonesPage() {
     setFormTitle('')
     setFormDescription('')
     setFormDisplayOrder('0')
+    resetDirty()
     setDialogOpen(true)
   }
 
@@ -71,6 +75,7 @@ export default function MilestonesPage() {
     setFormTitle(item.title)
     setFormDescription(item.description ?? '')
     setFormDisplayOrder(String(item.display_order))
+    resetDirty()
     setDialogOpen(true)
   }
 
@@ -100,6 +105,7 @@ export default function MilestonesPage() {
 
       if (res.ok) {
         setToast({ message: editingItem ? 'Milestone updated' : 'Milestone created', type: 'success' })
+        resetDirty()
         setDialogOpen(false)
         fetchItems()
       } else {
@@ -216,7 +222,15 @@ export default function MilestonesPage() {
         </div>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) setDialogOpen(false) }}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          if (isDirty) {
+            setDirty(true)
+            return
+          }
+          setDialogOpen(false)
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingItem ? 'Edit Milestone' : 'Add Milestone'}</DialogTitle>
@@ -230,7 +244,7 @@ export default function MilestonesPage() {
               <input
                 type="number"
                 value={formYear}
-                onChange={e => setFormYear(e.target.value)}
+                onChange={e => { setFormYear(e.target.value); setDirty(true) }}
                 placeholder="2026"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -240,7 +254,7 @@ export default function MilestonesPage() {
               <input
                 type="text"
                 value={formTitle}
-                onChange={e => setFormTitle(e.target.value)}
+                onChange={e => { setFormTitle(e.target.value); setDirty(true) }}
                 placeholder="Milestone title"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -249,7 +263,7 @@ export default function MilestonesPage() {
               <label className="block text-xs text-gray-500 mb-1">Description</label>
               <textarea
                 value={formDescription}
-                onChange={e => setFormDescription(e.target.value)}
+                onChange={e => { setFormDescription(e.target.value); setDirty(true) }}
                 rows={3}
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none resize-none"
               />
@@ -259,14 +273,20 @@ export default function MilestonesPage() {
               <input
                 type="number"
                 value={formDisplayOrder}
-                onChange={e => setFormDisplayOrder(e.target.value)}
+                onChange={e => { setFormDisplayOrder(e.target.value); setDirty(true) }}
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
             </div>
           </div>
           <div className="flex justify-end gap-3 mt-4">
             <button
-              onClick={() => setDialogOpen(false)}
+              onClick={() => {
+                if (isDirty) {
+                  setDirty(true)
+                  return
+                }
+                setDialogOpen(false)
+              }}
               className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-border rounded-lg"
             >
               Cancel
@@ -281,6 +301,16 @@ export default function MilestonesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <UnsavedChangesModal
+        isOpen={showModal}
+        onSave={() => {
+          handleSave()
+          handleCancel()
+        }}
+        onDiscard={handleDiscard}
+        onCancel={handleCancel}
+      />
 
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

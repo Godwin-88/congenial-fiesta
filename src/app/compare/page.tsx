@@ -90,12 +90,52 @@ export default async function ComparePage({ searchParams }: PageProps) {
         {devices.map((d: any) => d.name).join(' vs ')}
       </h1>
 
+      {/* Device images side-by-side */}
+      <div className={`grid gap-4 mb-8 ${devices.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
+        {devices.map((device: any) => {
+          const images = device.images as Array<Record<string, unknown>> | undefined
+          const primaryImage = images?.find((img: any) => img.isPrimary) ?? images?.[0]
+          const brandData = device.brand as Record<string, unknown> | undefined
+          return (
+            <div key={device.slug} className="flex flex-col items-center">
+              <div className="relative aspect-[4/5] w-full max-w-[280px] overflow-hidden rounded-xl bg-muted">
+                {primaryImage ? (
+                  <img
+                    src={String(primaryImage.url)}
+                    alt={String(primaryImage.alt ?? device.name)}
+                    className="h-full w-full object-contain p-4"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+                    No image
+                  </div>
+                )}
+              </div>
+              <div className="mt-3 text-center">
+                <p className="text-xs text-muted-foreground">{brandData?.name as string ?? ''}</p>
+                <p className="font-heading font-bold text-foreground">{device.name}</p>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
       <CompareDevicePicker
         selectedSlugs={slugs}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         deviceNames={(devices as any[]).map((d: any) => d.name)}
-        onAdd={() => {}}
-        onRemove={() => {}}
+        onAdd={(slug: string) => {
+          const updated = [...slugs, slug].sort()
+          redirect(`/compare?devices=${updated.join(',')}`)
+        }}
+        onRemove={(slug: string) => {
+          const updated = slugs.filter((s) => s !== slug)
+          if (updated.length < 2) {
+            redirect('/devices?toast=compare-error')
+          } else {
+            redirect(`/compare?devices=${updated.join(',')}`)
+          }
+        }}
       />
 
       <div className="mt-8 flex flex-col items-center">

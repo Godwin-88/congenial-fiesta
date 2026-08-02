@@ -26,6 +26,14 @@ const migrations = [
   '004_ratings.sql',
   '005_comments.sql',
   '006_verified_owner.sql',
+  '007_page_views.sql',
+  '007_saved_comparisons.sql',
+  '008_sponsor_inquiries.sql',
+  '009_analytics_aggregate.sql',
+  '010_admin_cms.sql',
+  '011_user_features.sql',
+  '012_storage_buckets.sql',
+  '013_add_package_interest.sql',
 ]
 
 async function runMigrations() {

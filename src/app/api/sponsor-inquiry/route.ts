@@ -6,8 +6,8 @@ import { formRateLimit } from '@/lib/upstash/ratelimit'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const resendApiKey = process.env.RESEND_API_KEY
-const adminEmail = process.env.ADMIN_EMAIL
-const resendFrom = process.env.RESEND_FROM_EMAIL ?? 'hello@fweezytech.com'
+const adminEmail = process.env.ADMIN_EMAIL ?? 'business@fweezytech.com'
+const resendFrom = process.env.RESEND_FROM_EMAIL ?? 'business@fweezytech.com'
 const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:3000'
 
 if (!supabaseUrl) throw new Error('Missing env var NEXT_PUBLIC_SUPABASE_URL')
@@ -17,8 +17,10 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey)
 const resend = resendApiKey ? new Resend(resendApiKey) : null
 
 const ALLOWED_BUDGET_RANGES = [
-  'Under $500',
-  '$500–$2,000',
+  'Under $300',
+  '$300–$500',
+  '$500–$800',
+  '$800–$2,000',
   '$2,000–$5,000',
   '$5,000–$10,000',
   '$10,000+',
@@ -57,6 +59,7 @@ export async function POST(request: Request) {
     budgetRange?: string
     message?: string
     email?: string
+    packageInterest?: string
   }
 
   try {
@@ -86,6 +89,9 @@ export async function POST(request: Request) {
   if (body.website && !validateUrl(body.website)) {
     errors.push('Website must be a valid URL')
   }
+  if (body.packageInterest && body.packageInterest.length > 200) {
+    errors.push('Package interest must be less than 200 characters')
+  }
 
   if (errors.length > 0) {
     return NextResponse.json({ error: errors.join('; ') }, { status: 400 })
@@ -101,13 +107,19 @@ export async function POST(request: Request) {
       budget_range: body.budgetRange!,
       message: body.message!.trim(),
       email: body.email!.trim(),
+      package_interest: body.packageInterest?.trim() ?? null,
       status: 'new',
     })
     .select('id')
     .single()
 
   if (insertError) {
-    console.error('Failed to insert sponsor inquiry:', insertError)
+    console.error(
+      'Failed to insert sponsor inquiry:',
+      insertError instanceof Error
+        ? insertError.message
+        : JSON.stringify(insertError),
+    )
     return NextResponse.json({ error: 'Something went wrong' }, { status: 500 })
   }
 
@@ -117,16 +129,19 @@ export async function POST(request: Request) {
       await resend.emails.send({
         from: resendFrom,
         to: adminEmail,
-        subject: `New Sponsor Inquiry: ${body.company} — ${body.budgetRange}`,
+        subject: `New Sponsor Inquiry: ${body.company} — ${body.packageInterest ?? body.budgetRange}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #0066FF;">New Sponsor Inquiry</h2>
+            <img src="${serverUrl}/images/logo.jpeg" alt="Fweezy Tech" style="max-width: 160px; margin-bottom: 16px;" />
+            <img src="${serverUrl}/images/banner.jpg" alt="Fweezy Tech Banner" style="width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 16px;" />
+            <h2 style="color: #0066FF; margin-top: 0;">New Sponsor Inquiry</h2>
             <table style="width:100%; border-collapse: collapse;">
               <tr><td style="padding:8px;border-bottom:1px solid #ddd;font-weight:bold;">Company</td><td style="padding:8px;border-bottom:1px solid #ddd;">${body.company}</td></tr>
               <tr><td style="padding:8px;border-bottom:1px solid #ddd;font-weight:bold;">Name</td><td style="padding:8px;border-bottom:1px solid #ddd;">${body.name}</td></tr>
               <tr><td style="padding:8px;border-bottom:1px solid #ddd;font-weight:bold;">Email</td><td style="padding:8px;border-bottom:1px solid #ddd;">${body.email}</td></tr>
               <tr><td style="padding:8px;border-bottom:1px solid #ddd;font-weight:bold;">Website</td><td style="padding:8px;border-bottom:1px solid #ddd;">${body.website ?? 'N/A'}</td></tr>
               <tr><td style="padding:8px;border-bottom:1px solid #ddd;font-weight:bold;">Budget Range</td><td style="padding:8px;border-bottom:1px solid #ddd;">${body.budgetRange}</td></tr>
+              <tr><td style="padding:8px;border-bottom:1px solid #ddd;font-weight:bold;">Package Interest</td><td style="padding:8px;border-bottom:1px solid #ddd;">${body.packageInterest ?? 'N/A'}</td></tr>
               <tr><td style="padding:8px;border-bottom:1px solid #ddd;font-weight:bold;">Message</td><td style="padding:8px;border-bottom:1px solid #ddd;">${body.message}</td></tr>
             </table>
             <p style="margin-top:16px;">
@@ -147,8 +162,10 @@ export async function POST(request: Request) {
         subject: 'We got your message — FweezyTech',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #111827; color: #F9FAFB; padding: 24px; border-radius: 8px;">
-            <h2 style="color: #0066FF;">Thanks for reaching out, ${body.name}!</h2>
-            <p>Hi ${body.name}, thanks for reaching out about a partnership with FweezyTech. We'll review your inquiry and get back to you within 3 business days.</p>
+            <img src="${serverUrl}/images/logo.jpeg" alt="Fweezy Tech" style="max-width: 160px; margin-bottom: 16px;" />
+            <img src="${serverUrl}/images/banner.jpg" alt="Fweezy Tech Banner" style="width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 16px;" />
+            <h2 style="color: #0066FF; margin-top: 0;">Thanks for reaching out, ${body.name}!</h2>
+            <p>Hi ${body.name}, thanks for reaching out about a partnership with FweezyTech. We&apos;ll review your inquiry${body.packageInterest ? ` regarding <strong>${body.packageInterest}</strong>` : ''} and get back to you within 3 business days.</p>
             <p style="color:#9CA3AF;">In the meantime, feel free to check out our <a href="${serverUrl}/press" style="color:#0066FF;">press resources</a>.</p>
             <p style="color:#9CA3AF; font-size:12px; margin-top:32px;">— The FweezyTech Team</p>
           </div>

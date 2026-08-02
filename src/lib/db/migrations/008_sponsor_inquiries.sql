@@ -1,11 +1,12 @@
 CREATE TABLE IF NOT EXISTS sponsor_inquiries (
   id              BIGSERIAL PRIMARY KEY,
-  name            TEXT NOT NULL,
+   name            TEXT NOT NULL,
   company         TEXT NOT NULL,
   website         TEXT,
   budget_range    TEXT NOT NULL,
   message         TEXT NOT NULL,
-  email           TEXT NOT NULL,
+   email           TEXT NOT NULL,
+  package_interest TEXT,
   status          TEXT NOT NULL DEFAULT 'new'
                   CHECK (status IN ('new','contacted','declined','closed')),
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -18,3 +19,4 @@ ALTER TABLE sponsor_inquiries ENABLE ROW LEVEL SECURITY;
 
 CREATE INDEX IF NOT EXISTS inquiries_status_idx    ON sponsor_inquiries(status);
 CREATE INDEX IF NOT EXISTS inquiries_created_idx   ON sponsor_inquiries(created_at);
+CREATE INDEX IF NOT EXISTS inquiries_package_idx  ON sponsor_inquiries(package_interest);

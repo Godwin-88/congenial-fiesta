@@ -56,7 +56,7 @@ export default function VideoFeed({ videos }: { videos: any[] }) {
         <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3" onClick={handleCardClick}>
           {filteredVideos.map((video, i) => (
             <VideoCard
-              key={`${video.id}-${i}`}
+              key={`${video.dbId}-${i}`}
               id={video.id}
               title={video.title}
               thumbnailUrl={video.thumbnailUrl}

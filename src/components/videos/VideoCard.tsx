@@ -31,7 +31,7 @@ export function VideoCard({ id, title, thumbnailUrl, platform, viewCount, durati
       data-platform={platform}
     >
       <div className="relative aspect-video bg-muted overflow-hidden">
-        {thumbnailUrl && (
+        {thumbnailUrl ? (
           <Image
             src={thumbnailUrl}
             alt={title}
@@ -39,6 +39,10 @@ export function VideoCard({ id, title, thumbnailUrl, platform, viewCount, durati
             className="object-cover transition-transform group-hover:scale-105"
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           />
+        ) : (
+          <div className={`flex h-full w-full items-center justify-center ${badgeColor}`}>
+            <span className="text-2xl font-bold text-white/80">{platformLabel}</span>
+          </div>
         )}
         {duration && (
           <span className="absolute bottom-2 right-2 rounded bg-black/80 px-1.5 py-0.5 text-xs font-medium text-white">
@@ -67,7 +71,9 @@ export function VideoCard({ id, title, thumbnailUrl, platform, viewCount, durati
 }
 
 function getRelativeTime(dateStr: string): string {
+  if (!dateStr) return ''
   const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return ''
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))

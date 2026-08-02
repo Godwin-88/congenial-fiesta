@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { usePathname } from "next/navigation"
 import { Moon, Sun, Menu, Search, Bookmark } from "lucide-react"
 import { useTheme } from "@ecosy/next-themes"
 import { Button } from "@/components/ui/button"
@@ -18,6 +19,8 @@ const navLinks = [
 ]
 
 export default function Header() {
+  const pathname = usePathname()
+  const isAdmin = pathname === "/admin" || pathname.startsWith("/admin/")
   const [open, setOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const { theme, setTheme } = useTheme()
@@ -26,10 +29,15 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <a href="/" className="font-heading text-xl font-bold text-brand-primary">
-          FweezyTech
+        <a href="/" className="block shrink-0">
+          <img
+            src="/images/logo.jpeg"
+            alt="FweezyTech"
+            className="h-10 w-auto"
+          />
         </a>
 
+        {!isAdmin && (
         <nav className="hidden md:flex items-center gap-6">
           {navLinks.map((link) => (
             <a
@@ -41,15 +49,24 @@ export default function Header() {
             </a>
           ))}
           {user && (
-            <a
-              href="/saved"
-              className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors flex items-center gap-1"
-            >
-              <Bookmark size={14} />
-              Saved
-            </a>
+            <>
+              <a
+                href="/saved"
+                className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors flex items-center gap-1"
+              >
+                <Bookmark size={14} />
+                Saved
+              </a>
+              <a
+                href="/my-comparisons"
+                className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
+              >
+                My Dashboard
+              </a>
+            </>
           )}
         </nav>
+        )}
 
         <div className="flex items-center gap-2">
           {/* Desktop search bar */}
@@ -105,14 +122,23 @@ export default function Header() {
                   </a>
                 ))}
                 {user && (
-                  <a
-                    href="/saved"
-                    onClick={() => setOpen(false)}
-                    className="text-lg font-medium text-foreground/70 hover:text-foreground transition-colors flex items-center gap-2"
-                  >
-                    <Bookmark size={16} />
-                    Saved
-                  </a>
+                  <>
+                    <a
+                      href="/saved"
+                      onClick={() => setOpen(false)}
+                      className="text-lg font-medium text-foreground/70 hover:text-foreground transition-colors flex items-center gap-2"
+                    >
+                      <Bookmark size={16} />
+                      Saved
+                    </a>
+                    <a
+                      href="/my-comparisons"
+                      onClick={() => setOpen(false)}
+                      className="text-lg font-medium text-foreground/70 hover:text-foreground transition-colors"
+                    >
+                      My Dashboard
+                    </a>
+                  </>
                 )}
               </nav>
             </SheetContent>

@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/context/AuthContext'
-import AuthModal from '@/components/auth/AuthModal'
 import { ArticleCard } from '@/components/articles/ArticleCard'
+import SavedComparisonsList from '@/components/compare/SavedComparisonsList'
 
 type SavedItem = {
   id: number
@@ -31,13 +31,11 @@ export default function SavedPage() {
   const [items, setItems] = useState<SavedItem[]>([])
   const [activeTab, setActiveTab] = useState('all')
   const [fetching, setFetching] = useState(true)
-  const [showAuth, setShowAuth] = useState(false)
 
   useEffect(() => {
     if (isLoading) return
     if (!user) {
       setFetching(false)
-      setShowAuth(true)
       return
     }
 
@@ -66,31 +64,23 @@ export default function SavedPage() {
     }
   }
 
+  const showComparisonsTab = activeTab === 'comparison' || activeTab === 'all'
+
   if (isLoading || fetching) {
     return (
-      <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-muted rounded w-48" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="h-64 bg-muted rounded-xl" />
-            ))}
-          </div>
+      <div className="animate-pulse space-y-6">
+        <div className="h-8 bg-muted rounded w-48" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-64 bg-muted rounded-xl" />
+          ))}
         </div>
       </div>
     )
   }
 
-  if (!user) {
-    return (
-      <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
-        <AuthModal isOpen={showAuth} onClose={() => setShowAuth(false)} redirectTo="/saved" />
-      </div>
-    )
-  }
-
   return (
-    <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
+    <div className="max-w-5xl">
       <h1 className="font-heading text-3xl font-bold text-foreground sm:text-4xl">
         My Saved
       </h1>
@@ -113,8 +103,18 @@ export default function SavedPage() {
         ))}
       </div>
 
-      {/* Saved items */}
-      {items.length === 0 ? (
+      {/* Comparisons section */}
+      {showComparisonsTab && (
+        <section className="mt-8">
+          <h2 className="font-heading text-xl font-bold text-foreground mb-4">
+            Saved Comparisons
+          </h2>
+          <SavedComparisonsList />
+        </section>
+      )}
+
+      {/* Other saved items (articles + devices) */}
+      {items.filter(i => i.content_type !== 'comparison').length === 0 && !showComparisonsTab ? (
         <div className="mt-12 text-center">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -141,7 +141,9 @@ export default function SavedPage() {
         </div>
       ) : (
         <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {items.map(item => (
+          {items
+            .filter(i => i.content_type !== 'comparison')
+            .map(item => (
             <div key={item.id} className="relative group">
               {item.content_type === 'article' ? (
                 <ArticleCard
@@ -151,21 +153,13 @@ export default function SavedPage() {
                   featuredImage={item.metadata.featuredImage}
                   category={item.metadata.category}
                 />
-              ) : item.content_type === 'device' ? (
+              ) : (
                 <Link
                   href={`/devices/${item.content_id}`}
                   className="block rounded-xl border border-border bg-card p-4 hover:shadow-lg transition-shadow"
                 >
                   <h3 className="font-semibold text-foreground">{item.metadata.title ?? item.content_id}</h3>
                   <p className="mt-1 text-sm text-muted-foreground">Device</p>
-                </Link>
-              ) : (
-                <Link
-                  href={`/compare?devices=${item.content_id}`}
-                  className="block rounded-xl border border-border bg-card p-4 hover:shadow-lg transition-shadow"
-                >
-                  <h3 className="font-semibold text-foreground">{item.metadata.title ?? 'Comparison'}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">Comparison</p>
                 </Link>
               )}
               <button

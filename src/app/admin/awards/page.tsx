@@ -8,6 +8,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 
 type Award = {
   id: number
@@ -28,6 +30,7 @@ export default function AwardsPage() {
   const [deleteName, setDeleteName] = useState('')
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [saving, setSaving] = useState(false)
+  const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
 
   const [formAwardName, setFormAwardName] = useState('')
   const [formAwardingBody, setFormAwardingBody] = useState('')
@@ -68,6 +71,7 @@ export default function AwardsPage() {
     setFormCertificateImage('')
     setFormAwardUrl('')
     setFormDisplayOrder('0')
+    resetDirty()
     setDialogOpen(true)
   }
 
@@ -79,6 +83,7 @@ export default function AwardsPage() {
     setFormCertificateImage(item.certificate_image ?? '')
     setFormAwardUrl(item.award_url ?? '')
     setFormDisplayOrder(String(item.display_order))
+    resetDirty()
     setDialogOpen(true)
   }
 
@@ -110,6 +115,7 @@ export default function AwardsPage() {
 
       if (res.ok) {
         setToast({ message: editingItem ? 'Award updated' : 'Award created', type: 'success' })
+        resetDirty()
         setDialogOpen(false)
         fetchItems()
       } else {
@@ -226,7 +232,15 @@ export default function AwardsPage() {
         </div>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) setDialogOpen(false) }}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          if (isDirty) {
+            setDirty(true)
+            return
+          }
+          setDialogOpen(false)
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingItem ? 'Edit Award' : 'Add Award'}</DialogTitle>
@@ -240,7 +254,7 @@ export default function AwardsPage() {
               <input
                 type="text"
                 value={formAwardName}
-                onChange={e => setFormAwardName(e.target.value)}
+                onChange={e => { setFormAwardName(e.target.value); setDirty(true) }}
                 placeholder="Award name"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -250,7 +264,7 @@ export default function AwardsPage() {
               <input
                 type="text"
                 value={formAwardingBody}
-                onChange={e => setFormAwardingBody(e.target.value)}
+                onChange={e => { setFormAwardingBody(e.target.value); setDirty(true) }}
                 placeholder="Organisation name"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -260,7 +274,7 @@ export default function AwardsPage() {
               <input
                 type="number"
                 value={formYear}
-                onChange={e => setFormYear(e.target.value)}
+                onChange={e => { setFormYear(e.target.value); setDirty(true) }}
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
             </div>
@@ -269,7 +283,7 @@ export default function AwardsPage() {
               <input
                 type="url"
                 value={formCertificateImage}
-                onChange={e => setFormCertificateImage(e.target.value)}
+                onChange={e => { setFormCertificateImage(e.target.value); setDirty(true) }}
                 placeholder="https://…"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -279,7 +293,7 @@ export default function AwardsPage() {
               <input
                 type="url"
                 value={formAwardUrl}
-                onChange={e => setFormAwardUrl(e.target.value)}
+                onChange={e => { setFormAwardUrl(e.target.value); setDirty(true) }}
                 placeholder="https://…"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
@@ -289,14 +303,20 @@ export default function AwardsPage() {
               <input
                 type="number"
                 value={formDisplayOrder}
-                onChange={e => setFormDisplayOrder(e.target.value)}
+                onChange={e => { setFormDisplayOrder(e.target.value); setDirty(true) }}
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
             </div>
           </div>
           <div className="flex justify-end gap-3 mt-4">
             <button
-              onClick={() => setDialogOpen(false)}
+              onClick={() => {
+                if (isDirty) {
+                  setDirty(true)
+                  return
+                }
+                setDialogOpen(false)
+              }}
               className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-border rounded-lg"
             >
               Cancel
@@ -311,6 +331,16 @@ export default function AwardsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <UnsavedChangesModal
+        isOpen={showModal}
+        onSave={() => {
+          handleSave()
+          handleCancel()
+        }}
+        onDiscard={handleDiscard}
+        onCancel={handleCancel}
+      />
 
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

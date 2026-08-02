@@ -6,14 +6,7 @@ import { mapArticle } from '@/types/cms'
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  )
-}
-
-function getPublicSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 }
 
@@ -96,7 +89,7 @@ export async function getAllArticlePaths(): Promise<Array<{ slug: string }>> {
     return cached as Array<{ slug: string }>
   }
 
-  const supabase = getPublicSupabase()
+  const supabase = getSupabase()
   const { data } = await supabase
     .from('articles')
     .select('slug')

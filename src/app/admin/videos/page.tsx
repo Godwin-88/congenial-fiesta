@@ -8,6 +8,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 
 type Video = {
   id: number
@@ -37,11 +39,13 @@ export default function VideosPage() {
   const [deleteTitle, setDeleteTitle] = useState('')
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [saving, setSaving] = useState(false)
+  const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
 
   const [formTitle, setFormTitle] = useState('')
   const [formPlatform, setFormPlatform] = useState('youtube')
   const [formEmbedId, setFormEmbedId] = useState('')
   const [formThumbnailUrl, setFormThumbnailUrl] = useState('')
+  const [autoThumbnail, setAutoThumbnail] = useState(true)
   const [formViewCount, setFormViewCount] = useState('')
   const [formDuration, setFormDuration] = useState('')
   const [formDeviceId, setFormDeviceId] = useState('')
@@ -85,6 +89,25 @@ export default function VideosPage() {
     }
   }, [toast])
 
+  const generateThumbnailUrl = useCallback((platform: string, embedId: string): string => {
+    if (!embedId.trim()) return ''
+    if (platform === 'youtube') {
+      let videoId = embedId.trim()
+      if (videoId.startsWith('http')) {
+        const youtuBeMatch = videoId.match(/youtu\.be\/([a-zA-Z0-9_-]+)/)
+        if (youtuBeMatch) videoId = youtuBeMatch[1]
+        const watchMatch = videoId.match(/[?&]v=([a-zA-Z0-9_-]+)/)
+        if (watchMatch) videoId = watchMatch[1]
+      }
+      videoId = videoId.split('?')[0].split('&')[0]
+      if (/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+        return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
+      }
+      return ''
+    }
+    return ''
+  }, [])
+
   const openCreate = () => {
     setEditingVideo(null)
     setFormTitle('')
@@ -96,6 +119,8 @@ export default function VideosPage() {
     setFormDeviceId('')
     setFormPublishedAt('')
     setFormFeatured(false)
+    setAutoThumbnail(true)
+    resetDirty()
     setDialogOpen(true)
   }
 
@@ -110,6 +135,8 @@ export default function VideosPage() {
     setFormDeviceId(video.associated_device_id ? String(video.associated_device_id) : '')
     setFormPublishedAt(video.published_at ? video.published_at.slice(0, 16) : '')
     setFormFeatured(video.featured)
+    setAutoThumbnail(!video.thumbnail_url)
+    resetDirty()
     setDialogOpen(true)
   }
 
@@ -144,6 +171,7 @@ export default function VideosPage() {
 
       if (res.ok) {
         setToast({ message: editingVideo ? 'Video updated' : 'Video created', type: 'success' })
+        resetDirty()
         setDialogOpen(false)
         fetchVideos()
       } else {
@@ -331,6 +359,30 @@ export default function VideosPage() {
                   ? 'Paste YouTube video ID only (not full URL)'
                   : 'Paste full URL'}
               </p>
+              {formPlatform === 'youtube' && formEmbedId && (
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoThumbnail}
+                      onChange={e => {
+                        setAutoThumbnail(e.target.checked)
+                        if (e.target.checked) {
+                          setFormThumbnailUrl(generateThumbnailUrl(formPlatform, formEmbedId))
+                        }
+                      }}
+                      className="rounded border-border bg-muted"
+                    />
+                    Auto-generate thumbnail
+                  </label>
+                  <img
+                    src={generateThumbnailUrl(formPlatform, formEmbedId)}
+                    alt="Preview"
+                    className="h-10 rounded border border-border"
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  />
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Embed ID / URL</label>
@@ -343,12 +395,20 @@ export default function VideosPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Thumbnail URL</label>
+              <label className="block text-xs text-gray-500 mb-1">
+                Thumbnail URL
+                {autoThumbnail && formPlatform === 'youtube' && formEmbedId && (
+                  <span className="text-gray-600 ml-1">(auto-generated)</span>
+                )}
+              </label>
               <input
                 type="url"
                 value={formThumbnailUrl}
-                onChange={e => setFormThumbnailUrl(e.target.value)}
-                placeholder="https://…"
+                onChange={e => {
+                  setFormThumbnailUrl(e.target.value)
+                  setAutoThumbnail(false)
+                }}
+                placeholder={autoThumbnail && formPlatform === 'youtube' && formEmbedId ? generateThumbnailUrl(formPlatform, formEmbedId) : 'https://…'}
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
               />
             </div>

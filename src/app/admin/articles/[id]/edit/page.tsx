@@ -3,6 +3,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 
 const TiptapEditor = dynamic(
   () => import('@/components/admin/TiptapEditor'),
@@ -60,6 +62,8 @@ export default function EditArticlePage() {
   const [seoOpen, setSeoOpen] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
+  const loadedRef = useRef(false)
 
   // Fetch article
   useEffect(() => {
@@ -92,10 +96,19 @@ export default function EditArticlePage() {
         setNotFound(true)
       } finally {
         setLoading(false)
+        loadedRef.current = true
       }
     }
     fetchArticle()
   }, [id])
+
+  // Track dirty state when any form field changes (only after initial load)
+  useEffect(() => {
+    if (!loadedRef.current) return
+    if (title || slug || excerpt || featuredImage || bodyHtml || category || tags || seoTitle || seoDescription) {
+      setDirty(true)
+    }
+  }, [title, slug, excerpt, featuredImage, bodyHtml, category, tags, seoTitle, seoDescription])
 
   // Auto-generate slug from title
   useEffect(() => {
@@ -173,6 +186,7 @@ export default function EditArticlePage() {
 
       lastSavedContent.current = JSON.stringify({ title, bodyHtml, excerpt })
       setSaveStatus('saved')
+      resetDirty()
       setErrors({})
       setUpdatedAt(new Date().toISOString())
 
@@ -245,7 +259,13 @@ export default function EditArticlePage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <button
-            onClick={() => router.push('/admin/articles')}
+            onClick={() => {
+              if (isDirty) {
+                setDirty(true)
+                return
+              }
+              router.push('/admin/articles')
+            }}
             className="text-sm text-muted-foreground hover:text-foreground mb-1 flex items-center gap-1"
           >
             ← Articles
@@ -486,6 +506,16 @@ export default function EditArticlePage() {
       </div>
 
       {/* Delete confirmation */}
+      <UnsavedChangesModal
+        isOpen={showModal}
+        onSave={() => {
+          handleSave('draft')
+          handleCancel()
+        }}
+        onDiscard={handleDiscard}
+        onCancel={handleCancel}
+      />
+
       {showDelete && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-card rounded-lg border border-border p-6 max-w-md w-full">

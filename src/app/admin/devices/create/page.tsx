@@ -3,6 +3,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { ChevronDown, ChevronUp, Eye, Save, Upload } from 'lucide-react'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 
 const TiptapEditor = dynamic(
   () => import('@/components/admin/TiptapEditor'),
@@ -66,6 +68,7 @@ export default function CreateDevicePage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [brands, setBrands] = useState<Array<{ id: number; name: string; slug: string }>>([])
   const [loadingBrands, setLoadingBrands] = useState(true)
+  const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
 
   // Identity
   const [name, setName] = useState('')
@@ -121,6 +124,27 @@ export default function CreateDevicePage() {
   // SEO
   const [seoTitle, setSeoTitle] = useState('')
   const [seoDescription, setSeoDescription] = useState('')
+
+  // Track dirty state when any form field changes
+  useEffect(() => {
+    if (name || slug || tagline || priceKes || priceUsd || releaseYear || category || status ||
+        scoreDisplay || scorePerformance || scoreCamera || scoreBattery || scoreValue ||
+        verdictBottomLine || verdictFull || benchGbSingle || benchGbMulti || benchAntutu || benchPcmark ||
+        relatedVideoId || relatedTiktokUrl || seoTitle || seoDescription ||
+        images.length > 0 || verdictPros.length > 0 || verdictCons.length > 0 || buyLinks.length > 0 ||
+        Object.keys(specsDesign).length > 0 || Object.keys(specsDisplay).length > 0 ||
+        Object.keys(specsProcessor).length > 0 || Object.keys(specsMemory).length > 0 ||
+        Object.keys(specsCamera).length > 0 || Object.keys(specsBattery).length > 0 ||
+        Object.keys(specsConnectivity).length > 0 || Object.keys(specsSoftware).length > 0) {
+      setDirty(true)
+    }
+  }, [name, slug, tagline, priceKes, priceUsd, releaseYear, category, status,
+      scoreDisplay, scorePerformance, scoreCamera, scoreBattery, scoreValue,
+      verdictBottomLine, verdictFull, benchGbSingle, benchGbMulti, benchAntutu, benchPcmark,
+      relatedVideoId, relatedTiktokUrl, seoTitle, seoDescription,
+      images, verdictPros, verdictCons, buyLinks,
+      specsDesign, specsDisplay, specsProcessor, specsMemory,
+      specsCamera, specsBattery, specsConnectivity, specsSoftware])
 
   useEffect(() => {
     if (!slugManuallyEdited && name) {
@@ -234,6 +258,7 @@ export default function CreateDevicePage() {
       if (res.ok) {
         const data = await res.json()
         setToast({ message: publish ? 'Device published' : 'Draft saved', type: 'success' })
+        resetDirty()
         if (!deviceId && data.data?.id) {
           setDeviceId(data.data.id)
           router.push(`/admin/devices/${data.data.id}/edit`)
@@ -254,6 +279,16 @@ export default function CreateDevicePage() {
   return (
     <div className="max-w-5xl mx-auto">
       {/* Toast */}
+      <UnsavedChangesModal
+        isOpen={showModal}
+        onSave={() => {
+          handleSave(false)
+          handleCancel()
+        }}
+        onDiscard={handleDiscard}
+        onCancel={handleCancel}
+      />
+
       {toast && (
         <div className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-lg text-sm shadow-lg ${
           toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'

@@ -69,7 +69,7 @@ export default function VideoModal({ videoId, platform, title, onClose }: VideoM
               <blockquote
                 className="tiktok-embed"
                 cite={videoId}
-                data-video-id={videoId}
+                data-video-id={getTikTokId(videoId)}
                 style={{ maxWidth: '605px', minWidth: '325px' }}
               >
                 <section>
@@ -80,10 +80,27 @@ export default function VideoModal({ videoId, platform, title, onClose }: VideoM
               </blockquote>
               <Script async src="https://www.tiktok.com/embed.js" />
             </div>
+          ) : platform === 'instagram' ? (
+            <iframe
+              src={`https://www.instagram.com/p/${getInstagramShortcode(videoId)}/embed`}
+              title={title}
+              allowFullScreen
+              className="h-full w-full"
+            />
+          ) : platform === 'facebook' ? (
+            <div className="flex h-full w-full items-center justify-center bg-background/10">
+              <iframe
+                src={`https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(videoId)}&show_text=false`}
+                title={title}
+                allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
+                allowFullScreen
+                className="h-full w-full"
+              />
+            </div>
           ) : (
             <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-background/10">
               <p className="text-lg text-foreground/80">
-                Watch this on {platform === 'instagram' ? 'Instagram' : 'Facebook'}
+                Watch this on {platform}
               </p>
               <a
                 href={videoId}
@@ -91,7 +108,7 @@ export default function VideoModal({ videoId, platform, title, onClose }: VideoM
                 rel="noopener noreferrer"
                 className="rounded-lg bg-brand-primary px-6 py-3 font-medium text-white transition-opacity hover:opacity-90"
               >
-                Watch on {platform === 'instagram' ? 'Instagram' : 'Facebook'}
+                Watch on {platform.charAt(0).toUpperCase() + platform.slice(1)}
               </a>
             </div>
           )}
@@ -112,6 +129,20 @@ export default function VideoModal({ videoId, platform, title, onClose }: VideoM
       </div>
     </div>
   )
+}
+
+// Extract TikTok video ID from a full TikTok URL
+function getTikTokId(url: string): string {
+  // TikTok URLs look like: https://www.tiktok.com/@user/video/1234567890
+  const match = url.match(/\/video\/(\d+)/)
+  return match ? match[1] : url
+}
+
+// Extract Instagram shortcode from a full Instagram URL
+function getInstagramShortcode(url: string): string {
+  // Instagram URLs look like: https://www.instagram.com/p/CxYzAbCdEf/
+  const match = url.match(/\/p\/([^/?]+)/)
+  return match ? match[1] : url
 }
 
 function getPlatformUrl(platform: string, videoId: string): string {

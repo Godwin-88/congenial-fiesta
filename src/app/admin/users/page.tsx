@@ -8,6 +8,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 
 type AdminUser = {
   id: string
@@ -33,6 +35,7 @@ export default function UsersPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [saving, setSaving] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
 
   const [formEmail, setFormEmail] = useState('')
   const [formDisplayName, setFormDisplayName] = useState('')
@@ -76,6 +79,7 @@ export default function UsersPage() {
     setFormEmail('')
     setFormDisplayName('')
     setFormRole('viewer')
+    resetDirty()
     setDialogOpen(true)
   }
 
@@ -84,6 +88,7 @@ export default function UsersPage() {
     setFormEmail(user.email ?? '')
     setFormDisplayName(user.display_name)
     setFormRole(user.role)
+    resetDirty()
     setDialogOpen(true)
   }
 
@@ -114,6 +119,7 @@ export default function UsersPage() {
 
       if (res.ok) {
         setToast({ message: editingUser ? 'User updated' : 'User added', type: 'success' })
+        resetDirty()
         setDialogOpen(false)
         fetchUsers()
       } else {
@@ -247,7 +253,15 @@ export default function UsersPage() {
         </div>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) setDialogOpen(false) }}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          if (isDirty) {
+            setDirty(true)
+            return
+          }
+          setDialogOpen(false)
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingUser ? 'Edit User' : 'Add User'}</DialogTitle>
@@ -265,7 +279,7 @@ export default function UsersPage() {
                   <input
                     type="email"
                     value={formEmail}
-                    onChange={e => setFormEmail(e.target.value)}
+                    onChange={e => { setFormEmail(e.target.value); setDirty(true) }}
                     placeholder="user@example.com"
                     className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
                   />
@@ -275,7 +289,7 @@ export default function UsersPage() {
                   <input
                     type="text"
                     value={formDisplayName}
-                    onChange={e => setFormDisplayName(e.target.value)}
+                    onChange={e => { setFormDisplayName(e.target.value); setDirty(true) }}
                     placeholder="John Doe"
                     className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none"
                   />
@@ -286,7 +300,7 @@ export default function UsersPage() {
               <label className="block text-xs text-gray-500 mb-1">Role</label>
               <select
                 value={formRole}
-                onChange={e => setFormRole(e.target.value)}
+                onChange={e => { setFormRole(e.target.value); setDirty(true) }}
                 disabled={!!editingUser && editingUser.id === currentUserId}
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none disabled:opacity-50"
               >
@@ -301,7 +315,13 @@ export default function UsersPage() {
           </div>
           <div className="flex justify-end gap-3 mt-4">
             <button
-              onClick={() => setDialogOpen(false)}
+              onClick={() => {
+                if (isDirty) {
+                  setDirty(true)
+                  return
+                }
+                setDialogOpen(false)
+              }}
               className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-border rounded-lg"
             >
               Cancel
@@ -316,6 +336,16 @@ export default function UsersPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <UnsavedChangesModal
+        isOpen={showModal}
+        onSave={() => {
+          handleSave()
+          handleCancel()
+        }}
+        onDiscard={handleDiscard}
+        onCancel={handleCancel}
+      />
 
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

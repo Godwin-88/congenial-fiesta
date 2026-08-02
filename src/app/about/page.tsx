@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import Link from 'next/link'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
@@ -76,10 +77,15 @@ export default async function AboutPage() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:items-center">
               <div className="order-2 lg:order-1">
-                <div className="mx-auto h-80 w-80 overflow-hidden rounded-2xl bg-gradient-to-br from-brand-primary/20 to-brand-primary/5 sm:h-96 sm:w-96">
-                  <div className="flex h-full items-center justify-center">
-                    <span className="text-6xl font-bold text-brand-primary/30">Fweezy</span>
-                  </div>
+                <div className="mx-auto h-80 w-80 overflow-hidden rounded-2xl bg-gradient-to-br from-brand-primary/20 to-brand-primary/5 sm:h-96 sm:w-96 relative">
+                  <Image
+                    src="/images/logo.jpeg"
+                    alt="FweezyTech Logo"
+                    fill
+                    className="object-contain p-8"
+                    sizes="(max-width: 640px) 320px, 384px"
+                    priority
+                  />
                 </div>
               </div>
 

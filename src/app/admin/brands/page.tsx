@@ -8,6 +8,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 
 type Brand = {
   id: number
@@ -35,6 +37,7 @@ export default function BrandsPage() {
   const [formWebsite, setFormWebsite] = useState('')
   const [formFeatured, setFormFeatured] = useState(false)
   const [saving, setSaving] = useState(false)
+  const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
 
   const fetchBrands = useCallback(async () => {
     setLoading(true)
@@ -68,6 +71,7 @@ export default function BrandsPage() {
     setFormLogoUrl('')
     setFormWebsite('')
     setFormFeatured(false)
+    resetDirty()
     setDialogOpen(true)
   }
 
@@ -78,11 +82,13 @@ export default function BrandsPage() {
     setFormLogoUrl(brand.logo_url ?? '')
     setFormWebsite(brand.website ?? '')
     setFormFeatured(brand.featured)
+    resetDirty()
     setDialogOpen(true)
   }
 
   const handleNameChange = (name: string) => {
     setFormName(name)
+    setDirty(true)
     if (!editingBrand) {
       const slug = name.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim()
       setFormSlug(slug)
@@ -116,6 +122,7 @@ export default function BrandsPage() {
 
       if (res.ok) {
         setToast({ message: editingBrand ? 'Brand updated' : 'Brand created', type: 'success' })
+        resetDirty()
         setDialogOpen(false)
         fetchBrands()
       } else {
@@ -273,7 +280,15 @@ export default function BrandsPage() {
       </div>
 
       {/* Create/Edit Modal */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) setDialogOpen(false) }}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          if (isDirty) {
+            setDirty(true)
+            return
+          }
+          setDialogOpen(false)
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingBrand ? 'Edit Brand' : 'Add Brand'}</DialogTitle>
@@ -298,7 +313,7 @@ export default function BrandsPage() {
               <input
                 type="text"
                 value={formSlug}
-                onChange={e => setFormSlug(e.target.value)}
+                onChange={e => { setFormSlug(e.target.value); setDirty(true) }}
                 placeholder="brand-slug"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm
                            border border-border focus:border-brand-primary focus:outline-none"
@@ -309,7 +324,7 @@ export default function BrandsPage() {
               <input
                 type="url"
                 value={formLogoUrl}
-                onChange={e => setFormLogoUrl(e.target.value)}
+                onChange={e => { setFormLogoUrl(e.target.value); setDirty(true) }}
                 placeholder="https://…"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm
                            border border-border focus:border-brand-primary focus:outline-none"
@@ -320,7 +335,7 @@ export default function BrandsPage() {
               <input
                 type="url"
                 value={formWebsite}
-                onChange={e => setFormWebsite(e.target.value)}
+                onChange={e => { setFormWebsite(e.target.value); setDirty(true) }}
                 placeholder="https://…"
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm
                            border border-border focus:border-brand-primary focus:outline-none"
@@ -331,7 +346,7 @@ export default function BrandsPage() {
                 type="checkbox"
                 id="featured"
                 checked={formFeatured}
-                onChange={e => setFormFeatured(e.target.checked)}
+                onChange={e => { setFormFeatured(e.target.checked); setDirty(true) }}
                 className="rounded border-border bg-muted"
               />
               <label htmlFor="featured" className="text-sm text-gray-400 cursor-pointer">Featured</label>
@@ -339,7 +354,13 @@ export default function BrandsPage() {
           </div>
           <div className="flex justify-end gap-3 mt-4">
             <button
-              onClick={() => setDialogOpen(false)}
+              onClick={() => {
+                if (isDirty) {
+                  setDirty(true)
+                  return
+                }
+                setDialogOpen(false)
+              }}
               className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-border rounded-lg"
             >
               Cancel
@@ -356,6 +377,16 @@ export default function BrandsPage() {
       </Dialog>
 
       {/* Delete confirmation */}
+      <UnsavedChangesModal
+        isOpen={showModal}
+        onSave={() => {
+          handleSave()
+          handleCancel()
+        }}
+        onDiscard={handleDiscard}
+        onCancel={handleCancel}
+      />
+
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-card rounded-lg border border-border p-6 max-w-md w-full">

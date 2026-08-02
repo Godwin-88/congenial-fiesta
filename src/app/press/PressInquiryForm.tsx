@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 
 type FormData = {
   name: string
@@ -24,9 +26,11 @@ export default function PressInquiryForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
 
   const updateField = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
+    setDirty(true)
   }
 
   const handleSubmit = async () => {
@@ -68,6 +72,7 @@ export default function PressInquiryForm() {
       }
 
       setSuccess(true)
+      resetDirty()
     } catch {
       setError('Network error. Please try again.')
     } finally {
@@ -89,6 +94,16 @@ export default function PressInquiryForm() {
 
   return (
     <div className="space-y-4 max-w-lg mx-auto">
+      <UnsavedChangesModal
+        isOpen={showModal}
+        onSave={() => {
+          handleSubmit()
+          handleCancel()
+        }}
+        onDiscard={handleDiscard}
+        onCancel={handleCancel}
+      />
+
       {error && (
         <div className="bg-red-900/20 border border-red-700/30 rounded-lg p-4 text-red-400 text-sm">
           {error}
