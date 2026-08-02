@@ -41,7 +41,7 @@ export default function ChatBubble() {
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-brand-primary text-white shadow-lg hover:bg-brand-primary/90 transition-all duration-200 flex items-center justify-center"
-        aria-label={isOpen ? 'Close Fweezy AI chat' : 'Open Fweezy AI chat'}
+        aria-label={isOpen ? 'Close Fweezy Assistant chat' : 'Open Fweezy Assistant chat'}
       >
         {isOpen ? (
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

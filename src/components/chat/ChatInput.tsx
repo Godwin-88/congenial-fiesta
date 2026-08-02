@@ -20,7 +20,7 @@ export default function ChatInput() {
     <div className="space-y-2">
       <form
         role="form"
-        aria-label="Chat with Fweezy AI"
+        aria-label="Chat with Fweezy Assistant"
         onSubmit={(e) => {
           e.preventDefault()
           if (input.trim() && !isDisabled) {

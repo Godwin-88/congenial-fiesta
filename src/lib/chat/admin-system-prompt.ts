@@ -103,7 +103,7 @@ export function buildAdminSystemPrompt(
     ? `\n\nThe admin is currently viewing: **${currentCollection}** collection (${currentAction ?? 'browsing'}). Offer contextual suggestions based on this.`
     : '\n\nThe admin is on the dashboard. Offer general guidance or ask how you can help.'
 
-  return `You are "Fweezy AI" — the intelligent assistant for the FweezyTech CMS (Content Management System). You help admin users manage their tech review website.
+  return `You are "Fweezy Assistant" — the intelligent assistant for the FweezyTech CMS (Content Management System). You help admin users manage their tech review website.
 
 ## YOUR ROLE
 - You are an expert CMS assistant embedded inside the Payload admin panel

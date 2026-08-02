@@ -1,5 +1,6 @@
 import { semanticSearch } from '@/lib/upstash/vector'
 import { searchDocuments } from '@/lib/upstash/search'
+import { fetchYouTubeVideos } from '@/lib/youtube/client'
 
 export type RetrievedDevice = {
   name: string
@@ -20,6 +21,15 @@ export type RetrievedArticle = {
   url: string
 }
 
+export type RetrievedVideo = {
+  id: string
+  title: string
+  description: string
+  url: string
+  thumbnailUrl: string
+  publishedAt: string
+}
+
 export type NavigationCard = {
   type: 'device' | 'article' | 'video' | 'page'
   title: string
@@ -32,17 +42,20 @@ export type NavigationCard = {
 export type RetrievedContext = {
   devices: RetrievedDevice[]
   articles: RetrievedArticle[]
+  videos: RetrievedVideo[]
   navigationCards: NavigationCard[]
 }
 
 export async function retrieveContext(query: string): Promise<RetrievedContext> {
-  const [vectorResults, searchResults] = await Promise.allSettled([
+  const [vectorResults, searchResults, youtubeResults] = await Promise.allSettled([
     semanticSearch(query, 6),
     searchDocuments(query),
+    fetchYouTubeVideos(15),
   ])
 
   const vectorDocs = vectorResults.status === 'fulfilled' ? vectorResults.value : []
   const searchDocs = searchResults.status === 'fulfilled' ? searchResults.value : []
+  const youtubeVideos = youtubeResults.status === 'fulfilled' ? youtubeResults.value : []
 
   const seenIds = new Set(vectorDocs.map(r => r.id))
   const mergedDocs = [
@@ -112,6 +125,36 @@ export async function retrieveContext(query: string): Promise<RetrievedContext> 
 
   const queryLower = query.toLowerCase()
 
+  // Fetch recent YouTube videos and filter for relevance to the query
+  const videoQueryTerms = queryLower.split(/\W+/).filter(t => t.length > 3)
+  const relevantYoutubeVideos = videoQueryTerms.length > 0
+    ? youtubeVideos.filter(v => videoQueryTerms.some(term =>
+      v.title.toLowerCase().includes(term) || v.description.toLowerCase().includes(term)
+    ))
+    : []
+
+  const videos: RetrievedVideo[] = relevantYoutubeVideos.slice(0, 5).map(v => ({
+    id: v.id,
+    title: v.title,
+    description: v.description,
+    url: `https://youtube.com/watch?v=${v.id}`,
+    thumbnailUrl: v.thumbnailUrl,
+    publishedAt: v.publishedAt,
+  }))
+
+  // Add video navigation cards
+  if (videos.length > 0) {
+    for (const v of videos) {
+      navigationCards.push({
+        type: 'video',
+        title: v.title,
+        subtitle: 'Watch on YouTube',
+        url: v.url,
+        imageUrl: v.thumbnailUrl,
+      })
+    }
+  }
+
   if (queryLower.includes('compar')) {
     navigationCards.push({
       type: 'page',
@@ -158,7 +201,7 @@ export async function retrieveContext(query: string): Promise<RetrievedContext> 
     return true
   }).slice(0, 4)
 
-  return { devices, articles, navigationCards: uniqueCards }
+  return { devices, articles, videos, navigationCards: uniqueCards }
 }
 
 export function formatContextForPrompt(context: RetrievedContext): string {
@@ -182,6 +225,16 @@ export function formatContextForPrompt(context: RetrievedContext): string {
       lines.push(`- **${a.title}**`)
       if (a.excerpt) lines.push(`  ${a.excerpt}`)
       lines.push(`  URL: ${a.url}`)
+    }
+  }
+
+  if (context.videos && context.videos.length > 0) {
+    lines.push('\n## Relevant YouTube Videos from FweezyTech:')
+    for (const v of context.videos) {
+      lines.push(`- **${v.title}**`)
+      if (v.description) lines.push(`  ${v.description.slice(0, 120)}`)
+      lines.push(`  URL: ${v.url}`)
+      lines.push(`  Published: ${v.publishedAt}`)
     }
   }
 

@@ -244,7 +244,7 @@ export default function AiAssistant() {
                   color: 'var(--theme-elevation-800)',
                 }}
               >
-                Fweezy AI
+                Fweezy Assistant
               </div>
               <div style={{ fontSize: 11, color: 'var(--theme-elevation-500)' }}>
                 {currentCollection.slug

@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
   const context = await retrieveContext(userQuery).catch(() => ({
     devices: [],
     articles: [],
+    videos: [],
     navigationCards: [],
   }))
   const contextText = formatContextForPrompt(context)

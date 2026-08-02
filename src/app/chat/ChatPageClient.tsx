@@ -33,7 +33,7 @@ export default function ChatPageClient() {
             <span className="text-lg font-bold text-white">F</span>
           </div>
           <div>
-            <h2 className="text-lg font-bold">Ask Fweezy AI</h2>
+            <h2 className="text-lg font-bold">Ask Fweezy Assistant</h2>
           </div>
         </div>
         <p className="text-sm text-muted-foreground mb-4">

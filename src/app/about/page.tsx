@@ -5,8 +5,7 @@ import { cookies } from 'next/headers'
 import JsonLd from '@/components/seo/JsonLd'
 import { personJsonLd, organizationJsonLd } from '@/lib/seo/jsonld'
 import TimelineClient from './TimelineClient'
-
-const HIGHLIGHT_REEL_VIDEO_ID = 'dQw4w9WgXcQ' // placeholder — replace with real ID
+import { fetchTopYouTubeVideos } from '@/lib/youtube/client'
 
 export const metadata = {
   title: 'About Millan Wafula (Fweezy Tech) | Tech Content Creator',
@@ -34,9 +33,10 @@ async function getSupabase() {
 export default async function AboutPage() {
   const supabase = await getSupabase()
 
-  const [milestonesResult, awardsResult] = await Promise.all([
+  const [milestonesResult, awardsResult, topVideoResult] = await Promise.all([
     supabase.from('milestones').select('*').order('year', { ascending: false }).order('display_order', { ascending: true }),
     supabase.from('awards').select('*').order('year', { ascending: false }).order('display_order', { ascending: true }),
+    fetchTopYouTubeVideos(1).catch(() => []),
   ])
 
   let mediaKitResult: { data: Record<string, unknown> | null } = { data: null }
@@ -184,14 +184,20 @@ export default async function AboutPage() {
         <section className="mx-auto w-full max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
           <h2 className="font-heading text-2xl font-bold text-foreground">Best of FweezyTech</h2>
           <div className="mt-6 aspect-video overflow-hidden rounded-xl">
-            <iframe
-              src={`https://www.youtube.com/embed/${HIGHLIGHT_REEL_VIDEO_ID}`}
-              title="FweezyTech Highlight Reel"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="h-full w-full"
-              loading="lazy"
-            />
+            {topVideoResult[0]?.id ? (
+              <iframe
+                src={`https://www.youtube.com/embed/${topVideoResult[0].id}`}
+                title={topVideoResult[0].title || 'FweezyTech Highlight Reel'}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="h-full w-full"
+                loading="lazy"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center rounded-xl bg-muted">
+                <p className="text-muted-foreground">Highlight reel — coming soon.</p>
+              </div>
+            )}
           </div>
         </section>
 

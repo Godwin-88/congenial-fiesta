@@ -21,12 +21,13 @@ export async function signInWithGoogle(redirectTo?: string): Promise<void> {
 
 export async function signInWithMagicLink(email: string, redirectTo?: string): Promise<{ error?: string }> {
   const supabase = await createClient()
+  const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
   const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SERVER_URL}/auth/callback?next=${encodeURIComponent(redirectTo ?? '/')}`,
-    },
-  })
+      email,
+      options: {
+        emailRedirectTo: `${serverUrl}/auth/callback?next=${encodeURIComponent(redirectTo ?? '/')}`,
+      },
+    })
 
   if (error) {
     return { error: error.message }
@@ -35,13 +36,13 @@ export async function signInWithMagicLink(email: string, redirectTo?: string): P
 }
 
 export async function signUpWithEmail(email: string, password: string, redirectTo?: string): Promise<{ error?: string }> {
-  // Step 1: Sign up with Supabase (triggers email confirmation in production)
   const supabase = await createClient()
-  const { error } = await supabase.auth.signUp({
+  const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SERVER_URL}/auth/callback?next=${encodeURIComponent(redirectTo ?? '/')}`,
+      emailRedirectTo: `${serverUrl}/auth/callback?next=${encodeURIComponent(redirectTo ?? '/')}`,
     },
   })
 
@@ -49,11 +50,15 @@ export async function signUpWithEmail(email: string, password: string, redirectT
     return { error: error.message }
   }
 
-  // Step 2: Auto-confirm the user using the service role key (bypasses email in dev/QA)
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!serviceRoleKey) {
+    return {}
+  }
+
   try {
     const adminClient = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      serviceRoleKey,
       {
         cookies: {
           getAll: () => [],
@@ -62,29 +67,23 @@ export async function signUpWithEmail(email: string, password: string, redirectT
       }
     )
 
-    // Find the user by email
-    const { data: users } = await adminClient.auth.admin.listUsers()
-    const user = users?.users.find(u => u.email === email)
+    const userId = data?.user?.id
 
-    if (user) {
-      // Update user to be confirmed
-      await adminClient.auth.admin.updateUserById(user.id, {
+    if (userId) {
+      await adminClient.auth.admin.updateUserById(userId, {
         email_confirm: true,
       })
 
-      // Step 3: Sign them in immediately after confirmation
       const { data: sessionData, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (!signInError && sessionData?.session) {
-        // Session is set by supabase client, no need to redirect to callback
         return {}
       }
     }
   } catch (e) {
-    // Silently ignore admin API errors — user can still check their email
     console.error('Auto-confirm failed (user can still verify via email):', e)
   }
 

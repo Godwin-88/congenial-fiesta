@@ -18,7 +18,7 @@ export default function VideoFeed({ videos }: { videos: any[] }) {
     : videos.filter((v) => v.platform === activePlatform)
 
   const handleCardClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const card = (e.currentTarget as HTMLElement).closest('[data-video-id]')
+    const card = (e.target as HTMLElement).closest('[data-video-id]')
     if (card) {
       const id = card.getAttribute('data-video-id')
       const platform = card.getAttribute('data-platform')

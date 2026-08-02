@@ -12,7 +12,7 @@ export default function ChatHeader({ variant }: { variant: 'bubble' | 'page' }) 
           <span className="text-sm font-bold text-white">F</span>
         </div>
         <div>
-          <p className="text-sm font-semibold text-foreground">Fweezy AI</p>
+          <p className="text-sm font-semibold text-foreground">Fweezy Assistant</p>
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
             <span className="text-[10px] text-muted-foreground">Online</span>
