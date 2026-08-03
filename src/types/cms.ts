@@ -37,7 +37,7 @@ export interface Device {
   score_camera: number | null
   score_battery: number | null
   score_value: number | null
-  score_overall: number | null
+  scores_overall: number | null
   verdict_pros: string[]
   verdict_cons: string[]
   verdict_bottom_line: string | null
@@ -234,7 +234,7 @@ export function mapDevice(row: Record<string, unknown>): Device {
     score_camera: (row.score_camera as number) ?? null,
     score_battery: (row.score_battery as number) ?? null,
     score_value: (row.score_value as number) ?? null,
-    score_overall: (row.score_overall as number) ?? null,
+    scores_overall: (row.scores_overall as number) ?? null,
     verdict_pros: (row.verdict_pros as string[]) ?? [],
     verdict_cons: (row.verdict_cons as string[]) ?? [],
     verdict_bottom_line: (row.verdict_bottom_line as string) ?? null,

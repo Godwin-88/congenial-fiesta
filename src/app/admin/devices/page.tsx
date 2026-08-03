@@ -10,7 +10,7 @@ type Device = {
   brand_id: number | null
   release_year: number | null
   category: string | null
-  score_overall: number | null
+  scores_overall: number | null
   status: string
   brand?: { name: string; logo_url: string | null } | null
 }
@@ -230,9 +230,9 @@ export default function DevicesPage() {
                   <td className="px-4 py-3 text-gray-400">{device.brand?.name ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-400 capitalize">{device.category ?? '—'}</td>
                   <td className="px-4 py-3">
-                    {device.score_overall ? (
-                      <span className={`inline-flex items-center justify-center rounded-full border-2 font-bold text-sm px-2 py-0.5 ${scoreBadgeColor(device.score_overall)}`}>
-                        {device.score_overall}
+                    {device.scores_overall ? (
+                      <span className={`inline-flex items-center justify-center rounded-full border-2 font-bold text-sm px-2 py-0.5 ${scoreBadgeColor(device.scores_overall)}`}>
+                        {device.scores_overall}
                       </span>
                     ) : (
                       <span className="text-gray-600">—</span>

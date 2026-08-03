@@ -357,6 +357,7 @@ fweezytech/
     - `011_user_features.sql` — User features (saved items, ratings)
     - `012_storage_buckets.sql` — Storage buckets for article images
     - `013_add_package_interest.sql` — Add package_interest column to sponsor_inquiries
+    - `014_fix_column_and_grants.sql` — Rename score_overall → scores_overall, grant saved_comparisons permissions
 
     Or use the migration script:
     ```bash
@@ -393,13 +394,28 @@ fweezytech/
 ## Supabase Auth Setup
 
 1. In Supabase Dashboard → Authentication → Providers
-2. Enable Google OAuth:
-   - Configure Google Cloud Console OAuth with redirect URI: `https://<your-domain>/auth/callback`
-   - Add Client ID and Secret to Supabase
-3. Enable Magic Link (email):
-   - Configure Resend SMTP in Supabase Auth settings
-   - Add confirmation/redirect URLs: `https://<your-domain>/auth/callback`
-4. Add your Supabase URL and anon key to `.env.local`
+2. Enable Magic Link (email):
+   - Configure SMTP (Resend recommended) in Supabase Auth settings
+   - Add redirect URL: `https://<your-domain>/auth/callback`
+3. Add your Supabase URL, anon key, and **service_role key** to `.env.local`
+   - `SUPABASE_SERVICE_ROLE_KEY` required for auto-confirm + admin functions
+4. Set `NEXT_PUBLIC_SERVER_URL` to production URL (e.g., `https://fweezytech.vercel.app`)
+
+## Vercel Environment Variables (required)
+
+| Variable | Source |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (from API settings) |
+| `NEXT_PUBLIC_SERVER_URL` | Production domain URL |
+| `DATABASE_URL` | Supabase connection pooler URL |
+| `DIRECT_URL` | Supabase direct connection URL |
+| `RESEND_API_KEY` | Resend.com dashboard |
+| `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` | Upstash dashboard |
+| `QSTASH_URL` + `QSTASH_TOKEN` | Upstash QStash |
+| `GROQ_API_KEY` | GROQ developer portal |
+| `GROQ_MODEL_PRIMARY` / `GROQ_MODEL_FALLBACK` | e.g., `llama-3.1-8b` |
 
 ## PWA Features
 

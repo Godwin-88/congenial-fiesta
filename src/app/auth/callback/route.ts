@@ -26,21 +26,28 @@ export async function GET(request: NextRequest) {
     if (!error) {
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.user) {
-        const adminClient = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY!
-        )
-        const { data: adminUser } = await adminClient
-          .from('admin_users')
-          .select('id')
-          .eq('id', session.user.id)
-          .maybeSingle()
+        try {
+          const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+          if (serviceRoleKey) {
+            const adminClient = createClient(
+              process.env.NEXT_PUBLIC_SUPABASE_URL!,
+              serviceRoleKey
+            )
+            const { data: adminUser } = await adminClient
+              .from('admin_users')
+              .select('id')
+              .eq('id', session.user.id)
+              .maybeSingle()
 
-        if (adminUser) {
-          return NextResponse.redirect(`${origin}/admin`)
+            if (adminUser) {
+              return NextResponse.redirect(`${origin}/admin`)
+            }
+          }
+        } catch {
+          // non-admin user, continue to normal redirect
         }
       }
-      return NextResponse.redirect(`${origin}/`)
+      return NextResponse.redirect(`${origin}${next.startsWith('/') ? next : '/'}`)
     }
   }
 

@@ -43,7 +43,7 @@ export async function GET() {
             devices.push({
               slug: d.slug,
               name: d.name,
-              score: d.score_overall,
+              score: d.scores_overall,
               imageUrl: primaryImage?.url ? String(primaryImage.url) : null,
             })
           }

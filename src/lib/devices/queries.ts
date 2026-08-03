@@ -157,7 +157,7 @@ export async function getTopDevices(limit: number = 6): Promise<Device[]> {
     .from('devices')
     .select('*, brand:brands(*)')
     .eq('status', 'published')
-    .order('score_overall', { ascending: false })
+    .order('scores_overall', { ascending: false })
     .limit(limit)
 
   if (error) {

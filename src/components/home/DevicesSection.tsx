@@ -54,10 +54,10 @@ export default function DevicesSection({ devices }: Props) {
                     {featured.tagline && (
                       <p className="text-muted-foreground italic">&ldquo;{featured.tagline}&rdquo;</p>
                     )}
-                    {featured.score_overall && (
+                    {featured.scores_overall && (
                       <div className="flex items-center gap-3">
                         <div className="flex items-center gap-1">
-                          <span className="text-3xl font-bold text-brand-primary font-heading">{featured.score_overall.toFixed(1)}</span>
+                          <span className="text-3xl font-bold text-brand-primary font-heading">{featured.scores_overall.toFixed(1)}</span>
                           <span className="text-sm text-muted-foreground">/10</span>
                         </div>
                         <span className="text-xs text-muted-foreground">Fweezy Score™</span>
@@ -127,9 +127,9 @@ export default function DevicesSection({ devices }: Props) {
                           <div className="p-3">
                             <p className="text-xs text-muted-foreground">{device.brand?.name}</p>
                             <p className="text-sm font-semibold text-foreground truncate">{device.name}</p>
-                            {device.score_overall && (
+                            {device.scores_overall && (
                               <span className="inline-block mt-1 rounded bg-brand-primary/10 px-1.5 py-0.5 text-xs font-bold text-brand-primary">
-                                {device.score_overall.toFixed(1)}
+                                {device.scores_overall.toFixed(1)}
                               </span>
                             )}
                           </div>

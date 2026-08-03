@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
       score_camera: body.score_camera ?? null,
       score_battery: body.score_battery ?? null,
       score_value: body.score_value ?? null,
-      score_overall: scoreOverall,
+      scores_overall: scoreOverall,
       verdict_pros: body.verdict_pros ?? [],
       verdict_cons: body.verdict_cons ?? [],
       verdict_bottom_line: body.verdict_bottom_line?.trim() ?? null,

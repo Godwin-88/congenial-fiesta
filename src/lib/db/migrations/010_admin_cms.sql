@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS devices (
   score_camera        NUMERIC(4,1),
   score_battery       NUMERIC(4,1),
   score_value         NUMERIC(4,1),
-  score_overall       NUMERIC(4,1),
+  scores_overall      NUMERIC(4,1),
   -- Verdict
   verdict_pros        JSONB DEFAULT '[]',
   verdict_cons        JSONB DEFAULT '[]',

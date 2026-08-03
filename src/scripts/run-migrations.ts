@@ -34,6 +34,7 @@ const migrations = [
   '011_user_features.sql',
   '012_storage_buckets.sql',
   '013_add_package_interest.sql',
+  '014_fix_column_and_grants.sql',
 ]
 
 async function runMigrations() {

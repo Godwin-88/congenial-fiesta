@@ -130,9 +130,9 @@ export default function HeroSection({ topDevices }: Props) {
                             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
                             <div className="absolute bottom-0 left-0 right-0 p-4">
                               <p className="text-white font-bold text-sm">{device.brand?.name} {device.name}</p>
-                              {device.score_overall && (
+                              {device.scores_overall && (
                                 <span className="inline-block mt-1 rounded bg-brand-primary px-2 py-0.5 text-xs font-bold text-white">
-                                  {device.score_overall}/10
+                                  {device.scores_overall}/10
                                 </span>
                               )}
                             </div>
@@ -222,7 +222,7 @@ export default function HeroSection({ topDevices }: Props) {
             </motion.div>
 
             {/* Floating Score Badge */}
-            {topDevices[0]?.score_overall && (
+            {topDevices[0]?.scores_overall && (
               <motion.div
                 className="mt-80 flex flex-col items-center gap-1"
                 initial={{ opacity: 0, scale: 0.8 }}
@@ -236,12 +236,12 @@ export default function HeroSection({ topDevices }: Props) {
                       strokeLinecap="round"
                       strokeDasharray={2 * Math.PI * 28}
                       initial={{ strokeDashoffset: 2 * Math.PI * 28 }}
-                      animate={{ strokeDashoffset: 2 * Math.PI * 28 * (1 - (topDevices[0].score_overall ?? 8) / 10) }}
+                      animate={{ strokeDashoffset: 2 * Math.PI * 28 * (1 - (topDevices[0].scores_overall ?? 8) / 10) }}
                       transition={{ duration: 1.5, delay: 1.2, ease: 'easeOut' }}
                     />
                   </svg>
                   <span className="absolute inset-0 flex items-center justify-center text-lg font-bold text-foreground">
-                    {topDevices[0].score_overall?.toFixed(1)}
+                    {topDevices[0].scores_overall?.toFixed(1)}
                   </span>
                 </div>
                 <span className="text-xs text-muted-foreground">Fweezy Score™</span>

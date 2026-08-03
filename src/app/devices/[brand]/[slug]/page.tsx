@@ -40,7 +40,7 @@ export async function generateMetadata({
   const d = device as any
   const brandData = d.brand as Record<string, unknown>
   const dName = String(d.name ?? '')
-  const dScore = Number(d.score_overall ?? 0)
+  const dScore = Number(d.scores_overall ?? 0)
   const metaTitle = d.seo_title ? String(d.seo_title) : `${dName} Review & Full Specs | FweezyTech`
   const metaDescription =
     d.seo_description
@@ -80,7 +80,7 @@ export default async function DeviceDetailPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d = device as any
   const brandData = d.brand as Record<string, unknown>
-  const overallScore = Number(d.score_overall ?? 0)
+  const overallScore = Number(d.scores_overall ?? 0)
   const images = d.images as Array<Record<string, unknown>> | undefined
   const primaryImage = images?.find((img: any) => img.isPrimary) ?? images?.[0]
   const dName = String(d.name ?? '')

@@ -131,7 +131,7 @@ export async function PATCH(
     if (body.score_camera !== undefined) payload.score_camera = body.score_camera ?? null
     if (body.score_battery !== undefined) payload.score_battery = body.score_battery ?? null
     if (body.score_value !== undefined) payload.score_value = body.score_value ?? null
-    payload.score_overall = scoreOverall
+    payload.scores_overall = scoreOverall
     if (body.verdict_pros !== undefined) payload.verdict_pros = body.verdict_pros ?? []
     if (body.verdict_cons !== undefined) payload.verdict_cons = body.verdict_cons ?? []
     if (body.verdict_bottom_line !== undefined) payload.verdict_bottom_line = body.verdict_bottom_line?.trim() ?? null

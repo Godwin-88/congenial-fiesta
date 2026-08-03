@@ -15,7 +15,7 @@ export default async function UserLayout({
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect('/auth/login?next=/saved')
+    redirect('/auth/login?next=/dashboard')
   }
 
   return (

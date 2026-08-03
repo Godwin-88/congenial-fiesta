@@ -15,7 +15,7 @@ export async function indexDevice(device: Device): Promise<void> {
     imageUrl: (device.images?.[0] as { url?: string })?.url ?? '',
     brand,
     category: device.category ?? undefined,
-    score: device.score_overall ?? undefined,
+    score: device.scores_overall ?? undefined,
     publishedAt: device.created_at,
   }
   await indexDocument(doc)

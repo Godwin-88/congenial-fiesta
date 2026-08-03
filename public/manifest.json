@@ -3,7 +3,7 @@
   "short_name": "FweezyTech",
   "description": "Kenya's #1 Tech Review Destination — devices, comparisons, and reviews by Fweezy",
   "start_url": "/",
-  "display": "standalone",
+  "display": "minimal-ui",
   "background_color": "#111827",
   "theme_color": "#0066FF",
   "orientation": "portrait-primary",
