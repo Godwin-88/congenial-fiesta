@@ -20,7 +20,7 @@ export default function ChatWindow({ variant }: { variant: 'bubble' | 'page' }) 
     <div className="flex flex-col h-full">
       <ChatHeader variant={variant} />
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
-        {messages.length === 0 && <SuggestedQuestions />}
+        {messages.length <= 1 && <SuggestedQuestions />}
         {messages.map((msg) => (
           <ChatMessage
             key={msg.id}

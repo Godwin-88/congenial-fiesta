@@ -12,6 +12,14 @@ type ChatMessage = {
   content: string
 }
 
+const WELCOME_MESSAGE: ChatMessage = {
+  id: '__welcome__',
+  role: 'assistant',
+  content:
+    "Hi! I'm **Fweezy Assistant** 👋 — here to help you discover the best tech on FweezyTech. " +
+    'Ask me about device reviews, Fweezy Scores, comparisons, or what\u2019s coming up next!',
+}
+
 type ChatContextType = {
   messages: ChatMessage[]
   input: string
@@ -34,7 +42,7 @@ const ChatContext = createContext<ChatContextType | null>(null)
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false)
   const [sessionId, setSessionId] = useState<string>('')
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -158,7 +166,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [input, isLoading, messages, sessionId])
 
   const clearChat = useCallback(() => {
-    setMessages([])
+    setMessages([WELCOME_MESSAGE])
     setNavigationCards({})
     setRateLimitInfo(null)
     setError(null)

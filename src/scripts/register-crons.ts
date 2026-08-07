@@ -1,4 +1,7 @@
 import { Client } from '@upstash/qstash'
+import * as dotenv from 'dotenv'
+
+dotenv.config({ path: '.env.local' })
 
 const token = process.env.QSTASH_TOKEN
 const BASE_URL = process.env.NEXT_PUBLIC_SERVER_URL
