@@ -31,7 +31,7 @@ export default function MyComparisonsPage() {
 
   if (savedComparisons.length === 0) {
     return (
-      <div className="max-w-5xl">
+      <div className="max-w-5xl mx-auto">
         <h1 className="font-heading text-3xl font-bold text-foreground sm:text-4xl">
           My Comparisons
         </h1>
@@ -65,7 +65,7 @@ export default function MyComparisonsPage() {
   }
 
   return (
-    <div className="max-w-5xl">
+    <div className="max-w-5xl mx-auto">
       <h1 className="font-heading text-3xl font-bold text-foreground sm:text-4xl">
         My Comparisons
       </h1>

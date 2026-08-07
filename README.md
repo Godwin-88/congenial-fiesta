@@ -436,7 +436,7 @@ fweezytech/
 
 - [ ] Run SQL migrations in Supabase SQL editor (if first deploy)
 - [ ] `npm run crons:register` (registers all 3 QStash cron jobs)
-- [ ] `npm run search:reindex` (indexes all content into Upstash Search + Vector)
+   - [ ] `npm run search:reindex` (indexes devices, articles, and YouTube videos into Upstash Search + Vector)
 - [ ] Verify `/admin/analytics` is accessible with admin email
 - [ ] Verify `/api/cron/keep-alive` returns `{ status: 'alive' }`
 - [ ] Test Notify Me form on `/coming-soon` — check email received

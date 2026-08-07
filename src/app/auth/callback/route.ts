@@ -49,6 +49,11 @@ export async function GET(request: NextRequest) {
       }
       return NextResponse.redirect(`${origin}${next.startsWith('/') ? next : '/'}`)
     }
+
+    const { data: { session: existingSession } } = await supabase.auth.getSession()
+    if (existingSession?.user) {
+      return NextResponse.redirect(`${origin}${next.startsWith('/') ? next : '/'}`)
+    }
   }
 
   return NextResponse.redirect(`${origin}/auth/error`)

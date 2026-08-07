@@ -34,7 +34,7 @@ export default function MyRatingsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-5xl">
+      <div className="max-w-5xl mx-auto">
         <h1 className="font-heading text-3xl font-bold text-foreground sm:text-4xl">My Ratings</h1>
         <div className="mt-6 animate-pulse space-y-4">
           {[1, 2, 3].map(i => <div key={i} className="h-16 bg-muted rounded-lg" />)}
@@ -44,7 +44,7 @@ export default function MyRatingsPage() {
   }
 
   return (
-    <div className="max-w-5xl">
+    <div className="max-w-5xl mx-auto">
       <h1 className="font-heading text-3xl font-bold text-foreground sm:text-4xl">My Ratings</h1>
       <p className="mt-1 text-muted-foreground">Devices you've rated.</p>
 

@@ -124,18 +124,6 @@ export default async function ComparePage({ searchParams }: PageProps) {
         selectedSlugs={slugs}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         deviceNames={(devices as any[]).map((d: any) => d.name)}
-        onAdd={(slug: string) => {
-          const updated = [...slugs, slug].sort()
-          redirect(`/compare?devices=${updated.join(',')}`)
-        }}
-        onRemove={(slug: string) => {
-          const updated = slugs.filter((s) => s !== slug)
-          if (updated.length < 2) {
-            redirect('/devices?toast=compare-error')
-          } else {
-            redirect(`/compare?devices=${updated.join(',')}`)
-          }
-        }}
       />
 
       <div className="mt-8 flex flex-col items-center">
@@ -144,11 +132,11 @@ export default async function ComparePage({ searchParams }: PageProps) {
           devices={(devices as any[]).map((d: any) => ({
             name: d.name,
             scores: {
-              display: d.scores?.display ?? 0,
-              performance: d.scores?.performance ?? 0,
-              camera: d.scores?.camera ?? 0,
-              battery: d.scores?.battery ?? 0,
-              value: d.scores?.value ?? 0,
+              display: d.score_display ?? 0,
+              performance: d.score_performance ?? 0,
+              camera: d.score_camera ?? 0,
+              battery: d.score_battery ?? 0,
+              value: d.score_value ?? 0,
             },
           }))}
         />
@@ -160,7 +148,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
           {devices.map((device: any) => (
             <div key={device.slug} className="text-center">
               <p className="font-heading text-lg font-bold text-foreground mb-2">{device.name}</p>
-              <ScoreBadge score={device.scores?.overall ?? 0} size="lg" />
+              <ScoreBadge score={device.scores_overall ?? 0} size="lg" />
             </div>
           ))}
         </div>
@@ -170,33 +158,43 @@ export default async function ComparePage({ searchParams }: PageProps) {
         <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Specifications</h2>
         <CompareSpecTable
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          devices={(devices as any[]).map((d: any) => {
-            return {
-              [d.name]: {
-                Dimensions: { label: 'Dimensions', value: d.specsDesign?.dimensions },
-                Weight: { label: 'Weight', value: d.specsDesign?.weight },
-                Build: { label: 'Build', value: d.specsDesign?.build },
-                'Water Resistance': { label: 'Water Resistance', value: d.specsDesign?.waterResistance },
-                'Display Size': { label: 'Display Size', value: d.specsDisplay?.size },
-                'Display Type': { label: 'Display Type', value: d.specsDisplay?.type },
-                'Display Resolution': { label: 'Display Resolution', value: d.specsDisplay?.resolution },
-                'Refresh Rate': { label: 'Refresh Rate', value: d.specsDisplay?.refreshRate },
-                'Display Brightness': { label: 'Display Brightness', value: d.specsDisplay?.brightness },
-                Chipset: { label: 'Chipset', value: d.specsProcessor?.chipset },
-                CPU: { label: 'CPU', value: d.specsProcessor?.cpu },
-                GPU: { label: 'GPU', value: d.specsProcessor?.gpu },
-                'RAM': { label: 'RAM', value: d.specsMemory?.ram },
-                Storage: { label: 'Storage', value: d.specsMemory?.storage },
-                'Main Camera': { label: 'Main Camera', value: d.specsCamera?.mainCamera },
-                Ultrawide: { label: 'Ultrawide', value: d.specsCamera?.ultrawide },
-                Telephoto: { label: 'Telephoto', value: d.specsCamera?.telephoto },
-                'Battery Capacity': { label: 'Battery Capacity', value: d.specsBattery?.capacity },
-                'Wired Charging': { label: 'Wired Charging', value: d.specsBattery?.wiredCharging },
-                'Wireless Charging': { label: 'Wireless Charging', value: d.specsBattery?.wirelessCharging },
-                OS: { label: 'OS', value: d.specsSoftware?.os },
-              },
-            }
-          })}
+          devices={(devices as any[]).map((d: any) => ({
+            Design: {
+              Dimensions: { label: 'Dimensions', value: d.specs_design?.dimensions },
+              Weight: { label: 'Weight', value: d.specs_design?.weight },
+              Build: { label: 'Build', value: d.specs_design?.build },
+              'Water Resistance': { label: 'Water Resistance', value: d.specs_design?.waterResistance },
+            },
+            Display: {
+              'Display Size': { label: 'Display Size', value: d.specs_display?.size },
+              'Display Type': { label: 'Display Type', value: d.specs_display?.type },
+              'Display Resolution': { label: 'Display Resolution', value: d.specs_display?.resolution },
+              'Refresh Rate': { label: 'Refresh Rate', value: d.specs_display?.refreshRate },
+              'Display Brightness': { label: 'Display Brightness', value: d.specs_display?.brightness },
+            },
+            Processor: {
+              Chipset: { label: 'Chipset', value: d.specs_processor?.chipset },
+              CPU: { label: 'CPU', value: d.specs_processor?.cpu },
+              GPU: { label: 'GPU', value: d.specs_processor?.gpu },
+            },
+            Memory: {
+              RAM: { label: 'RAM', value: d.specs_memory?.ram },
+              Storage: { label: 'Storage', value: d.specs_memory?.storage },
+            },
+            Camera: {
+              'Main Camera': { label: 'Main Camera', value: d.specs_camera?.mainCamera },
+              Ultrawide: { label: 'Ultrawide', value: d.specs_camera?.ultrawide },
+              Telephoto: { label: 'Telephoto', value: d.specs_camera?.telephoto },
+            },
+            Battery: {
+              'Battery Capacity': { label: 'Battery Capacity', value: d.specs_battery?.capacity },
+              'Wired Charging': { label: 'Wired Charging', value: d.specs_battery?.wiredCharging },
+              'Wireless Charging': { label: 'Wireless Charging', value: d.specs_battery?.wirelessCharging },
+            },
+            Software: {
+              OS: { label: 'OS', value: d.specs_software?.os },
+            },
+          }))}
           deviceNames={devices.map((d: any) => d.name)}
         />
       </section>
@@ -207,7 +205,14 @@ export default async function ComparePage({ searchParams }: PageProps) {
           {devices.map((device: any) => (
             <div key={device.slug} className="rounded-xl border border-border bg-card p-6">
               <h3 className="mb-4 font-heading text-lg font-bold text-foreground">{device.name}</h3>
-              <BenchmarkChart benchmarks={device.benchmarks ?? null} />
+              <BenchmarkChart
+                benchmarks={{
+                  geekbenchSingle: device.benchmark_geekbench_single ?? null,
+                  geekbenchMulti: device.benchmark_geekbench_multi ?? null,
+                  antutu: device.benchmark_antutu ?? null,
+                  pcmark: device.benchmark_pcmark ?? null,
+                }}
+              />
             </div>
           ))}
         </div>
@@ -217,7 +222,15 @@ export default async function ComparePage({ searchParams }: PageProps) {
         <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Fweezy's Take</h2>
         <div className={`grid gap-6 ${devices.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
           {devices.map((device: any) => (
-            <VerdictBlock key={device.slug} verdict={device.verdict} />
+            <VerdictBlock
+              key={device.slug}
+              verdict={{
+                pros: (device.verdict_pros ?? []).map((p: string) => ({ point: p })),
+                cons: (device.verdict_cons ?? []).map((c: string) => ({ point: c })),
+                bottomLine: device.verdict_bottom_line ?? null,
+                fullVerdict: device.verdict_full ?? null,
+              }}
+            />
           ))}
         </div>
       </section>
@@ -228,7 +241,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
           {devices.map((device: any) => (
             <BuyBox
               key={device.slug}
-              buyLinks={device.buyLinks}
+              buyLinks={device.buy_links}
               deviceName={device.name}
               deviceSlug={device.slug}
             />
@@ -252,7 +265,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
               '@type': 'Product',
               name: device.name,
               brand: { '@type': 'Brand', name: typeof device.brand === 'object' && device.brand !== null ? device.brand.name : '' },
-              description: device.seo?.metaDescription ?? device.tagline ?? '',
+              description: device.seo_description ?? device.tagline ?? '',
             }),
           }}
         />

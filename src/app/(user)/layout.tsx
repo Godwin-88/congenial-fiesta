@@ -21,8 +21,10 @@ export default async function UserLayout({
   return (
     <div className="flex min-h-screen">
       <UserSidebar />
-      <main className="flex-1 overflow-y-auto bg-background p-6 lg:p-8 pt-16 lg:pt-8">
-        {children}
+      <main className="flex-1 overflow-y-auto bg-background pt-16 lg:pt-8">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+          {children}
+        </div>
       </main>
     </div>
   )

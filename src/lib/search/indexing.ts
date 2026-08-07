@@ -65,6 +65,39 @@ export async function indexVideo(video: {
   await indexDocument(doc)
 }
 
+export async function indexYouTubeVideo(video: {
+  id: string
+  title: string
+  thumbnailUrl: string
+  viewCount: number
+  duration: string
+  publishedAt: string
+  description: string
+}): Promise<void> {
+  const doc: SearchDocument = {
+    id: `youtube:${video.id}`,
+    type: 'video',
+    title: video.title,
+    description: video.description,
+    url: `https://www.youtube.com/watch?v=${video.id}`,
+    imageUrl: video.thumbnailUrl,
+    publishedAt: video.publishedAt,
+  }
+  await indexDocument(doc)
+  await upsertVector({
+    id: doc.id,
+    text: `${video.title} ${video.description}`,
+    metadata: {
+      url: doc.url,
+      type: 'video',
+      title: doc.title,
+      imageUrl: doc.imageUrl,
+      viewCount: video.viewCount,
+      publishedAt: doc.publishedAt,
+    },
+  })
+}
+
 export async function removeFromIndex(id: string): Promise<void> {
   await removeDocument(id)
 }

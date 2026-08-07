@@ -1,9 +1,9 @@
 import { Client } from '@upstash/qstash'
 
-const qstash = new Client({ token: process.env.QSTASH_TOKEN! })
-const BASE_URL = process.env.NEXT_PUBLIC_SERVER_URL!
+const token = process.env.QSTASH_TOKEN
+const BASE_URL = process.env.NEXT_PUBLIC_SERVER_URL
 
-if (!process.env.QSTASH_TOKEN) {
+if (!token) {
   console.error('Missing env var QSTASH_TOKEN')
   process.exit(1)
 }
@@ -12,6 +12,8 @@ if (!BASE_URL) {
   console.error('Missing env var NEXT_PUBLIC_SERVER_URL')
   process.exit(1)
 }
+
+const qstash = new Client({ token })
 
 const jobs = [
   {
@@ -38,6 +40,12 @@ const jobs = [
     // Daily at 06:00 UTC (09:00 EAT)
     cron: '0 6 * * *',
   },
+  {
+    name: 'import-youtube-devices',
+    url: `${BASE_URL}/api/cron/import-youtube-devices`,
+    // Daily at 07:00 UTC (10:00 EAT)
+    cron: '0 7 * * *',
+  },
 ]
 
 async function registerCrons() {
@@ -49,7 +57,7 @@ async function registerCrons() {
       })
       console.log(`✅ Registered: ${job.name} → ${result.scheduleId}`)
     } catch (err) {
-      console.error(`❌ Failed: ${job.name}`, err)
+      console.error(`❌ Failed: ${job.name}`, err instanceof Error ? err.message : err)
     }
   }
   console.log('\nAll cron jobs registered. View at https://console.upstash.com/qstash')

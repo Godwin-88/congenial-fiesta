@@ -14,7 +14,7 @@ interface DeviceCardProps {
 export function DeviceCard({ device }: DeviceCardProps) {
   const brand = device.brand as Brand
   const primaryImage = device.images?.find((img: any) => img.isPrimary) ?? device.images?.[0]
-  const overallScore = device.scores?.overall ?? 0
+  const overallScore = device.scores_overall ?? 0
 
   return (
     <Link
@@ -52,9 +52,9 @@ export function DeviceCard({ device }: DeviceCardProps) {
           <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium capitalize text-muted-foreground">
             {device.category}
           </span>
-          {device.priceKES && (
+          {device.price_kes && (
             <span className="text-sm font-semibold text-foreground">
-              KES {device.priceKES.toLocaleString()}
+              KES {device.price_kes.toLocaleString()}
             </span>
           )}
         </div>

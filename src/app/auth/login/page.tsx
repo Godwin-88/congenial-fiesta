@@ -19,6 +19,7 @@ function LoginForm() {
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [showReset, setShowReset] = useState(false)
 
@@ -38,6 +39,7 @@ function LoginForm() {
   const handleEmailPassword = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setInfo('')
     setSending(true)
     try {
       const supabase = createClient()
@@ -45,9 +47,9 @@ function LoginForm() {
         const result = await signUpWithEmail(email.trim(), password, next)
         if (result.error) {
           setError(result.error)
+        } else if (result.needsVerification) {
+          setInfo('Account created! Please check your email to verify your account.')
         } else {
-          setError('')
-          // Auto-confirmed and signed in by the server action — refresh to pick up session cookies
           router.refresh()
           router.push(next)
         }
@@ -98,6 +100,11 @@ function LoginForm() {
         {error && (
           <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm text-center">
             {error}
+          </div>
+        )}
+        {info && (
+          <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-sm text-center">
+            {info}
           </div>
         )}
 

@@ -19,7 +19,7 @@ export default function DashboardPage() {
   const displayName = user?.email?.split('@')[0] ?? 'User'
 
   return (
-    <div className="max-w-5xl">
+    <div className="max-w-5xl mx-auto">
       <h1 className="font-heading text-3xl font-bold text-foreground sm:text-4xl">
         Dashboard
       </h1>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,7 @@ export default function AuthButton({ redirectTo }: AuthButtonProps) {
   const [showModal, setShowModal] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const router = useRouter()
+  const pathname = usePathname()
 
   if (isLoading) {
     return (
@@ -45,11 +46,18 @@ export default function AuthButton({ redirectTo }: AuthButtonProps) {
 
   const displayName = user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? 'User'
   const initial = displayName.charAt(0).toUpperCase()
+  const isOnDashboard = pathname === '/dashboard' || pathname.startsWith('/dashboard/')
 
   return (
     <div className="relative">
       <button
-        onClick={() => setDropdownOpen(!dropdownOpen)}
+        onClick={() => {
+          if (isOnDashboard) {
+            setDropdownOpen(!dropdownOpen)
+          } else {
+            router.push('/dashboard')
+          }
+        }}
         className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-primary text-sm font-bold text-white transition-opacity hover:opacity-80"
         aria-label={displayName}
       >
@@ -67,14 +75,6 @@ export default function AuthButton({ redirectTo }: AuthButtonProps) {
               <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
               <p className="text-xs text-muted-foreground truncate">{user.email}</p>
             </div>
-            <a
-              href="/saved"
-              onClick={() => setDropdownOpen(false)}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground/70 hover:bg-muted hover:text-foreground"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-              Saved
-            </a>
             <button
               onClick={async () => {
                 setDropdownOpen(false)

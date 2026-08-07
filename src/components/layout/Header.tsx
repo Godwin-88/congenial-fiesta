@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { usePathname } from "next/navigation"
-import { Moon, Sun, Menu, Search, Bookmark } from "lucide-react"
+import { Moon, Sun, Menu, Search } from "lucide-react"
 import { useTheme } from "@ecosy/next-themes"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
@@ -11,11 +11,12 @@ import AuthButton from "@/components/auth/AuthButton"
 import { useAuth } from "@/context/AuthContext"
 
 const navLinks = [
-  { href: "/articles", label: "Articles" },
+  { href: "/articles?category=news", label: "News" },
+  { href: "/articles?category=review", label: "Reviews" },
+  { href: "/articles?category=buying-guide", label: "Buying Guides" },
   { href: "/devices", label: "Devices" },
   { href: "/videos", label: "Videos" },
-  { href: "/about", label: "About" },
-  { href: "/advertise", label: "Advertise" },
+  { href: "/advertise", label: "Contact Us" },
 ]
 
 export default function Header() {
@@ -48,23 +49,6 @@ export default function Header() {
               {link.label}
             </a>
           ))}
-          {user && (
-            <>
-              <a
-                href="/saved"
-                className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors flex items-center gap-1"
-              >
-                <Bookmark size={14} />
-                Saved
-              </a>
-              <a
-                href="/my-comparisons"
-                className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
-              >
-                My Dashboard
-              </a>
-            </>
-          )}
         </nav>
         )}
 
@@ -121,25 +105,6 @@ export default function Header() {
                     {link.label}
                   </a>
                 ))}
-                {user && (
-                  <>
-                    <a
-                      href="/saved"
-                      onClick={() => setOpen(false)}
-                      className="text-lg font-medium text-foreground/70 hover:text-foreground transition-colors flex items-center gap-2"
-                    >
-                      <Bookmark size={16} />
-                      Saved
-                    </a>
-                    <a
-                      href="/my-comparisons"
-                      onClick={() => setOpen(false)}
-                      className="text-lg font-medium text-foreground/70 hover:text-foreground transition-colors"
-                    >
-                      My Dashboard
-                    </a>
-                  </>
-                )}
               </nav>
             </SheetContent>
           </Sheet>

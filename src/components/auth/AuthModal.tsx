@@ -62,8 +62,10 @@ export default function AuthModal({ isOpen, onClose, redirectTo }: AuthModalProp
       const result = await signUpWithEmail(email, password, redirectTo)
       if (result.error) {
         setEmailError(result.error)
-      } else {
+      } else if (result.needsVerification) {
         setVerificationSent(true)
+      } else {
+        onClose()
       }
     } catch {
       setEmailError('Something went wrong. Please try again.')

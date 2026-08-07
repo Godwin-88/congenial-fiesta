@@ -167,7 +167,7 @@ export default function UserSidebar() {
       <button
         type="button"
         onClick={() => setMobileOpen(!mobileOpen)}
-        className="fixed top-4 left-4 z-50 lg:hidden p-2 rounded-lg bg-card
+        className="fixed top-20 left-4 z-50 lg:hidden p-2 rounded-lg bg-card
                    border border-border text-muted-foreground hover:text-foreground"
         aria-label={mobileOpen ? 'Close sidebar' : 'Open sidebar'}
       >
@@ -185,10 +185,10 @@ export default function UserSidebar() {
       {/* Sidebar */}
       <aside
         className={[
-          'fixed top-0 left-0 z-40 h-full w-64 bg-card border-r border-border',
+          'fixed top-16 left-0 z-40 h-[calc(100vh-4rem)] w-64 bg-card border-r border-border',
           'transition-transform duration-200',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
-          'lg:translate-x-0 lg:static lg:z-auto',
+          'lg:translate-x-0 lg:static lg:z-auto lg:h-full',
         ].join(' ')}
       >
         {sidebarContent}

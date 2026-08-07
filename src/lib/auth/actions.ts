@@ -12,15 +12,18 @@ export async function signInWithMagicLink(email: string, redirectTo?: string): P
       options: {
         emailRedirectTo: `${serverUrl}/auth/callback?next=${encodeURIComponent(redirectTo ?? '/')}`,
       },
-    })
+  })
 
   if (error) {
+    if (error.message.includes('rate limit') || error.status === 429) {
+      return { error: 'Too many magic link requests. Please wait a few minutes before trying again, or check your spam folder if you have already requested a link.' }
+    }
     return { error: error.message }
   }
   return {}
 }
 
-export async function signUpWithEmail(email: string, password: string, redirectTo?: string): Promise<{ error?: string }> {
+export async function signUpWithEmail(email: string, password: string, redirectTo?: string): Promise<{ error?: string; needsVerification?: boolean }> {
   const supabase = await createClient()
   const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
   const { data, error } = await supabase.auth.signUp({
@@ -32,12 +35,15 @@ export async function signUpWithEmail(email: string, password: string, redirectT
   })
 
   if (error) {
+    if (error.message.includes('rate limit') || error.status === 429) {
+      return { error: 'Too many sign-up attempts. Please wait a few minutes before trying again.' }
+    }
     return { error: error.message }
   }
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!serviceRoleKey) {
-    return {}
+    return { needsVerification: true }
   }
 
   try {
@@ -72,7 +78,7 @@ export async function signUpWithEmail(email: string, password: string, redirectT
     console.error('Auto-confirm failed (user can still verify via email):', e)
   }
 
-  return {}
+  return { needsVerification: true }
 }
 
 export async function signInWithEmail(email: string, password: string): Promise<{ error?: string }> {

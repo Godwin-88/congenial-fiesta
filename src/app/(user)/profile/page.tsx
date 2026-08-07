@@ -8,7 +8,7 @@ export default function ProfilePage() {
 
   if (isLoading) {
     return (
-      <div className="max-w-5xl">
+      <div className="max-w-5xl mx-auto">
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-muted rounded w-48" />
           <div className="h-32 bg-muted rounded-lg" />
@@ -19,7 +19,7 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="max-w-5xl">
+      <div className="max-w-5xl mx-auto">
         <h1 className="font-heading text-3xl font-bold text-foreground sm:text-4xl">Profile</h1>
         <p className="mt-4 text-muted-foreground">
           Please{' '}
@@ -33,7 +33,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-3xl mx-auto">
       <h1 className="font-heading text-3xl font-bold text-foreground sm:text-4xl">Profile</h1>
       <p className="mt-1 text-muted-foreground">Your account information.</p>
 

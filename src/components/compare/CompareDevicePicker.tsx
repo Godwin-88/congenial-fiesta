@@ -1,16 +1,16 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Search } from 'lucide-react'
 
 interface CompareDevicePickerProps {
   selectedSlugs: string[]
   deviceNames: string[]
-  onAdd: (slug: string, name: string) => void
-  onRemove: (slug: string) => void
 }
 
-export default function CompareDevicePicker({ selectedSlugs, deviceNames, onAdd, onRemove }: CompareDevicePickerProps) {
+export default function CompareDevicePicker({ selectedSlugs, deviceNames }: CompareDevicePickerProps) {
+  const router = useRouter()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<{ slug: string; name: string }[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
@@ -51,11 +51,21 @@ export default function CompareDevicePicker({ selectedSlugs, deviceNames, onAdd,
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const handleAdd = (slug: string, name: string) => {
-    onAdd(slug, name)
+  const handleAdd = (slug: string) => {
+    const updated = [...selectedSlugs, slug].sort()
+    router.push(`/compare?devices=${updated.join(',')}`)
     setQuery('')
     setResults([])
     setShowDropdown(false)
+  }
+
+  const handleRemove = (slug: string) => {
+    const updated = selectedSlugs.filter((s) => s !== slug)
+    if (updated.length < 2) {
+      router.push('/devices?toast=compare-error')
+    } else {
+      router.push(`/compare?devices=${updated.join(',')}`)
+    }
   }
 
   return (
@@ -68,7 +78,7 @@ export default function CompareDevicePicker({ selectedSlugs, deviceNames, onAdd,
           >
             {deviceNames[selectedSlugs.indexOf(slug)]}
             <button
-              onClick={() => onRemove(slug)}
+              onClick={() => handleRemove(slug)}
               className="rounded-full p-0.5 text-muted-foreground hover:text-foreground"
               aria-label={`Remove ${slug}`}
             >
@@ -103,7 +113,7 @@ export default function CompareDevicePicker({ selectedSlugs, deviceNames, onAdd,
                   .map((r) => (
                     <button
                       key={r.slug}
-                      onClick={() => handleAdd(r.slug, r.name)}
+                      onClick={() => handleAdd(r.slug)}
                       className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted"
                     >
                       <span className="truncate">{r.name}</span>

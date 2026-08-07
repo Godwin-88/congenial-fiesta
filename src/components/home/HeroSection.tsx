@@ -1,6 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
@@ -10,6 +11,34 @@ const ParticleField = dynamic(() => import('@/components/home/ParticleField'), {
 
 type Props = {
   topDevices: Device[]
+}
+
+const ROTATING_WORDS = ['Unboxing', 'Unpacking', 'Reviewing', 'Testing', 'Comparing', 'Exploring'] as const
+const WORD_DURATION = 2
+
+function RotatingWord() {
+  const [index, setIndex] = useState(0)
+  const word = ROTATING_WORDS[index]
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setIndex((prev) => (prev + 1) % ROTATING_WORDS.length)
+    }, WORD_DURATION * 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  return (
+    <motion.span
+      key={word}
+      className="text-brand-primary draw-underline inline-block"
+      initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
+      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+      exit={{ opacity: 0, y: -10, filter: 'blur(4px)' }}
+      transition={{ duration: 0.4, ease: 'easeInOut' }}
+    >
+      {word}.
+    </motion.span>
+  )
 }
 
 const container = {
@@ -45,7 +74,7 @@ export default function HeroSection({ topDevices }: Props) {
             {/* Headline */}
             <motion.div variants={itemFadeDown} className="space-y-1">
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground font-heading leading-tight">
-                Tech. <span className="text-brand-primary draw-underline">Unboxing.</span>
+                Tech. <RotatingWord />
               </h1>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground font-heading leading-tight">
                 Reviews.

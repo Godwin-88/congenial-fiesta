@@ -170,6 +170,77 @@ export async function fetchTopYouTubeVideos(limit: number = 5): Promise<YouTubeV
   return [...all].sort((a, b) => b.viewCount - a.viewCount).slice(0, limit)
 }
 
+export async function fetchAllYouTubeVideos(): Promise<YouTubeVideo[]> {
+  const hasApiKey = process.env.YOUTUBE_API_KEY && process.env.YOUTUBE_API_KEY.trim()
+  if (hasApiKey && process.env.YOUTUBE_CHANNEL_ID) {
+    const videos: YouTubeVideo[] = []
+    let pageToken: string | undefined
+    do {
+      const page = await fetchFromYouTubeApiPaginated(50, pageToken)
+      videos.push(...page.items)
+      pageToken = page.nextPageToken
+    } while (pageToken && videos.length < 900)
+    return videos.slice(0, 900)
+  }
+  const rssVideos = await fetchYouTubeVideosViaRss(50)
+  if (rssVideos.length < 20 && !hasApiKey) {
+    console.warn(
+      '⚠ Only fetched %d YouTube videos via RSS feed (YouTube caps RSS at 15 entries). ' +
+      'To index more, set YOUTUBE_API_KEY in .env.local (free via Google Cloud Console → YouTube Data API v3).',
+      rssVideos.length,
+    )
+  }
+  return rssVideos
+}
+
+async function fetchFromYouTubeApiPaginated(
+  maxResults: number,
+  pageToken?: string,
+): Promise<{ items: YouTubeVideo[]; nextPageToken?: string }> {
+  if (!process.env.YOUTUBE_API_KEY) throw new Error('Missing YOUTUBE_API_KEY')
+  if (!process.env.YOUTUBE_CHANNEL_ID) throw new Error('Missing YOUTUBE_CHANNEL_ID')
+
+  const searchUrl =
+    `${YOUTUBE_API_BASE}/search?part=id` +
+    `&channelId=${process.env.YOUTUBE_CHANNEL_ID}` +
+    `&maxResults=${maxResults}` +
+    `&order=date&type=video&key=${process.env.YOUTUBE_API_KEY}` +
+    (pageToken ? `&pageToken=${pageToken}` : '')
+
+  const searchRes = await fetch(searchUrl)
+  if (!searchRes.ok) throw new Error(`YouTube search API error: ${searchRes.status}`)
+  const searchData = await searchRes.json()
+  const videoIds: string[] = (searchData.items ?? []).map((i: { id: { videoId: string } }) => i.id.videoId)
+  if (videoIds.length === 0) return { items: [], nextPageToken: searchData.nextPageToken }
+
+  const detailRes = await fetch(
+    `${YOUTUBE_API_BASE}/videos?part=snippet,statistics,contentDetails` +
+    `&id=${videoIds.join(',')}&key=${process.env.YOUTUBE_API_KEY}`,
+  )
+  if (!detailRes.ok) throw new Error(`YouTube videos API error: ${detailRes.status}`)
+  const detailData = await detailRes.json()
+
+  return {
+    items: (detailData.items ?? []).map((item: {
+      id: string
+      snippet: { title: string; description: string; publishedAt?: string; thumbnails: Record<string, { url: string }> }
+      statistics?: { viewCount?: string }
+      contentDetails?: { duration?: string }
+    }) => ({
+      id: item.id,
+      title: item.snippet.title,
+      thumbnailUrl: item.snippet.thumbnails.maxres?.url ??
+                    item.snippet.thumbnails.high?.url ??
+                    item.snippet.thumbnails.default.url,
+      viewCount: parseInt(item.statistics?.viewCount ?? '0', 10),
+      duration: formatIsoDuration(item.contentDetails?.duration ?? ''),
+      publishedAt: item.snippet.publishedAt ?? new Date().toISOString(),
+      description: item.snippet.description,
+    })),
+    nextPageToken: searchData.nextPageToken,
+  }
+}
+
 export function formatViewCount(count: number): string {
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M views`
   if (count >= 1_000) return `${(count / 1_000).toFixed(0)}K views`

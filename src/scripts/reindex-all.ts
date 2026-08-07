@@ -5,7 +5,8 @@ config({ path: '.env.local' })
 
 async function reindexAll() {
   const { createClient } = await import('@supabase/supabase-js')
-  const { indexDevice, indexArticle } = await import('@/lib/search/indexing')
+  const { indexDevice, indexArticle, indexYouTubeVideo } = await import('@/lib/search/indexing')
+  const { fetchAllYouTubeVideos } = await import('@/lib/youtube/client')
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -55,6 +56,27 @@ async function reindexAll() {
   }
 
   console.log(`\n✅ Reindex complete! Indexed ${deviceList.length} devices, ${articleList.length} articles.`)
+
+  // ── Index YouTube Videos (from RSS or Data API) ─────────────────────
+  console.log('\nFetching YouTube videos...')
+  try {
+    const videos = await fetchAllYouTubeVideos()
+    console.log(`Found ${videos.length} YouTube videos. Indexing...`)
+
+    let indexed = 0
+    for (const video of videos) {
+      try {
+        await indexYouTubeVideo(video)
+        indexed++
+        console.log(`  ✓ Indexed YouTube video: ${video.title}`)
+      } catch (err) {
+        console.error(`  ✗ Failed to index YouTube video "${video.title}":`, err)
+      }
+    }
+    console.log(`\n✅ Indexed ${indexed} YouTube videos.`)
+  } catch (err) {
+    console.error('YouTube video indexing failed:', err)
+  }
 }
 
 reindexAll()

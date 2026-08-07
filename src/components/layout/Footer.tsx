@@ -38,7 +38,7 @@ export default function Footer() {
                   Press
                 </Link>
                 <Link href="/advertise" className="text-sm text-foreground/60 hover:text-foreground transition-colors">
-                  Advertise
+                  Contact Us
                 </Link>
                 <Link href="/privacy" className="text-sm text-foreground/60 hover:text-foreground transition-colors">
                   Privacy Policy
