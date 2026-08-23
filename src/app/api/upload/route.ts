@@ -37,6 +37,10 @@ export async function POST(request: NextRequest) {
 
     const supabase = getStorageClient()
 
+    // Restrict uploads to known public buckets
+    const bucket = formData.get('bucket')
+    const targetBucket = bucket === 'device-images' ? 'device-images' : 'article-images'
+
     // Generate a unique filename
     const timestamp = Date.now()
     const ext = file.name.split('.').pop() ?? 'jpg'
@@ -48,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     // Upload to Supabase Storage
     const { data, error } = await supabase.storage
-      .from('article-images')
+      .from(targetBucket)
       .upload(fileName, buffer, {
         contentType: file.type,
         cacheControl: '3600',
@@ -65,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     // Get public URL
     const { data: urlData } = supabase.storage
-      .from('article-images')
+      .from(targetBucket)
       .getPublicUrl(data.path)
 
     return NextResponse.json({

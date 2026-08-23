@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { redis } from '@/lib/upstash/redis'
-import type { Device, Brand } from '@/types/cms'
-import { mapDevice } from '@/types/cms'
+import type { Device, Brand, DeviceType, MajorCategory } from '@/types/cms'
+import { mapDevice, MAJOR_CATEGORIES } from '@/types/cms'
 
 function getSupabase() {
   return createClient(
@@ -13,6 +13,8 @@ function getSupabase() {
 type GetDevicesParams = {
   brand?: string
   category?: string
+  majorCategory?: MajorCategory | null
+  deviceTypeId?: number | null
   page?: number
   limit?: number
 }
@@ -20,9 +22,9 @@ type GetDevicesParams = {
 export async function getDevices(
   params: GetDevicesParams = {},
 ): Promise<{ devices: Device[]; totalPages: number }> {
-  const { brand, category, page = 1, limit = 12 } = params
+  const { brand, category, majorCategory, deviceTypeId, page = 1, limit = 12 } = params
 
-  const cacheKey = `devices:list:${brand ?? ''}:${category ?? ''}:${page}`
+  const cacheKey = `devices:list:${brand ?? ''}:${category ?? ''}:${majorCategory ?? ''}:${deviceTypeId ?? ''}:${page}`
   const cached = await redis.get(cacheKey).catch(() => null)
   if (cached) {
     if (typeof cached === 'string') return JSON.parse(cached)
@@ -34,12 +36,14 @@ export async function getDevices(
 
   let query = supabase
     .from('devices')
-    .select('*, brand:brands(*)', { count: 'exact' })
+    .select('*, brand:brands(*), device_type:device_types(*)', { count: 'exact' })
     .eq('status', 'published')
     .order('release_year', { ascending: false })
     .range(offset, offset + limit - 1)
 
-  if (category) query = query.eq('category', category)
+  if (category) query = query.eq('price_tier', category)
+  if (majorCategory) query = query.eq('major_category', majorCategory)
+  if (deviceTypeId) query = query.eq('device_type_id', deviceTypeId)
   if (brand) {
     const { data: brandData } = await supabase
       .from('brands')
@@ -62,6 +66,67 @@ export async function getDevices(
 
   await redis.setex(cacheKey, 300, JSON.stringify(result))
   return result
+}
+
+// All device types (for admin forms / lookups)
+export async function getDeviceTypes(): Promise<DeviceType[]> {
+  const cacheKey = 'device_types:all'
+  const cached = await redis.get(cacheKey).catch(() => null)
+  if (cached) {
+    if (typeof cached === 'string') return JSON.parse(cached)
+    return cached as DeviceType[]
+  }
+
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from('device_types')
+    .select('*')
+    .order('display_order', { ascending: true })
+
+  if (error) {
+    console.error('getDeviceTypes error:', error)
+    return []
+  }
+
+  const types = (data ?? []) as DeviceType[]
+  await redis.setex(cacheKey, 3600, JSON.stringify(types))
+  return types
+}
+
+// Brands that have at least one published device in the given major category
+export async function getBrandsByCategory(major: MajorCategory): Promise<Brand[]> {
+  const cacheKey = `brands:by_category:${major}`
+  const cached = await redis.get(cacheKey).catch(() => null)
+  if (cached) {
+    if (typeof cached === 'string') return JSON.parse(cached)
+    return cached as Brand[]
+  }
+
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from('devices')
+    .select('brand:brands(id, name, slug, logo_url, website, featured)')
+    .eq('status', 'published')
+    .eq('major_category', major)
+
+  if (error) {
+    console.error('getBrandsByCategory error:', error)
+    return []
+  }
+
+  const seen = new Map<number, Brand>()
+  for (const row of (data ?? []) as Array<{ brand?: any }>) {
+    const b = row.brand as Brand | null | undefined
+    if (b && b.id && !seen.has(b.id)) seen.set(b.id, b)
+  }
+
+  const brands = Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name))
+  await redis.setex(cacheKey, 600, JSON.stringify(brands))
+  return brands
+}
+
+export function getMajorCategories() {
+  return MAJOR_CATEGORIES
 }
 
 export async function getDevice(

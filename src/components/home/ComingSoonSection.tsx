@@ -14,7 +14,7 @@ export default function ComingSoonSection({ teasers }: Props) {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <SectionHeading
           label="COMING SOON"
-          title="What Fweezy's Reviewing Next"
+          title="What Fweezytech's Reviewing Next"
           tagline="Be the first to know when a new review drops."
         />
 

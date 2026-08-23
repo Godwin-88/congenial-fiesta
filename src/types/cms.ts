@@ -21,13 +21,37 @@ export interface Brand {
   device_count?: number
 }
 
+export type MajorCategory = 'phones' | 'televisions' | 'sound' | 'macs'
+
+export const MAJOR_CATEGORIES: Array<{
+  slug: MajorCategory
+  label: string
+  icon: string
+}> = [
+  { slug: 'phones', label: 'Phones', icon: 'phone' },
+  { slug: 'televisions', label: 'Televisions', icon: 'tv' },
+  { slug: 'sound', label: 'Sound', icon: 'volume-2' },
+  { slug: 'macs', label: 'Macs', icon: 'monitor' },
+]
+
+export interface DeviceType {
+  id: number
+  slug: string
+  label: string
+  major_category: MajorCategory
+  display_order: number
+}
+
 export interface Device {
   id: number
   name: string
   slug: string
   brand_id: number | null
   release_year: number | null
-  category: 'flagship' | 'mid-range' | 'budget' | 'ultra-premium' | null
+  price_tier: 'flagship' | 'mid-range' | 'budget' | 'ultra-premium' | null
+  major_category: MajorCategory | null
+  device_type_id: number | null
+  device_type?: DeviceType | null
   price_kes: number | null
   price_usd: number | null
   tagline: string | null
@@ -51,10 +75,7 @@ export interface Device {
   specs_battery: Record<string, unknown>
   specs_connectivity: Record<string, unknown>
   specs_software: Record<string, unknown>
-  benchmark_geekbench_single: number | null
-  benchmark_geekbench_multi: number | null
-  benchmark_antutu: number | null
-  benchmark_pcmark: number | null
+  specs_network: Record<string, unknown>
   buy_links: Record<string, unknown>[]
   related_video_id: string | null
   related_tiktok_url: string | null
@@ -224,7 +245,10 @@ export function mapDevice(row: Record<string, unknown>): Device {
     slug: row.slug as string,
     brand_id: (row.brand_id as number) ?? null,
     release_year: (row.release_year as number) ?? null,
-    category: (row.category as Device['category']) ?? null,
+    price_tier: (row.price_tier as Device['price_tier']) ?? null,
+    major_category: (row.major_category as MajorCategory) ?? null,
+    device_type_id: (row.device_type_id as number) ?? null,
+    device_type: (row.device_type as DeviceType) ?? null,
     price_kes: (row.price_kes as number) ?? null,
     price_usd: (row.price_usd as number) ?? null,
     tagline: (row.tagline as string) ?? null,
@@ -248,10 +272,7 @@ export function mapDevice(row: Record<string, unknown>): Device {
     specs_battery: (row.specs_battery as Record<string, unknown>) ?? {},
     specs_connectivity: (row.specs_connectivity as Record<string, unknown>) ?? {},
     specs_software: (row.specs_software as Record<string, unknown>) ?? {},
-    benchmark_geekbench_single: (row.benchmark_geekbench_single as number) ?? null,
-    benchmark_geekbench_multi: (row.benchmark_geekbench_multi as number) ?? null,
-    benchmark_antutu: (row.benchmark_antutu as number) ?? null,
-    benchmark_pcmark: (row.benchmark_pcmark as number) ?? null,
+    specs_network: (row.specs_network as Record<string, unknown>) ?? {},
     buy_links: (row.buy_links as Record<string, unknown>[]) ?? [],
     related_video_id: (row.related_video_id as string) ?? null,
     related_tiktok_url: (row.related_tiktok_url as string) ?? null,

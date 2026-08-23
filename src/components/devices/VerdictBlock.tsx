@@ -19,7 +19,7 @@ export function VerdictBlock({ verdict }: VerdictBlockProps) {
   return (
     <div className="rounded-xl border-l-4 border-brand-primary bg-card p-6">
       <h3 className="mb-4 font-heading text-xl font-bold text-foreground">
-        Fweezy's Verdict
+        Fweezytech's Verdict
       </h3>
 
       <div className="grid gap-6 sm:grid-cols-2">
@@ -85,7 +85,7 @@ export function FullVerdictRichText({
   return (
     <div className="rounded-xl border-l-4 border-brand-primary bg-card p-6">
       <h3 className="mb-4 font-heading text-xl font-bold text-foreground">
-        Fweezy's Full Verdict
+        Fweezytech's Full Verdict
       </h3>
       <div className="prose prose-sm dark:prose-invert max-w-none">
         {JSON.stringify(fullVerdict)}

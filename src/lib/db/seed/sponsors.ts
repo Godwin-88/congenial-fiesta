@@ -50,7 +50,7 @@ async function seed() {
       tier: 'starter',
       highlighted: false,
       display_order: 1,
-      description: "A dedicated mention in one of Fweezy's videos reaching his full audience.",
+      description: "A dedicated mention in one of Fweezytech's videos reaching his full audience.",
       deliverables: [
         { item: '30-second verbal shoutout' },
         { item: 'Brand link in video description' },

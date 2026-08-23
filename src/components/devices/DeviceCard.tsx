@@ -48,11 +48,11 @@ export function DeviceCard({ device }: DeviceCardProps) {
           <ScoreBadge score={overallScore} size="sm" />
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium capitalize text-muted-foreground">
-            {device.category}
-          </span>
-          {device.price_kes && (
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium capitalize text-muted-foreground">
+              {device.device_type?.label ?? device.major_category ?? 'Device'}
+            </span>
+            {device.price_kes && (
             <span className="text-sm font-semibold text-foreground">
               KES {device.price_kes.toLocaleString()}
             </span>

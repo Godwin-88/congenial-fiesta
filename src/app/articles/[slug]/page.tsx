@@ -115,10 +115,10 @@ export default async function ArticleDetailPage({
         {/* Author */}
         <div className="mt-6 flex items-center gap-3 border-t border-border pt-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-primary text-sm font-bold text-white">
-            F
+            M
           </div>
           <div>
-            <p className="text-sm font-medium text-foreground">Fweezy</p>
+            <p className="text-sm font-medium text-foreground">Millan Wafula</p>
             <p className="text-xs text-foreground/50">Tech Reviewer</p>
           </div>
         </div>
@@ -184,7 +184,7 @@ export default async function ArticleDetailPage({
             '@context': 'https://schema.org',
             '@type': 'Article',
             headline: a.title,
-            author: { '@type': 'Person', name: 'Fweezy' },
+            author: { '@type': 'Person', name: 'Millan Wafula' },
             datePublished: a.publishedAt,
             dateModified: a.updatedAt ?? a.publishedAt,
             image: a.featuredImage,

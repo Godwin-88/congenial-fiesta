@@ -82,7 +82,7 @@ export const seedDevices: SeedDevice[] = [
     slug: 'galaxy-s25-ultra',
     brand: 'samsung',
     releaseYear: 2025,
-    category: 'ultra-premium',
+    price_tier: 'ultra-premium',
     priceKES: 259999,
     priceUSD: 1299,
     tagline:
@@ -215,7 +215,7 @@ export const seedDevices: SeedDevice[] = [
     slug: 'iphone-16-pro-max',
     brand: 'apple',
     releaseYear: 2024,
-    category: 'ultra-premium',
+    price_tier: 'ultra-premium',
     priceKES: 229999,
     priceUSD: 1199,
     tagline:
@@ -347,7 +347,7 @@ export const seedDevices: SeedDevice[] = [
     slug: 'pixel-9-pro',
     brand: 'google',
     releaseYear: 2024,
-    category: 'flagship',
+    price_tier: 'flagship',
     priceKES: 159999,
     priceUSD: 999,
     tagline:
@@ -473,7 +473,7 @@ export const seedDevices: SeedDevice[] = [
     slug: 'phantom-v-fold2',
     brand: 'tecno',
     releaseYear: 2025,
-    category: 'flagship',
+    price_tier: 'flagship',
     priceKES: 149999,
     priceUSD: 899,
     tagline:
@@ -605,7 +605,7 @@ export const seedDevices: SeedDevice[] = [
     slug: 'zero-40-5g',
     brand: 'infinix',
     releaseYear: 2025,
-    category: 'mid-range',
+    price_tier: 'mid-range',
     priceKES: 49999,
     priceUSD: 299,
     tagline:

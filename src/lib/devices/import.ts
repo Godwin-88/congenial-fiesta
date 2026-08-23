@@ -230,7 +230,7 @@ export async function importDevicesFromYouTube(
         name: deviceName,
         slug,
         brand_id: brandId,
-        category: inferCategory(deviceName),
+        price_tier: inferCategory(deviceName),
         tagline: title.slice(0, 160),
         status: 'published',
         scores_overall: 0,

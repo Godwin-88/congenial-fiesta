@@ -23,8 +23,8 @@ export async function requireAdminAuth(): Promise<AdminUser> {
     }
   )
 
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.user) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
     throw new Error('Unauthorized')
   }
 
@@ -43,7 +43,7 @@ export async function requireAdminAuth(): Promise<AdminUser> {
   const { data: adminUser } = await adminClient
     .from('admin_users')
     .select('*')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .maybeSingle()
 
   if (!adminUser) {
@@ -73,8 +73,8 @@ export async function getAdminUser(): Promise<AdminUser | null> {
     }
   )
 
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.user) return null
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
 
   const adminClient = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -90,7 +90,7 @@ export async function getAdminUser(): Promise<AdminUser | null> {
   const { data: adminUser } = await adminClient
     .from('admin_users')
     .select('*')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .maybeSingle()
 
   return adminUser as AdminUser | null

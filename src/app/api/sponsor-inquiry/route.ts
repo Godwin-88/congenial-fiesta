@@ -1,20 +1,18 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { Resend } from 'resend'
+import { sendEmail, isEmailConfigured } from '@/lib/email'
 import { formRateLimit } from '@/lib/upstash/ratelimit'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const resendApiKey = process.env.RESEND_API_KEY
 const adminEmail = process.env.ADMIN_EMAIL ?? 'business@fweezytech.com'
-const resendFrom = process.env.RESEND_FROM_EMAIL ?? 'business@fweezytech.com'
+const mailFrom = process.env.MAIL_FROM ?? process.env.RESEND_FROM_EMAIL ?? 'business@fweezytech.com'
 const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:3000'
 
 if (!supabaseUrl) throw new Error('Missing env var NEXT_PUBLIC_SUPABASE_URL')
 if (!supabaseServiceKey) throw new Error('Missing env var SUPABASE_SERVICE_ROLE_KEY')
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
-const resend = resendApiKey ? new Resend(resendApiKey) : null
 
 const ALLOWED_BUDGET_RANGES = [
   'Under $300',
@@ -124,10 +122,10 @@ export async function POST(request: Request) {
   }
 
   // Send notification email to admin
-  if (resend && adminEmail) {
+  if (isEmailConfigured() && adminEmail) {
     try {
-      await resend.emails.send({
-        from: resendFrom,
+      await sendEmail({
+        from: mailFrom,
         to: adminEmail,
         subject: `New Sponsor Inquiry: ${body.company} — ${body.packageInterest ?? body.budgetRange}`,
         html: `
@@ -156,8 +154,8 @@ export async function POST(request: Request) {
 
     // Send acknowledgement to submitter
     try {
-      await resend.emails.send({
-        from: resendFrom,
+      await sendEmail({
+        from: mailFrom,
         to: body.email!,
         subject: 'We got your message — FweezyTech',
         html: `

@@ -685,7 +685,7 @@ Sticky toolbar above editor. Groups:
 #### Feature A5.1 — Video List & Create/Edit
 
 **User Story A5.1.1**
-> As an editor, I want to add videos from TikTok, Instagram, and Facebook to the video feed so that all of Fweezy's content appears on the site regardless of platform.
+> As an editor, I want to add videos from TikTok, Instagram, and Facebook to the video feed so that all of Fweezytech's content appears on the site regardless of platform.
 
 **Acceptance Criteria:**
 - Route: `/admin/videos`
@@ -783,7 +783,7 @@ Sticky toolbar above editor. Groups:
 #### Feature A9.1 — Milestones
 
 **User Story A9.1.1**
-> As an admin, I want to manage the milestone timeline entries on the /about page so that Fweezy's journey is accurately represented.
+> As an admin, I want to manage the milestone timeline entries on the /about page so that Fweezytech's journey is accurately represented.
 
 **Acceptance Criteria:**
 - Route: `/admin/milestones`

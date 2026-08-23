@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       query = query.eq('status', status)
     }
     if (category) {
-      query = query.eq('category', category)
+      query = query.eq('price_tier', category)
     }
     if (brand) {
       const { data: brandData } = await supabase
@@ -134,6 +134,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Resolve device type + major category
+    let majorCategory: string | null = body.major_category ?? null
+    if (body.device_type_id) {
+      const { data: typeData } = await supabase
+        .from('device_types')
+        .select('id, major_category')
+        .eq('id', body.device_type_id)
+        .single()
+      if (!typeData) {
+        return NextResponse.json({ error: 'Device type not found' }, { status: 400 })
+      }
+      majorCategory = typeData.major_category
+    }
+
     const weights = await getScoreWeights(supabase)
     const scoreOverall = computeOverallScore({
       display: body.score_display,
@@ -148,7 +162,9 @@ export async function POST(request: NextRequest) {
       slug: body.slug.trim(),
       brand_id: body.brand_id ?? null,
       release_year: body.release_year ?? null,
-      category: body.category ?? null,
+      price_tier: body.price_tier ?? null,
+      major_category: majorCategory,
+      device_type_id: body.device_type_id ?? null,
       price_kes: body.price_kes ?? null,
       price_usd: body.price_usd ?? null,
       tagline: body.tagline?.trim() ?? null,
@@ -172,10 +188,7 @@ export async function POST(request: NextRequest) {
       specs_battery: body.specs_battery ?? {},
       specs_connectivity: body.specs_connectivity ?? {},
       specs_software: body.specs_software ?? {},
-      benchmark_geekbench_single: body.benchmark_geekbench_single ?? null,
-      benchmark_geekbench_multi: body.benchmark_geekbench_multi ?? null,
-      benchmark_antutu: body.benchmark_antutu ?? null,
-      benchmark_pcmark: body.benchmark_pcmark ?? null,
+      specs_network: body.specs_network ?? {},
       buy_links: body.buy_links ?? [],
       related_video_id: body.related_video_id?.trim() ?? null,
       related_tiktok_url: body.related_tiktok_url?.trim() ?? null,

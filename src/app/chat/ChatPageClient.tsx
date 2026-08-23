@@ -37,7 +37,7 @@ export default function ChatPageClient() {
           </div>
         </div>
         <p className="text-sm text-muted-foreground mb-4">
-          Your AI guide to FweezyTech. Ask anything about devices, reviews, comparisons, and Fweezy's content.
+          Your AI guide to FweezyTech. Ask anything about devices, reviews, comparisons, and Fweezytech's content.
         </p>
         <div className="border-t border-border pt-4 mb-4">
           <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-3">What I can help with</h3>

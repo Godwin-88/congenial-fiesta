@@ -35,6 +35,7 @@ const migrations = [
   '012_storage_buckets.sql',
   '013_add_package_interest.sql',
   '014_fix_column_and_grants.sql',
+  '015_add_device_images.sql',
 ]
 
 async function runMigrations() {

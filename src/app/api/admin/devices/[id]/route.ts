@@ -107,6 +107,20 @@ export async function PATCH(
       }
     }
 
+    // Resolve device type + major category if provided
+    let majorCategory: string | null | undefined = body.major_category
+    if (body.device_type_id !== undefined && body.device_type_id) {
+      const { data: typeData } = await supabase
+        .from('device_types')
+        .select('id, major_category')
+        .eq('id', body.device_type_id)
+        .single()
+      if (!typeData) {
+        return NextResponse.json({ error: 'Device type not found' }, { status: 400 })
+      }
+      majorCategory = typeData.major_category
+    }
+
     const weights = await getScoreWeights(supabase)
     const scoreOverall = computeOverallScore({
       display: body.score_display,
@@ -121,7 +135,9 @@ export async function PATCH(
     if (body.slug !== undefined) payload.slug = body.slug.trim()
     if (body.brand_id !== undefined) payload.brand_id = body.brand_id ?? null
     if (body.release_year !== undefined) payload.release_year = body.release_year ?? null
-    if (body.category !== undefined) payload.category = body.category ?? null
+    if (body.price_tier !== undefined) payload.price_tier = body.price_tier ?? null
+    if (body.major_category !== undefined) payload.major_category = majorCategory ?? null
+    if (body.device_type_id !== undefined) payload.device_type_id = body.device_type_id ?? null
     if (body.price_kes !== undefined) payload.price_kes = body.price_kes ?? null
     if (body.price_usd !== undefined) payload.price_usd = body.price_usd ?? null
     if (body.tagline !== undefined) payload.tagline = body.tagline?.trim() ?? null
@@ -145,10 +161,7 @@ export async function PATCH(
     if (body.specs_battery !== undefined) payload.specs_battery = body.specs_battery ?? {}
     if (body.specs_connectivity !== undefined) payload.specs_connectivity = body.specs_connectivity ?? {}
     if (body.specs_software !== undefined) payload.specs_software = body.specs_software ?? {}
-    if (body.benchmark_geekbench_single !== undefined) payload.benchmark_geekbench_single = body.benchmark_geekbench_single ?? null
-    if (body.benchmark_geekbench_multi !== undefined) payload.benchmark_geekbench_multi = body.benchmark_geekbench_multi ?? null
-    if (body.benchmark_antutu !== undefined) payload.benchmark_antutu = body.benchmark_antutu ?? null
-    if (body.benchmark_pcmark !== undefined) payload.benchmark_pcmark = body.benchmark_pcmark ?? null
+    if (body.specs_network !== undefined) payload.specs_network = body.specs_network ?? {}
     if (body.buy_links !== undefined) payload.buy_links = body.buy_links ?? []
     if (body.related_video_id !== undefined) payload.related_video_id = body.related_video_id?.trim() ?? null
     if (body.related_tiktok_url !== undefined) payload.related_tiktok_url = body.related_tiktok_url?.trim() ?? null

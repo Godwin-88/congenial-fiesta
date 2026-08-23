@@ -20,7 +20,7 @@ export default function ArticlesSection({ articles }: Props) {
         <SectionHeading
           label="INSIGHTS"
           title="From the FweezyTech Blog"
-          tagline="Deep dives, buying guides, and Fweezy's takes on what matters."
+          tagline="Deep dives, buying guides, and Fweezytech's takes on what matters."
           viewAllHref="/articles"
         />
 

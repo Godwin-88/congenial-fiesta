@@ -1,5 +1,5 @@
 'use client'
-import { useEditor, EditorContent } from '@tiptap/react'
+import { useEditor, EditorContent, type Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
@@ -24,6 +24,7 @@ type TiptapEditorProps = {
   onChange: (json: Record<string, unknown>, html: string) => void
   placeholder?: string
   minHeight?: number
+  onEditorReady?: (editor: Editor | null) => void
 }
 
 export default function TiptapEditor({
@@ -31,6 +32,7 @@ export default function TiptapEditor({
   onChange,
   placeholder = 'Start writing your article…',
   minHeight = 500,
+  onEditorReady,
 }: TiptapEditorProps) {
   const editor = useEditor({
     extensions: [
@@ -84,6 +86,12 @@ export default function TiptapEditor({
     immediatelyRender: false,   // prevents SSR hydration mismatch
   })
 
+  // Expose the editor instance to the parent (e.g. for inserting images from a sidebar panel)
+  useEffect(() => {
+    onEditorReady?.(editor)
+    return () => onEditorReady?.(null)
+  }, [editor, onEditorReady])
+
   // Sync external content changes (e.g. loading existing article)
   useEffect(() => {
     if (editor && content && editor.isEmpty) {
@@ -112,8 +120,6 @@ export default function TiptapEditor({
     const file = e.target.files?.[0]
     if (!file) return
 
-    editor?.chain().focus().setImage({ src: '' }).run()
-
     const formData = new FormData()
     formData.append('file', file)
 
@@ -124,7 +130,6 @@ export default function TiptapEditor({
       })
       const data = await res.json()
       if (data.url) {
-        // Replace the placeholder with the actual image
         editor?.chain().focus().setImage({ src: data.url }).run()
       } else {
         alert('Upload failed: ' + (data.error || 'Unknown error'))

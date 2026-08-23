@@ -7,7 +7,6 @@ import { getAllDevicePaths, getDevice } from '@/lib/devices/queries'
 import { ScoreBadge } from '@/components/devices/ScoreBadge'
 import { RadarChart } from '@/components/devices/RadarChart'
 import { SpecTable } from '@/components/devices/SpecTable'
-import { BenchmarkChart } from '@/components/devices/BenchmarkChart'
 import { BuyBox } from '@/components/devices/BuyBox'
 import { VerdictBlock } from '@/components/devices/VerdictBlock'
 import RatingsSection from '@/components/community/RatingsSection'
@@ -85,7 +84,7 @@ export default async function DeviceDetailPage({
   const primaryImage = images?.find((img: any) => img.isPrimary) ?? images?.[0]
   const dName = String(d.name ?? '')
   const dSlug = String(d.slug ?? '')
-  const dCategory = String(d.category ?? '')
+  const dCategory = String(d.device_type?.label ?? d.major_category ?? '')
   const dPriceKES = Number(d.price_kes ?? 0)
   const dPriceUSD = Number(d.price_usd ?? 0)
   const dReleaseYear = String(d.release_year ?? '')
@@ -100,12 +99,16 @@ export default async function DeviceDetailPage({
   const dSpecsProcessor = d.specs_processor as Record<string, unknown> | undefined
   const dSpecsMemory = d.specs_memory as Record<string, unknown> | undefined
   const dSpecsCamera = d.specs_camera as Record<string, unknown> | undefined
+  const dCamMain = (() => {
+    const rear = (dSpecsCamera as any)?.rear
+    if (Array.isArray(rear) && rear[0]?.sensorType) return String(rear[0].sensorType).split(' ')[0]
+    const selfie = (dSpecsCamera as any)?.selfie?.sensorType
+    if (selfie) return String(selfie).split(' ')[0]
+    return undefined
+  })()
   const dSpecsBattery = d.specs_battery as Record<string, unknown> | undefined
   const dRelatedVideoId = String(d.related_video_id ?? '')
   const dRelatedTiktokUrl = String(d.related_tiktok_url ?? '')
-
-  const hasBenchmarks =
-    d.benchmark_geekbench_single || d.benchmark_geekbench_multi || d.benchmark_antutu || d.benchmark_pcmark
 
   const schemaOrg = {
     '@context': 'https://schema.org',
@@ -247,12 +250,12 @@ export default async function DeviceDetailPage({
       {/* Quick specs strip */}
       <div className="mt-12 flex flex-wrap gap-4 rounded-xl border border-border bg-card p-4">
         {[
-          { icon: '📱', label: 'Display', value: dSpecsDisplay?.size },
-          { icon: '⚡', label: 'Chipset', value: dSpecsProcessor?.chipset },
-          { icon: '📷', label: 'Camera', value: dSpecsCamera?.mainCamera?.toString().split(' ')[0] },
-          { icon: '🔋', label: 'Battery', value: dSpecsBattery?.capacity },
-          { icon: '💾', label: 'RAM', value: dSpecsMemory?.ram?.toString().split(' ')[0] },
-          { icon: '🛡️', label: 'Protection', value: dSpecsDesign?.waterResistance },
+          { icon: '📱', label: 'Display', value: dSpecsDisplay?.['Size'] },
+          { icon: '⚡', label: 'Chipset', value: dSpecsProcessor?.['Chipset'] },
+          { icon: '📷', label: 'Camera', value: dCamMain },
+          { icon: '🔋', label: 'Battery', value: dSpecsBattery?.['Capacity'] },
+          { icon: '💾', label: 'RAM', value: dSpecsMemory?.['RAM']?.toString().split(' ')[0] },
+           { icon: '🛡️', label: 'IP Rating', value: dSpecsDesign?.['IP Rating'] },
         ]
           .filter((s) => s.value)
           .map((spec) => (
@@ -272,7 +275,7 @@ export default async function DeviceDetailPage({
         <section className="mt-12">
           <div className="rounded-xl border-l-4 border-brand-primary bg-card p-6">
             <h2 className="mb-4 font-heading text-xl font-bold text-foreground">
-              Fweezy's Full Verdict
+              Fweezytech's Full Verdict
             </h2>
             <div className="prose prose-sm dark:prose-invert max-w-none text-foreground/80">
               {d.verdict_full}
@@ -289,30 +292,11 @@ export default async function DeviceDetailPage({
         <SpecTable device={d} />
       </section>
 
-      {/* Benchmarks */}
-      {hasBenchmarks && (
-        <section className="mt-12">
-          <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">
-            Performance Benchmarks
-          </h2>
-          <div className="rounded-xl border border-border bg-card p-6">
-            <BenchmarkChart
-              benchmarks={{
-                geekbenchSingle: d.benchmark_geekbench_single ?? null,
-                geekbenchMulti: d.benchmark_geekbench_multi ?? null,
-                antutu: d.benchmark_antutu ?? null,
-                pcmark: d.benchmark_pcmark ?? null,
-              }}
-            />
-          </div>
-        </section>
-      )}
-
       {/* Video Review */}
       {(dRelatedVideoId || dRelatedTiktokUrl) && (
         <section className="mt-12">
           <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">
-            Fweezy's Video Review
+            Fweezytech's Video Review
           </h2>
           <div className="space-y-6">
             {dRelatedVideoId && (

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getRedisOrThrow } from '@/lib/upstash/redis'
 import { Ratelimit } from '@upstash/ratelimit'
+import { sendEmail, isEmailConfigured } from '@/lib/email'
 
 const ratelimit = new Ratelimit({
   redis: getRedisOrThrow(),
@@ -61,13 +62,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Send confirmation email via Resend
-    if (process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL) {
+    // Send confirmation email via SMTP (Gmail app password)
+    if (isEmailConfigured()) {
       try {
-        const { Resend } = await import('resend')
-        const resend = new Resend(process.env.RESEND_API_KEY)
-        await resend.emails.send({
-          from: process.env.RESEND_FROM_EMAIL,
+        await sendEmail({
           to: email,
           subject: "You're on the list — FweezyTech",
           html: `<p>Hey!</p><p>You'll be the first to know when Fweezy drops his next review. Stay tuned.</p>`,

@@ -169,7 +169,7 @@ export async function retrieveContext(query: string): Promise<RetrievedContext> 
     navigationCards.push({
       type: 'page',
       title: 'Coming Soon',
-      subtitle: "See what Fweezy's reviewing next",
+      subtitle: "See what Fweezytech's reviewing next",
       url: '/coming-soon',
     })
   }

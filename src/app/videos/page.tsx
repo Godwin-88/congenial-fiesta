@@ -7,7 +7,7 @@ import VideoFeed from './video-feed'
 
 export const metadata = {
   title: 'Videos | FweezyTech',
-  description: "Watch all of Fweezy's tech reviews across YouTube, TikTok, Instagram and Facebook",
+  description: "Watch all of Fweezytech's tech reviews across YouTube, TikTok, Instagram and Facebook",
 }
 
 export default async function VideosPage() {
@@ -165,7 +165,7 @@ export default async function VideosPage() {
     <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
       <h1 className="font-heading text-3xl font-bold text-foreground sm:text-4xl">Videos</h1>
       <p className="mt-2 text-foreground/60">
-        Watch all of Fweezy's tech reviews across YouTube, TikTok, Instagram and Facebook
+        Watch all of Fweezytech's tech reviews across YouTube, TikTok, Instagram and Facebook
       </p>
       <VideoFeed videos={unifiedVideos} />
     </div>

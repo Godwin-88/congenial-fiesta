@@ -5,7 +5,6 @@ import type { Metadata } from 'next'
 import { getDeviceBySlug } from '@/lib/devices/queries'
 import type { Device } from '@/types/cms'
 import { ScoreBadge } from '@/components/devices/ScoreBadge'
-import { BenchmarkChart } from '@/components/devices/BenchmarkChart'
 import { BuyBox } from '@/components/devices/BuyBox'
 import { VerdictBlock } from '@/components/devices/VerdictBlock'
 import CompareRadarChart from '@/components/compare/CompareRadarChart'
@@ -38,10 +37,10 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
 
   return {
     title: `${deviceNames} | FweezyTech`,
-    description: `Compare ${deviceNames} — specs, Fweezy Score, benchmarks, and verdict.`,
+    description: `Compare ${deviceNames} — specs, Fweezy Score, and verdict.`,
     openGraph: {
       title: `${deviceNames} | FweezyTech`,
-      description: `Compare ${deviceNames} — specs, Fweezy Score, benchmarks, and verdict.`,
+      description: `Compare ${deviceNames} — specs, Fweezy Score, and verdict.`,
       images: [`/api/og/compare?devices=${sortedSlugs}`],
     },
   }
@@ -160,39 +159,82 @@ export default async function ComparePage({ searchParams }: PageProps) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           devices={(devices as any[]).map((d: any) => ({
             Design: {
-              Dimensions: { label: 'Dimensions', value: d.specs_design?.dimensions },
-              Weight: { label: 'Weight', value: d.specs_design?.weight },
-              Build: { label: 'Build', value: d.specs_design?.build },
-              'Water Resistance': { label: 'Water Resistance', value: d.specs_design?.waterResistance },
+              Dimensions: { label: 'Dimensions', value: d.specs_design?.['Dimensions'] },
+              Weight: { label: 'Weight', value: d.specs_design?.['Weight'] },
+              Front: { label: 'Front', value: d.specs_design?.['Front'] },
+              Back: { label: 'Back', value: d.specs_design?.['Back'] },
+              Side: { label: 'Side', value: d.specs_design?.['Side'] },
+              Ports: { label: 'Ports', value: d.specs_design?.['Ports'] },
+              Speakers: { label: 'Speakers', value: d.specs_design?.['Speakers'] },
+              'IP Rating': { label: 'IP Rating', value: d.specs_design?.['IP Rating'] },
             },
             Display: {
-              'Display Size': { label: 'Display Size', value: d.specs_display?.size },
-              'Display Type': { label: 'Display Type', value: d.specs_display?.type },
-              'Display Resolution': { label: 'Display Resolution', value: d.specs_display?.resolution },
-              'Refresh Rate': { label: 'Refresh Rate', value: d.specs_display?.refreshRate },
-              'Display Brightness': { label: 'Display Brightness', value: d.specs_display?.brightness },
+              'Display Size': { label: 'Display Size', value: d.specs_display?.['Size'] },
+              'Display Type': { label: 'Display Type', value: d.specs_display?.['Type'] },
+              'Display Resolution': { label: 'Display Resolution', value: d.specs_display?.['Resolution'] },
+              'Refresh Rate': { label: 'Refresh Rate', value: d.specs_display?.['Refresh Rate'] },
+              'Pixel Density': { label: 'Pixel Density', value: d.specs_display?.['Pixel Density'] },
+              'Screen-to-body': { label: 'Screen-to-body', value: d.specs_display?.['Screen-to-body ratio'] },
+              'Peak Brightness': { label: 'Peak Brightness', value: d.specs_display?.['Peak Brightness'] },
+              'HDR': { label: 'HDR', value: d.specs_display?.['HDR'] },
+              'Color depth': { label: 'Color depth', value: d.specs_display?.['Color depth'] },
             },
             Processor: {
-              Chipset: { label: 'Chipset', value: d.specs_processor?.chipset },
-              CPU: { label: 'CPU', value: d.specs_processor?.cpu },
-              GPU: { label: 'GPU', value: d.specs_processor?.gpu },
+              Chipset: { label: 'Chipset', value: d.specs_processor?.['Chipset'] },
+              CPU: { label: 'CPU', value: d.specs_processor?.['CPU'] },
+              GPU: { label: 'GPU', value: d.specs_processor?.['GPU'] },
+              'Node size': { label: 'Node size', value: d.specs_processor?.['Node size'] },
+              'NPU': { label: 'NPU', value: d.specs_processor?.['NPU'] },
             },
             Memory: {
-              RAM: { label: 'RAM', value: d.specs_memory?.ram },
-              Storage: { label: 'Storage', value: d.specs_memory?.storage },
+              RAM: { label: 'RAM', value: d.specs_memory?.['RAM'] },
+              'RAM type': { label: 'RAM type', value: d.specs_memory?.['RAM type'] },
+              Storage: { label: 'Storage', value: d.specs_memory?.['Storage'] },
+              'Storage type': { label: 'Storage type', value: d.specs_memory?.['Storage type'] },
+              Expandable: { label: 'Expandable', value: d.specs_memory?.['Expandable'] },
             },
             Camera: {
-              'Main Camera': { label: 'Main Camera', value: d.specs_camera?.mainCamera },
-              Ultrawide: { label: 'Ultrawide', value: d.specs_camera?.ultrawide },
-              Telephoto: { label: 'Telephoto', value: d.specs_camera?.telephoto },
+              'Rear Cameras': {
+                label: 'Rear Cameras',
+                value:
+                  ((d.specs_camera?.rear ?? []).map((c: any) => `${c.type}: ${c.sensorType}`).join(' · ') as string) ||
+                  undefined,
+              },
+              Selfie: { label: 'Selfie', value: d.specs_camera?.selfie?.sensorType },
+              'Rear Video': { label: 'Rear Video', value: d.specs_camera?.video?.rear },
+              'Front Video': { label: 'Front Video', value: d.specs_camera?.video?.front },
+              'Video Features': { label: 'Video Features', value: d.specs_camera?.video?.features },
+              Extras: { label: 'Extras', value: d.specs_camera?.extras },
             },
             Battery: {
-              'Battery Capacity': { label: 'Battery Capacity', value: d.specs_battery?.capacity },
-              'Wired Charging': { label: 'Wired Charging', value: d.specs_battery?.wiredCharging },
-              'Wireless Charging': { label: 'Wireless Charging', value: d.specs_battery?.wirelessCharging },
+              Capacity: { label: 'Capacity', value: d.specs_battery?.['Capacity'] },
+              'Battery type': { label: 'Battery type', value: d.specs_battery?.['Battery type'] },
+              'Wired Charging': { label: 'Wired Charging', value: d.specs_battery?.['Wired charging'] },
+              'Wireless Charging': { label: 'Wireless Charging', value: d.specs_battery?.['Wireless charging'] },
+              'Reverse Charging': { label: 'Reverse Charging', value: d.specs_battery?.['Reverse charging'] },
+              'Charging Protocols': { label: 'Charging Protocols', value: d.specs_battery?.['Charging protocols'] },
+            },
+            Connectivity: {
+              WiFi: { label: 'WiFi', value: d.specs_connectivity?.['WiFi'] },
+              Bluetooth: { label: 'Bluetooth', value: d.specs_connectivity?.['Bluetooth'] },
+              NFC: { label: 'NFC', value: d.specs_connectivity?.['NFC'] },
+              USB: { label: 'USB', value: d.specs_connectivity?.['USB'] },
+              Positioning: { label: 'Positioning', value: d.specs_connectivity?.['Positioning'] },
+              'IR Blaster': { label: 'IR Blaster', value: d.specs_connectivity?.['IR blaster'] },
+            },
+            Network: {
+              SIM: { label: 'SIM', value: d.specs_network?.['SIM'] },
+              Technology: { label: 'Technology', value: d.specs_network?.['Technology'] },
+              '2G bands': { label: '2G bands', value: d.specs_network?.['2G bands'] },
+              '3G bands': { label: '3G bands', value: d.specs_network?.['3G bands'] },
+              '4G bands': { label: '4G bands', value: d.specs_network?.['4G bands'] },
+              '5G bands': { label: '5G bands', value: d.specs_network?.['5G bands'] },
             },
             Software: {
-              OS: { label: 'OS', value: d.specs_software?.os },
+              OS: { label: 'OS', value: d.specs_software?.['OS'] },
+              'UI layer': { label: 'UI layer', value: d.specs_software?.['UI layer'] },
+              'Major OS upgrades': { label: 'Major OS upgrades', value: d.specs_software?.['Major OS upgrades'] },
+              'Security patches': { label: 'Security patches', value: d.specs_software?.['Security patches'] },
             },
           }))}
           deviceNames={devices.map((d: any) => d.name)}
@@ -200,26 +242,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
       </section>
 
       <section className="mt-12">
-        <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Performance Benchmarks</h2>
-        <div className={`grid gap-6 ${devices.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
-          {devices.map((device: any) => (
-            <div key={device.slug} className="rounded-xl border border-border bg-card p-6">
-              <h3 className="mb-4 font-heading text-lg font-bold text-foreground">{device.name}</h3>
-              <BenchmarkChart
-                benchmarks={{
-                  geekbenchSingle: device.benchmark_geekbench_single ?? null,
-                  geekbenchMulti: device.benchmark_geekbench_multi ?? null,
-                  antutu: device.benchmark_antutu ?? null,
-                  pcmark: device.benchmark_pcmark ?? null,
-                }}
-              />
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="mt-12">
-        <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Fweezy's Take</h2>
+        <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Fweezytech's Take</h2>
         <div className={`grid gap-6 ${devices.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
           {devices.map((device: any) => (
             <VerdictBlock

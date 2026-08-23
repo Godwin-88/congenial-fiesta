@@ -2,9 +2,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
+import type { Editor } from '@tiptap/react'
 import Link from 'next/link'
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
+import ArticleImagesPanel from '@/components/admin/ArticleImagesPanel'
+import { uploadImageFile } from '@/lib/client-upload'
 
 const TiptapEditor = dynamic(
   () => import('@/components/admin/TiptapEditor'),
@@ -62,8 +65,26 @@ export default function EditArticlePage() {
   const [seoOpen, setSeoOpen] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [editor, setEditor] = useState<Editor | null>(null)
+  const [featuredUploading, setFeaturedUploading] = useState(false)
+  const featuredFileRef = useRef<HTMLInputElement>(null)
   const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
   const loadedRef = useRef(false)
+
+  async function handleFeaturedUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setFeaturedUploading(true)
+    try {
+      const url = await uploadImageFile(file)
+      setFeaturedImage(url)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setFeaturedUploading(false)
+      if (featuredFileRef.current) featuredFileRef.current.value = ''
+    }
+  }
 
   // Fetch article
   useEffect(() => {
@@ -365,6 +386,7 @@ export default function EditArticlePage() {
           <TiptapEditor
             content={bodyJson}
             onChange={(json, html) => { setBodyJson(json); setBodyHtml(html) }}
+            onEditorReady={setEditor}
             placeholder="Start writing your article…"
             minHeight={500}
           />
@@ -439,10 +461,27 @@ export default function EditArticlePage() {
               type="url"
               value={featuredImage}
               onChange={e => setFeaturedImage(e.target.value)}
-              placeholder="Cloudflare Images URL…"
+              placeholder="Paste image URL…"
               className="w-full bg-muted text-foreground rounded px-3 py-2 text-sm
-                         border border-border focus:border-brand-primary focus:outline-none"
+                          border border-border focus:border-brand-primary focus:outline-none"
             />
+            <input
+              ref={featuredFileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+              className="hidden"
+              onChange={handleFeaturedUpload}
+            />
+            <button
+              type="button"
+              onClick={() => featuredFileRef.current?.click()}
+              disabled={featuredUploading}
+              className="mt-2 w-full py-1.5 px-3 rounded-lg border border-dashed border-border
+                         text-xs text-muted-foreground hover:text-foreground hover:border-brand-primary
+                         transition-colors disabled:opacity-40"
+            >
+              {featuredUploading ? 'Uploading…' : '⬆ Upload image'}
+            </button>
             {featuredImage && (
               <img
                 src={featuredImage}
@@ -452,6 +491,12 @@ export default function EditArticlePage() {
               />
             )}
           </div>
+
+          {/* Images library */}
+          <ArticleImagesPanel
+            onInsert={(url) => editor?.chain().focus().setImage({ src: url }).run()}
+            onSetFeatured={(url) => setFeaturedImage(url)}
+          />
 
           {/* Tags */}
           <div className="bg-card rounded-lg p-4 border border-border">

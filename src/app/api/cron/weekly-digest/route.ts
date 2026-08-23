@@ -1,20 +1,18 @@
 import { NextResponse } from 'next/server'
 import { verifySignatureAppRouter } from '@upstash/qstash/nextjs'
 import { createClient } from '@supabase/supabase-js'
-import { Resend } from 'resend'
+import { sendEmail, isEmailConfigured } from '@/lib/email'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const resendApiKey = process.env.RESEND_API_KEY
 const adminEmail = process.env.ADMIN_EMAIL
-const resendFrom = process.env.RESEND_FROM_EMAIL ?? 'hello@fweezytech.com'
+const mailFrom = process.env.MAIL_FROM ?? process.env.RESEND_FROM_EMAIL ?? 'business@fweezytech.com'
 const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:3000'
 
 if (!supabaseUrl) throw new Error('Missing env var NEXT_PUBLIC_SUPABASE_URL')
 if (!supabaseServiceKey) throw new Error('Missing env var SUPABASE_SERVICE_ROLE_KEY')
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
-const resend = resendApiKey ? new Resend(resendApiKey) : null
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
@@ -41,9 +39,9 @@ export const GET = verifySignatureAppRouter(async () => {
     return NextResponse.json({ error: 'ADMIN_EMAIL not configured' }, { status: 500 })
   }
 
-  if (!resend) {
-    console.error('RESEND_API_KEY not set — skipping weekly digest')
-    return NextResponse.json({ error: 'RESEND_API_KEY not configured' }, { status: 500 })
+  if (!isEmailConfigured()) {
+    console.error('SMTP not configured — skipping weekly digest')
+    return NextResponse.json({ error: 'SMTP not configured' }, { status: 500 })
   }
 
   const { weekStart, weekEnd } = getWeekBounds()
@@ -128,12 +126,16 @@ export const GET = verifySignatureAppRouter(async () => {
   `
 
   try {
-    await resend.emails.send({
-      from: resendFrom,
+    const result = await sendEmail({
+      from: mailFrom,
       to: adminEmail,
       subject: `FweezyTech Weekly Digest — Week of ${weekStartStr}`,
       html,
     })
+
+    if (!result.sent) {
+      return NextResponse.json({ error: 'Failed to send email' }, { status: 500 })
+    }
 
     return NextResponse.json({ success: true, sentTo: adminEmail })
   } catch (error) {

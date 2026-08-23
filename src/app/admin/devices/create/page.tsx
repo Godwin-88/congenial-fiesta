@@ -5,6 +5,10 @@ import dynamic from 'next/dynamic'
 import { ChevronDown, ChevronUp, Eye, Save, Upload } from 'lucide-react'
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
+import BrandSelect from '@/components/admin/BrandSelect'
+import { CameraSpecSection } from '@/components/admin/CameraSpecSection'
+import { CameraSpec, emptyCamera, cameraHasContent } from '@/lib/camera-spec'
+import { MAJOR_CATEGORIES, type MajorCategory, type DeviceType } from '@/types/cms'
 
 const TiptapEditor = dynamic(
   () => import('@/components/admin/TiptapEditor'),
@@ -21,13 +25,22 @@ function slugify(text: string): string {
     .trim()
 }
 
-const CATEGORIES = [
-  { value: '', label: 'Select category…' },
+const PRICE_TIERS = [
+  { value: '', label: 'Select price tier…' },
   { value: 'flagship', label: 'Flagship' },
   { value: 'mid-range', label: 'Mid-range' },
   { value: 'budget', label: 'Budget' },
   { value: 'ultra-premium', label: 'Ultra-premium' },
 ]
+
+// Which spec sections to show per major category (identity-only save means
+// these are all optional). Empty major = show everything.
+const SPEC_SECTIONS_BY_MAJOR: Record<string, string[]> = {
+  phones: ['design', 'display', 'processor', 'memory', 'camera', 'battery', 'connectivity', 'network', 'software'],
+  televisions: ['design', 'display', 'processor', 'memory', 'connectivity', 'software'],
+  sound: ['design', 'battery', 'connectivity', 'software'],
+  macs: ['design', 'display', 'processor', 'memory', 'battery', 'connectivity', 'software'],
+}
 
 const RETAILERS = [
   { value: '', label: 'Select retailer…' },
@@ -68,6 +81,9 @@ export default function CreateDevicePage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [brands, setBrands] = useState<Array<{ id: number; name: string; slug: string }>>([])
   const [loadingBrands, setLoadingBrands] = useState(true)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadingIndex, setUploadingIndex] = useState<number | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
 
   // Identity
@@ -76,11 +92,16 @@ export default function CreateDevicePage() {
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
   const [brandId, setBrandId] = useState<number | null>(null)
   const [releaseYear, setReleaseYear] = useState('')
-  const [category, setCategory] = useState('')
   const [priceKes, setPriceKes] = useState('')
   const [priceUsd, setPriceUsd] = useState('')
   const [tagline, setTagline] = useState('')
   const [status, setStatus] = useState<'draft' | 'published'>('draft')
+
+  // Taxonomy (replaces the old single price-tier "category")
+  const [priceTier, setPriceTier] = useState('')
+  const [majorCategory, setMajorCategory] = useState<MajorCategory | ''>('')
+  const [deviceTypeId, setDeviceTypeId] = useState<number | null>(null)
+  const [deviceTypes, setDeviceTypes] = useState<DeviceType[]>([])
 
   // Images
   const [images, setImages] = useState<Array<{ url: string; alt: string; isPrimary: boolean }>>([])
@@ -103,16 +124,11 @@ export default function CreateDevicePage() {
   const [specsDisplay, setSpecsDisplay] = useState<Record<string, string>>({})
   const [specsProcessor, setSpecsProcessor] = useState<Record<string, string>>({})
   const [specsMemory, setSpecsMemory] = useState<Record<string, string>>({})
-  const [specsCamera, setSpecsCamera] = useState<Record<string, string>>({})
+  const [specsCamera, setSpecsCamera] = useState<CameraSpec>(emptyCamera())
   const [specsBattery, setSpecsBattery] = useState<Record<string, string>>({})
   const [specsConnectivity, setSpecsConnectivity] = useState<Record<string, string>>({})
   const [specsSoftware, setSpecsSoftware] = useState<Record<string, string>>({})
-
-  // Benchmarks
-  const [benchGbSingle, setBenchGbSingle] = useState('')
-  const [benchGbMulti, setBenchGbMulti] = useState('')
-  const [benchAntutu, setBenchAntutu] = useState('')
-  const [benchPcmark, setBenchPcmark] = useState('')
+  const [specsNetwork, setSpecsNetwork] = useState<Record<string, string>>({})
 
   // Buy links
   const [buyLinks, setBuyLinks] = useState<Array<{ retailer: string; url: string; price: string; priceDate: string }>>([])
@@ -127,24 +143,25 @@ export default function CreateDevicePage() {
 
   // Track dirty state when any form field changes
   useEffect(() => {
-    if (name || slug || tagline || priceKes || priceUsd || releaseYear || category || status ||
+    if (name || slug || tagline || priceKes || priceUsd || releaseYear || priceTier || majorCategory || deviceTypeId || status ||
         scoreDisplay || scorePerformance || scoreCamera || scoreBattery || scoreValue ||
-        verdictBottomLine || verdictFull || benchGbSingle || benchGbMulti || benchAntutu || benchPcmark ||
+        verdictBottomLine || verdictFull ||
         relatedVideoId || relatedTiktokUrl || seoTitle || seoDescription ||
         images.length > 0 || verdictPros.length > 0 || verdictCons.length > 0 || buyLinks.length > 0 ||
         Object.keys(specsDesign).length > 0 || Object.keys(specsDisplay).length > 0 ||
         Object.keys(specsProcessor).length > 0 || Object.keys(specsMemory).length > 0 ||
-        Object.keys(specsCamera).length > 0 || Object.keys(specsBattery).length > 0 ||
-        Object.keys(specsConnectivity).length > 0 || Object.keys(specsSoftware).length > 0) {
+        cameraHasContent(specsCamera) || Object.keys(specsBattery).length > 0 ||
+        Object.keys(specsConnectivity).length > 0 || Object.keys(specsSoftware).length > 0 ||
+        Object.keys(specsNetwork).length > 0) {
       setDirty(true)
     }
-  }, [name, slug, tagline, priceKes, priceUsd, releaseYear, category, status,
+  }, [name, slug, tagline, priceKes, priceUsd, releaseYear, priceTier, majorCategory, deviceTypeId, status,
       scoreDisplay, scorePerformance, scoreCamera, scoreBattery, scoreValue,
-      verdictBottomLine, verdictFull, benchGbSingle, benchGbMulti, benchAntutu, benchPcmark,
+      verdictBottomLine, verdictFull,
       relatedVideoId, relatedTiktokUrl, seoTitle, seoDescription,
       images, verdictPros, verdictCons, buyLinks,
       specsDesign, specsDisplay, specsProcessor, specsMemory,
-      specsCamera, specsBattery, specsConnectivity, specsSoftware])
+      specsCamera, specsBattery, specsConnectivity, specsSoftware, specsNetwork])
 
   useEffect(() => {
     if (!slugManuallyEdited && name) {
@@ -166,7 +183,19 @@ export default function CreateDevicePage() {
         setLoadingBrands(false)
       }
     }
+    async function loadDeviceTypes() {
+      try {
+        const res = await fetch('/api/admin/device-types')
+        if (res.ok) {
+          const data = await res.json()
+          setDeviceTypes(data.data ?? [])
+        }
+      } catch (e) {
+        console.error('Failed to fetch device types:', e)
+      }
+    }
     loadBrands()
+    loadDeviceTypes()
   }, [])
 
   // Auto-dismiss toast
@@ -199,6 +228,34 @@ export default function CreateDevicePage() {
     setter(prev => prev.filter((_, i) => i !== index))
   }
 
+  const triggerImageUpload = (index: number) => {
+    setUploadingIndex(index)
+    fileInputRef.current?.click()
+  }
+
+  const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || uploadingIndex === null) return
+    setUploadError(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('bucket', 'device-images')
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) {
+        setUploadError(data.error ?? 'Upload failed')
+        return
+      }
+      setImages(prev => prev.map((item, idx) => idx === uploadingIndex ? { ...item, url: data.url } : item))
+    } catch {
+      setUploadError('Upload failed')
+    } finally {
+      setUploadingIndex(null)
+    }
+  }
+
   const handleSave = async (publish: boolean) => {
     if (!name.trim() || !slug.trim()) {
       setToast({ message: 'Name and slug are required', type: 'error' })
@@ -212,7 +269,9 @@ export default function CreateDevicePage() {
         slug: slug.trim(),
         brand_id: brandId,
         release_year: releaseYear ? parseInt(releaseYear) : null,
-        category: category || null,
+        price_tier: priceTier || null,
+        major_category: majorCategory || null,
+        device_type_id: deviceTypeId || null,
         price_kes: priceKes ? parseInt(priceKes) : null,
         price_usd: priceUsd ? parseInt(priceUsd) : null,
         tagline: tagline.trim() || null,
@@ -235,10 +294,7 @@ export default function CreateDevicePage() {
         specs_battery: specsBattery,
         specs_connectivity: specsConnectivity,
         specs_software: specsSoftware,
-        benchmark_geekbench_single: benchGbSingle ? parseInt(benchGbSingle) : null,
-        benchmark_geekbench_multi: benchGbMulti ? parseInt(benchGbMulti) : null,
-        benchmark_antutu: benchAntutu ? parseInt(benchAntutu) : null,
-        benchmark_pcmark: benchPcmark ? parseInt(benchPcmark) : null,
+        specs_network: specsNetwork,
         buy_links: buyLinks.filter(link => link.url.trim()),
         related_video_id: relatedVideoId.trim() || null,
         related_tiktok_url: relatedTiktokUrl.trim() || null,
@@ -319,11 +375,7 @@ export default function CreateDevicePage() {
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Brand</label>
-                <select value={brandId ?? ''} onChange={e => setBrandId(e.target.value ? parseInt(e.target.value) : null)}
-                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none">
-                  <option value="">Select brand…</option>
-                  {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
+                <BrandSelect brands={brands} value={brandId} onChange={setBrandId} />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Release Year</label>
@@ -331,10 +383,31 @@ export default function CreateDevicePage() {
                   className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Category</label>
-                <select value={category} onChange={e => setCategory(e.target.value)}
+                <label className="block text-xs text-gray-500 mb-1">Major Category</label>
+                <select value={majorCategory} onChange={e => {
+                  setMajorCategory(e.target.value as MajorCategory | '')
+                  setDeviceTypeId(null)
+                }}
                   className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none">
-                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  <option value="">Select major…</option>
+                  {MAJOR_CATEGORIES.map(m => <option key={m.slug} value={m.slug}>{m.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Device Type</label>
+                <select value={deviceTypeId ?? ''} onChange={e => setDeviceTypeId(e.target.value ? parseInt(e.target.value) : null)}
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none">
+                  <option value="">Select type…</option>
+                  {deviceTypes.filter(t => !majorCategory || t.major_category === majorCategory).map(t => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Price Tier</label>
+                <select value={priceTier} onChange={e => setPriceTier(e.target.value)}
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none">
+                  {PRICE_TIERS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
               <div>
@@ -374,6 +447,11 @@ export default function CreateDevicePage() {
                     className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
                 </div>
                 <div className="flex items-end gap-2">
+                  <button type="button" onClick={() => triggerImageUpload(i)}
+                    disabled={uploadingIndex === i}
+                    className="text-xs text-brand-primary hover:text-blue-400 disabled:opacity-50">
+                    {uploadingIndex === i ? 'Uploading…' : 'Upload'}
+                  </button>
                   <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
                     <input type="checkbox" checked={img.isPrimary} onChange={e => {
                       setImages(prev => prev.map((item, idx) => idx === i ? { ...item, isPrimary: e.target.checked } : item))
@@ -387,6 +465,10 @@ export default function CreateDevicePage() {
             ))}
             <button type="button" onClick={() => setImages(prev => [...prev, { url: '', alt: '', isPrimary: false }])}
               className="text-sm text-brand-primary hover:text-blue-400">+ Add Image</button>
+            <p className="text-xs text-gray-500 mt-2">Paste an image URL above, or click &ldquo;Upload&rdquo; to upload a file.</p>
+            {uploadError && <p className="text-xs text-red-400 mt-2">{uploadError}</p>}
+            <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+              className="hidden" onChange={handleImageFile} />
           </CollapsibleSection>
 
           {/* Fweezy Score */}
@@ -451,47 +533,41 @@ export default function CreateDevicePage() {
             </div>
           </CollapsibleSection>
 
-          {/* Specs sections */}
-          {[
-            { title: 'Specs: Design', data: specsDesign, setter: setSpecsDesign, fields: ['Dimensions', 'Weight', 'Build', 'Colours', 'Water Resistance'] },
-            { title: 'Specs: Display', data: specsDisplay, setter: setSpecsDisplay, fields: ['Size', 'Type', 'Resolution', 'Refresh Rate', 'Brightness', 'Protection'] },
-            { title: 'Specs: Processor', data: specsProcessor, setter: setSpecsProcessor, fields: ['Chipset', 'CPU', 'GPU', 'Process node'] },
-            { title: 'Specs: Memory', data: specsMemory, setter: setSpecsMemory, fields: ['RAM', 'Storage', 'Expandable'] },
-            { title: 'Specs: Camera', data: specsCamera, setter: setSpecsCamera, fields: ['Main', 'Ultrawide', 'Telephoto', 'Video (main)', 'Front', 'Video (front)'] },
-            { title: 'Specs: Battery', data: specsBattery, setter: setSpecsBattery, fields: ['Capacity', 'Wired charging', 'Wireless charging', 'Reverse charging'] },
-            { title: 'Specs: Connectivity', data: specsConnectivity, setter: setSpecsConnectivity, fields: ['Network', 'WiFi', 'Bluetooth', 'NFC', 'USB', 'Satellite'] },
-            { title: 'Specs: Software', data: specsSoftware, setter: setSpecsSoftware, fields: ['OS', 'UI layer', 'Update policy'] },
-          ].map(section => (
-            <CollapsibleSection key={section.title} title={section.title}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {section.fields.map(field => (
-                  <div key={field}>
-                    <label className="block text-xs text-gray-500 mb-1">{field}</label>
-                    <input type="text" value={section.data[field] ?? ''} onChange={e => section.setter(prev => ({ ...prev, [field]: e.target.value }))} placeholder={field}
-                      className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
-                  </div>
-                ))}
-              </div>
-            </CollapsibleSection>
-          ))}
-
-          {/* Benchmarks */}
-          <CollapsibleSection title="Benchmarks">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { label: 'Geekbench Single', value: benchGbSingle, setter: setBenchGbSingle },
-                { label: 'Geekbench Multi', value: benchGbMulti, setter: setBenchGbMulti },
-                { label: 'AnTuTu', value: benchAntutu, setter: setBenchAntutu },
-                { label: 'PCMark', value: benchPcmark, setter: setBenchPcmark },
-              ].map(field => (
-                <div key={field.label}>
-                  <label className="block text-xs text-gray-500 mb-1">{field.label}</label>
-                  <input type="number" value={field.value} onChange={e => field.setter(e.target.value)} placeholder="0"
-                    className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
+          {/* Specs sections (conditional on major category) */}
+          {([
+            { key: 'design', title: 'Specs: Design', data: specsDesign, setter: setSpecsDesign, fields: ['Dimensions', 'Weight', 'Front', 'Back', 'Side', 'Ports', 'Speakers', 'Colours', 'IP Rating'] },
+            { key: 'display', title: 'Specs: Display', data: specsDisplay, setter: setSpecsDisplay, fields: ['Size', 'Type', 'Resolution', 'Refresh Rate', 'Pixel Density', 'Screen-to-body ratio', 'Peak Brightness', 'HDR', 'Color depth', 'Protection'] },
+            { key: 'processor', title: 'Specs: Processor', data: specsProcessor, setter: setSpecsProcessor, fields: ['Chipset', 'CPU', 'GPU', 'Node size', 'NPU'] },
+            { key: 'memory', title: 'Specs: Memory', data: specsMemory, setter: setSpecsMemory, fields: ['RAM', 'RAM type', 'Storage', 'Storage type', 'Expandable'] },
+            { key: 'camera', title: 'Specs: Camera', custom: true },
+            { key: 'battery', title: 'Specs: Battery', data: specsBattery, setter: setSpecsBattery, fields: ['Capacity', 'Battery type', 'Wired charging', 'Wireless charging', 'Reverse charging', 'Charging protocols'] },
+            { key: 'connectivity', title: 'Specs: Connectivity', data: specsConnectivity, setter: setSpecsConnectivity, fields: ['WiFi', 'Bluetooth', 'NFC', 'USB', 'Positioning', 'IR blaster'] },
+            { key: 'network', title: 'Specs: Network', data: specsNetwork, setter: setSpecsNetwork, fields: ['SIM', 'Technology', '2G bands', '3G bands', '4G bands', '5G bands'] },
+            { key: 'software', title: 'Specs: Software', data: specsSoftware, setter: setSpecsSoftware, fields: ['OS', 'UI layer', 'Major OS upgrades', 'Security patches'] },
+          ] as any[])
+            .filter(section => !majorCategory || (SPEC_SECTIONS_BY_MAJOR[majorCategory] ?? []).includes(section.key))
+            .map(section => {
+            if (section.custom) {
+              return (
+                <CollapsibleSection key={section.title} title={section.title}>
+                  <CameraSpecSection value={specsCamera} onChange={setSpecsCamera} />
+                </CollapsibleSection>
+              )
+            }
+            return (
+              <CollapsibleSection key={section.title} title={section.title}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {section.fields.map((field: string) => (
+                    <div key={field}>
+                      <label className="block text-xs text-gray-500 mb-1">{field}</label>
+                      <input type="text" value={section.data[field] ?? ''} onChange={e => section.setter((prev: Record<string, string>) => ({ ...prev, [field]: e.target.value }))} placeholder={field}
+                        className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </CollapsibleSection>
+              </CollapsibleSection>
+            )
+          })}
 
           {/* Buy Links */}
           <CollapsibleSection title="Buy Links">
@@ -574,14 +650,10 @@ export default function CreateDevicePage() {
               </select>
             </div>
 
-            <div className="bg-card rounded-lg border border-border p-4">
-              <h3 className="text-sm font-medium text-white mb-3">Brand</h3>
-              <select value={brandId ?? ''} onChange={e => setBrandId(e.target.value ? parseInt(e.target.value) : null)} disabled={loadingBrands}
-                className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none disabled:opacity-40">
-                <option value="">Select brand…</option>
-                {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </div>
+              <div className="bg-card rounded-lg border border-border p-4">
+                <h3 className="text-sm font-medium text-white mb-3">Brand</h3>
+                <BrandSelect brands={brands} value={brandId} onChange={setBrandId} disabled={loadingBrands} />
+              </div>
 
             <div className="bg-card rounded-lg border border-border p-4 text-center">
               <h3 className="text-sm font-medium text-white mb-2">Overall Score</h3>

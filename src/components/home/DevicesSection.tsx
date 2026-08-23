@@ -20,7 +20,7 @@ export default function DevicesSection({ devices }: Props) {
         <SectionHeading
           label="REVIEWS"
           title="Top-Rated Devices"
-          tagline="Every score is earned. Every verdict is Fweezy's honest opinion."
+          tagline="Every score is earned. Every verdict is Fweezytech's honest opinion."
           viewAllHref="/devices"
         />
 

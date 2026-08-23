@@ -10,7 +10,7 @@ export const TEST_PROMPTS = [
   "Where can I compare phones?",
   "Show me upcoming reviews",
   "How do I contact Fweezy for a sponsorship?",
-  "Where can I watch Fweezy's videos?",
+  "Where can I watch Fweezytech's videos?",
   "I want to read articles about buying guides",
 
   // Edge cases

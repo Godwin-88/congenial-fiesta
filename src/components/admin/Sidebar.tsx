@@ -36,6 +36,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: 'Articles', icon: <FileText size={18} />, href: '/admin/articles' },
       { label: 'Devices', icon: <Smartphone size={18} />, href: '/admin/devices' },
+      { label: 'Device Categories', icon: <Tag size={18} />, href: '/admin/device-types' },
       { label: 'Brands', icon: <Tag size={18} />, href: '/admin/brands' },
       { label: 'Videos', icon: <Video size={18} />, href: '/admin/videos' },
       { label: 'Coming Soon', icon: <Clock size={18} />, href: '/admin/coming-soon' },

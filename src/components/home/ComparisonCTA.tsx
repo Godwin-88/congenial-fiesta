@@ -63,7 +63,7 @@ export default function ComparisonCTA({ devices }: Props) {
           </motion.div>
 
           <h2 className="text-2xl md:text-3xl font-bold text-foreground font-heading mb-3">
-            Can't decide? Let Fweezy's data decide for you.
+            Can't decide? Let Fweezytech's data decide for you.
           </h2>
           <p className="text-muted-foreground max-w-lg mx-auto mb-8">
             Compare specs, Fweezy Scores, benchmarks, and buy prices side by side. Up to 3 devices at once.

@@ -62,6 +62,15 @@ const withPWAConfig = withPWA({
 })
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      {
+        source: '/',
+        destination: '/videos',
+        permanent: false,
+      },
+    ]
+  },
   turbopack: {
     root: process.cwd(),
   },

@@ -15,7 +15,7 @@ export default function Footer() {
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row md:justify-between gap-8">
           <div className="max-w-sm">
-            <Link href="/" className="block">
+            <Link href="/videos" className="block">
               <img
                 src="/images/logo.jpeg"
                 alt="FweezyTech"
