@@ -14,14 +14,14 @@ export async function indexDevice(device: Device): Promise<void> {
     url: `/devices/${brandSlug}/${device.slug}`,
     imageUrl: (device.images?.[0] as { url?: string })?.url ?? '',
     brand,
-    category: device.price_tier ?? undefined,
+    category: device.device_type?.label ?? device.major_category ?? undefined,
     score: device.scores_overall ?? undefined,
     publishedAt: device.created_at,
   }
   await indexDocument(doc)
   await upsertVector({
     id: `device:${device.slug}`,
-    text: `${device.name} ${brand} ${device.tagline ?? ''} ${(device.specs_processor as Record<string, unknown>)?.chipset ?? ''} ${device.price_tier ?? ''}`,
+    text: `${device.name} ${brand} ${device.device_type ?? ''} ${device.major_category ?? ''} ${device.tagline ?? ''} ${(device.specs_processor as Record<string, unknown>)?.chipset ?? ''} ${device.price_tier ?? ''}`,
     metadata: { url: doc.url, type: 'device', title: doc.title, imageUrl: doc.imageUrl },
   })
 }

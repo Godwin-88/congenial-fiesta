@@ -64,13 +64,13 @@ export default async function ArticlesPage({
           {articles.map((article) => (
             <ArticleCard
               key={article.id}
-              slug={(article as unknown as { slug: string }).slug}
+              slug={article.slug}
               title={article.title}
-              excerpt={(article as unknown as { excerpt?: string | null }).excerpt}
-              featuredImage={(article as unknown as { featuredImage?: string | null }).featuredImage}
-              category={(article as unknown as { category?: string | null }).category}
-              readingTimeMinutes={(article as unknown as { readingTimeMinutes?: number | null }).readingTimeMinutes}
-              publishedAt={(article as unknown as { publishedAt?: string | null }).publishedAt}
+              excerpt={article.excerpt}
+              featuredImage={article.featuredImage}
+              category={article.category}
+              readingTimeMinutes={article.readingTimeMinutes}
+              publishedAt={article.publishedAt}
             />
           ))}
         </div>

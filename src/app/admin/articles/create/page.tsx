@@ -168,10 +168,8 @@ export default function CreateArticlePage() {
 
       if (data.data?.id && !articleId) {
         setArticleId(data.data.id)
-        // Update URL without page reload
-        window.history.replaceState(
-          null, '', `/admin/articles/${data.data.id}/edit`
-        )
+        // Move to the real edit route so the saved article lives on a proper page
+        router.replace(`/admin/articles/${data.data.id}/edit`)
       }
 
       lastSavedContent.current = JSON.stringify({ title, bodyHtml, excerpt })
@@ -432,10 +430,11 @@ export default function CreateArticlePage() {
           </div>
 
           {/* Images library */}
-          <ArticleImagesPanel
-            onInsert={(url) => editor?.chain().focus().setImage({ src: url }).run()}
-            onSetFeatured={(url) => setFeaturedImage(url)}
-          />
+            <ArticleImagesPanel
+              onInsert={(url) => editor?.chain().focus().setImage({ src: url }).run()}
+              onSetFeatured={(url) => setFeaturedImage(url)}
+              featuredImage={featuredImage}
+            />
 
           {/* Tags */}
           <div className="bg-card rounded-lg p-4 border border-border">

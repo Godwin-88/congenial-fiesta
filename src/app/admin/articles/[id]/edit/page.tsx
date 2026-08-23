@@ -496,6 +496,7 @@ export default function EditArticlePage() {
           <ArticleImagesPanel
             onInsert={(url) => editor?.chain().focus().setImage({ src: url }).run()}
             onSetFeatured={(url) => setFeaturedImage(url)}
+            featuredImage={featuredImage}
           />
 
           {/* Tags */}

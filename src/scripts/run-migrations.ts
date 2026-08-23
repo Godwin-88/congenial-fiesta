@@ -36,6 +36,10 @@ const migrations = [
   '013_add_package_interest.sql',
   '014_fix_column_and_grants.sql',
   '015_add_device_images.sql',
+  '016_align_devices_schema.sql',
+  '017_device_images_bucket.sql',
+  '018_network_and_drop_benchmarks.sql',
+  '019_device_categories.sql',
 ]
 
 async function runMigrations() {

@@ -28,9 +28,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    const [{ count: draftCount }, { count: publishedCount }] = await Promise.all([
+      supabase.from('articles').select('*', { count: 'exact', head: true }).eq('status', 'draft'),
+      supabase.from('articles').select('*', { count: 'exact', head: true }).eq('status', 'published'),
+    ])
+
     return NextResponse.json({
       data: data ?? [],
       total: count ?? 0,
+      counts: { draft: draftCount ?? 0, published: publishedCount ?? 0 },
       page,
       limit,
     })

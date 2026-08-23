@@ -8,9 +8,11 @@ type UploadedImage = { url: string }
 export default function ArticleImagesPanel({
   onInsert,
   onSetFeatured,
+  featuredImage,
 }: {
   onInsert: (url: string) => void
   onSetFeatured: (url: string) => void
+  featuredImage?: string
 }) {
   const [images, setImages] = useState<UploadedImage[]>([])
   const [uploading, setUploading] = useState(false)
@@ -24,9 +26,16 @@ export default function ArticleImagesPanel({
     setUploading(true)
     setError(null)
     try {
+      const uploaded: string[] = []
       for (const file of files) {
         const url = await uploadImageFile(file)
+        uploaded.push(url)
         setImages(prev => [...prev, { url }])
+      }
+      // Auto-apply the first uploaded image as the featured/banner image
+      // when no featured image has been chosen yet.
+      if (!featuredImage && uploaded.length) {
+        onSetFeatured(uploaded[0])
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
@@ -43,7 +52,8 @@ export default function ArticleImagesPanel({
       </label>
       <p className="text-xs text-muted-foreground/60">
         Upload as many images as you like, then insert them between paragraphs.
-        Click into the editor where you want an image, then press Insert.
+        Click into the editor where you want an image, then press Insert. The
+        first image you upload is set as the featured (banner) image automatically.
       </p>
 
       <input
@@ -69,34 +79,42 @@ export default function ArticleImagesPanel({
 
       {images.length > 0 && (
         <div className="grid grid-cols-2 gap-2">
-          {images.map((img, i) => (
-            <div
-              key={i}
-              className="relative group rounded overflow-hidden border border-border"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={img.url} alt="" className="w-full h-20 object-cover" />
+          {images.map((img, i) => {
+            const isFeatured = featuredImage === img.url
+            return (
               <div
-                className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100
-                           transition-opacity flex flex-col items-center justify-center gap-1 p-1"
+                key={i}
+                className={`relative group rounded overflow-hidden border ${isFeatured ? 'border-brand-primary ring-1 ring-brand-primary' : 'border-border'}`}
               >
-                <button
-                  type="button"
-                  onClick={() => onInsert(img.url)}
-                  className="text-xs bg-brand-primary text-white px-2 py-1 rounded hover:bg-brand-primary/80"
+                {isFeatured && (
+                  <span className="absolute top-1 left-1 z-10 text-[10px] px-1.5 py-0.5 rounded bg-brand-primary text-white">
+                    Featured
+                  </span>
+                )}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={img.url} alt="" className="w-full h-20 object-cover" />
+                <div
+                  className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100
+                             transition-opacity flex flex-col items-center justify-center gap-1 p-1"
                 >
-                  Insert
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onSetFeatured(img.url)}
-                  className="text-xs bg-muted text-foreground px-2 py-1 rounded hover:bg-muted/80"
-                >
-                  Featured
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => onInsert(img.url)}
+                    className="text-xs bg-brand-primary text-white px-2 py-1 rounded hover:bg-brand-primary/80"
+                  >
+                    Insert
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onSetFeatured(img.url)}
+                    className="text-xs bg-muted text-foreground px-2 py-1 rounded hover:bg-muted/80"
+                  >
+                    Featured
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

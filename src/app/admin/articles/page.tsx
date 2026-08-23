@@ -23,6 +23,7 @@ export default function ArticleListPage() {
 
   const [articles, setArticles] = useState<Article[]>([])
   const [total, setTotal] = useState(0)
+  const [counts, setCounts] = useState<{ draft: number; published: number }>({ draft: 0, published: 0 })
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [deleteId, setDeleteId] = useState<number | null>(null)
@@ -46,6 +47,7 @@ export default function ArticleListPage() {
         const data = await res.json()
         setArticles(data.data ?? [])
         setTotal(data.total ?? 0)
+        if (data.counts) setCounts(data.counts)
       }
     } catch (e) {
       console.error('Failed to fetch articles:', e)
@@ -101,9 +103,9 @@ export default function ArticleListPage() {
     : articles
 
   const tabs = [
-    { label: 'All', value: '' },
-    { label: 'Draft', value: 'draft' },
-    { label: 'Published', value: 'published' },
+    { label: 'All', value: '', count: counts.draft + counts.published },
+    { label: 'Draft', value: 'draft', count: counts.draft },
+    { label: 'Published', value: 'published', count: counts.published },
   ]
 
   return (
@@ -146,6 +148,9 @@ export default function ArticleListPage() {
               }`}
             >
               {tab.label}
+              {typeof tab.count === 'number' && (
+                <span className="ml-1.5 text-xs text-muted-foreground/70">{tab.count}</span>
+              )}
             </Link>
           )
         })}
