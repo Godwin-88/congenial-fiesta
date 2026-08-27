@@ -82,6 +82,7 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: '*.ytimg.com' },
       { protocol: 'https', hostname: 'supabase.co' },
       { protocol: 'https', hostname: '*.supabase.co' },
+      { protocol: 'https', hostname: 'api.mobileapi.dev' },
     ],
   },
 }

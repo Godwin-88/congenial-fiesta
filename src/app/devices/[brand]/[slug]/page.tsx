@@ -6,7 +6,7 @@ import type { Metadata } from 'next'
 import { getAllDevicePaths, getDevice } from '@/lib/devices/queries'
 import { ScoreBadge } from '@/components/devices/ScoreBadge'
 import { RadarChart } from '@/components/devices/RadarChart'
-import { SpecTable } from '@/components/devices/SpecTable'
+import { Smartphone, Cpu, Camera, BatteryFull, MemoryStick, ShieldCheck } from 'lucide-react'
 import { BuyBox } from '@/components/devices/BuyBox'
 import { VerdictBlock } from '@/components/devices/VerdictBlock'
 import RatingsSection from '@/components/community/RatingsSection'
@@ -247,25 +247,27 @@ export default async function DeviceDetailPage({
         </div>
       </div>
 
-      {/* Quick specs strip */}
-      <div className="mt-12 flex flex-wrap gap-4 rounded-xl border border-border bg-card p-4">
+      {/* Quick specs */}
+      <div className="mt-12 rounded-xl border border-border bg-card p-4">
         {[
-          { icon: '📱', label: 'Display', value: dSpecsDisplay?.['Size'] },
-          { icon: '⚡', label: 'Chipset', value: dSpecsProcessor?.['Chipset'] },
-          { icon: '📷', label: 'Camera', value: dCamMain },
-          { icon: '🔋', label: 'Battery', value: dSpecsBattery?.['Capacity'] },
-          { icon: '💾', label: 'RAM', value: dSpecsMemory?.['RAM']?.toString().split(' ')[0] },
-           { icon: '🛡️', label: 'IP Rating', value: dSpecsDesign?.['IP Rating'] },
+          { Icon: Smartphone, label: 'Display', value: dSpecsDisplay?.['Size'] },
+          { Icon: Cpu, label: 'Chipset', value: dSpecsProcessor?.['Chipset'] },
+          { Icon: Camera, label: 'Camera', value: dCamMain },
+          { Icon: BatteryFull, label: 'Battery', value: dSpecsBattery?.['Capacity'] },
+          { Icon: MemoryStick, label: 'RAM', value: dSpecsMemory?.['RAM']?.toString().split(' ')[0] },
+          { Icon: ShieldCheck, label: 'IP Rating', value: dSpecsDesign?.['IP Rating'] },
         ]
           .filter((s) => s.value)
           .map((spec) => (
             <div
               key={spec.label}
-              className="flex min-w-[100px] flex-col items-center rounded-lg bg-muted/50 p-3 text-center"
+              className="flex items-center gap-3 border-b border-border py-2.5 last:border-0"
             >
-              <span className="text-lg">{spec.icon}</span>
-              <span className="mt-1 text-xs text-muted-foreground">{spec.label}</span>
-              <span className="text-sm font-semibold text-foreground">{String(spec.value)}</span>
+              <spec.Icon className="h-5 w-5 shrink-0 text-brand-primary" aria-hidden="true" />
+              <span className="text-sm text-muted-foreground">{spec.label}</span>
+              <span className="ml-auto text-sm font-semibold text-foreground">
+                {String(spec.value)}
+              </span>
             </div>
           ))}
       </div>
@@ -283,14 +285,6 @@ export default async function DeviceDetailPage({
           </div>
         </section>
       )}
-
-      {/* Spec Table */}
-      <section className="mt-12">
-        <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">
-          Full Specifications
-        </h2>
-        <SpecTable device={d} />
-      </section>
 
       {/* Video Review */}
       {(dRelatedVideoId || dRelatedTiktokUrl) && (

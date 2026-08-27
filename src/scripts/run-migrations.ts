@@ -40,6 +40,11 @@ const migrations = [
   '017_device_images_bucket.sql',
   '018_network_and_drop_benchmarks.sql',
   '019_device_categories.sql',
+  '020_device_types_grants.sql',
+  '021_rename_brands_logo.sql',
+  '022_price_tier_optional.sql',
+  '023_fix_search_vector_trigger.sql',
+  '024_release_year_optional.sql',
 ]
 
 async function runMigrations() {
