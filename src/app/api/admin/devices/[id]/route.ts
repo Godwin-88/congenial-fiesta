@@ -142,6 +142,7 @@ export async function PATCH(
     if (body.price_usd !== undefined) payload.price_usd = body.price_usd ?? null
     if (body.tagline !== undefined) payload.tagline = body.tagline?.trim() ?? null
     if (body.status !== undefined) payload.status = body.status
+    if (body.availability !== undefined) payload.availability = body.availability ?? null
     if (body.score_display !== undefined) payload.score_display = body.score_display ?? null
     if (body.score_performance !== undefined) payload.score_performance = body.score_performance ?? null
     if (body.score_camera !== undefined) payload.score_camera = body.score_camera ?? null

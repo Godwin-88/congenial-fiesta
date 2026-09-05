@@ -4,13 +4,20 @@ import Script from 'next/script'
 import { Suspense } from 'react'
 import { ScoreBadge } from '@/components/devices/ScoreBadge'
 import { RadarChart } from '@/components/devices/RadarChart'
-import { Smartphone, Cpu, Camera, BatteryFull, MemoryStick, ShieldCheck } from 'lucide-react'
+import { Smartphone, Cpu, Camera, BatteryFull, MemoryStick, ShieldCheck, GitCompareArrows, Play } from 'lucide-react'
 import { BuyBox } from '@/components/devices/BuyBox'
 import { VerdictBlock } from '@/components/devices/VerdictBlock'
+import AvailabilityBadge from '@/components/devices/AvailabilityBadge'
+import NotifyMePanel from '@/components/devices/NotifyMePanel'
+import ShareRow from '@/components/devices/ShareRow'
+import FullSpecsTable from '@/components/devices/FullSpecsTable'
+import RelatedDevices from '@/components/devices/RelatedDevices'
 import RatingsSection from '@/components/community/RatingsSection'
 import CommentsSection from '@/components/community/CommentsSection'
 import RatingsSkeleton from '@/components/community/RatingsSkeleton'
 import CommentsSkeleton from '@/components/community/CommentsSkeleton'
+import AddToCompareButton from '@/components/devices/AddToCompareButton'
+import { getRelatedDevices } from '@/lib/devices/queries'
 import type { Device } from '@/types/cms'
 
 interface DeviceDetailProps {
@@ -18,7 +25,7 @@ interface DeviceDetailProps {
   isPreview?: boolean
 }
 
-export default function DeviceDetail({ device, isPreview = false }: DeviceDetailProps) {
+export default async function DeviceDetail({ device, isPreview = false }: DeviceDetailProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d = device as any
   const brandData = (d.brand as Record<string, unknown> | null) ?? {}
@@ -31,12 +38,14 @@ export default function DeviceDetail({ device, isPreview = false }: DeviceDetail
   const dPriceKES = Number(d.price_kes ?? 0)
   const dPriceUSD = Number(d.price_usd ?? 0)
   const dReleaseYear = String(d.release_year ?? '')
+  const dAvailability = (d.availability as Device['availability']) ?? null
   const dScoreDisplay = Number(d.score_display ?? 0)
   const dScorePerformance = Number(d.score_performance ?? 0)
   const dScoreCamera = Number(d.score_camera ?? 0)
   const dScoreBattery = Number(d.score_battery ?? 0)
   const dScoreValue = Number(d.score_value ?? 0)
   const dBuyLinks = d.buy_links as Array<Record<string, unknown>> | undefined
+  const hasBuyLinks = Array.isArray(dBuyLinks) && (dBuyLinks.length ?? 0) > 0
   const dSpecsDesign = d.specs_design as Record<string, unknown> | undefined
   const dSpecsDisplay = d.specs_display as Record<string, unknown> | undefined
   const dSpecsProcessor = d.specs_processor as Record<string, unknown> | undefined
@@ -52,6 +61,14 @@ export default function DeviceDetail({ device, isPreview = false }: DeviceDetail
   const dSpecsBattery = d.specs_battery as Record<string, unknown> | undefined
   const dRelatedVideoId = String(d.related_video_id ?? '')
   const dRelatedTiktokUrl = String(d.related_tiktok_url ?? '')
+
+  const [relatedDevices] = await Promise.all([
+    getRelatedDevices({
+      id: device.id,
+      major_category: device.major_category,
+      brand_id: device.brand_id,
+    }).catch(() => []),
+  ])
 
   const schemaOrg = {
     '@context': 'https://schema.org',
@@ -150,6 +167,7 @@ export default function DeviceDetail({ device, isPreview = false }: DeviceDetail
               <span className="rounded-full bg-muted px-3 py-1 text-sm font-medium capitalize text-muted-foreground">
                 {dCategory}
               </span>
+              <AvailabilityBadge availability={dAvailability} />
               {dPriceKES > 0 && (
                 <span className="text-xl font-bold text-foreground">
                   KES {dPriceKES.toLocaleString()}
@@ -168,12 +186,33 @@ export default function DeviceDetail({ device, isPreview = false }: DeviceDetail
               deviceSlug={dSlug}
             />
 
+            {(!hasBuyLinks || dAvailability === 'coming-soon' || dAvailability === 'out-of-stock') && (
+              <NotifyMePanel
+                deviceSlug={dSlug}
+                deviceName={dName}
+                label="Where to buy — get notified when this device is available"
+              />
+            )}
+
             <div className="flex items-center gap-4">
               <ScoreBadge score={overallScore} size="lg" />
               <div>
                 <p className="font-heading text-lg font-bold text-foreground">Fweezy Score</p>
                 <p className="text-sm text-muted-foreground">Overall rating</p>
               </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <AddToCompareButton
+                device={{
+                  slug: dSlug,
+                  brandSlug: String(brandData.slug ?? ''),
+                  name: dName,
+                  imageUrl: primaryImage ? String(primaryImage.url) : '',
+                  score: overallScore,
+                }}
+              />
+              <ShareRow title={`${dName} review by Fweezy`} path={`/devices/${String(brandData.slug ?? '')}/${dSlug}`} />
             </div>
 
             <RadarChart
@@ -222,6 +261,21 @@ export default function DeviceDetail({ device, isPreview = false }: DeviceDetail
             ))}
         </div>
 
+        {/* Full Specifications */}
+        <FullSpecsTable
+          specs={{
+            design: dSpecsDesign,
+            display: dSpecsDisplay,
+            processor: dSpecsProcessor,
+            memory: dSpecsMemory,
+            camera: dSpecsCamera,
+            battery: dSpecsBattery,
+            connectivity: d.specs_connectivity as Record<string, unknown> | undefined,
+            network: d.specs_network as Record<string, unknown> | undefined,
+            software: d.specs_software as Record<string, unknown> | undefined,
+          }}
+        />
+
         {/* Full Verdict */}
         {d.verdict_full && (
           <section className="mt-12">
@@ -239,9 +293,22 @@ export default function DeviceDetail({ device, isPreview = false }: DeviceDetail
         {/* Video Review */}
         {(dRelatedVideoId || dRelatedTiktokUrl) && (
           <section className="mt-12">
-            <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">
-              Fweezytech's Video Review
-            </h2>
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="font-heading text-2xl font-bold text-foreground">
+                Fweezytech's Video Review
+              </h2>
+              {dRelatedVideoId && (
+                <a
+                  href={`https://www.youtube.com/watch?v=${dRelatedVideoId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                >
+                  <Play size={16} className="text-red-500" />
+                  Watch on YouTube
+                </a>
+              )}
+            </div>
             <div className="space-y-6">
               {dRelatedVideoId && (
                 <div className="aspect-video w-full overflow-hidden rounded-xl">
@@ -269,6 +336,8 @@ export default function DeviceDetail({ device, isPreview = false }: DeviceDetail
             </div>
           </section>
         )}
+
+        <RelatedDevices devices={relatedDevices} currentSlug={dSlug} />
 
         <Suspense fallback={<RatingsSkeleton />}>
           <RatingsSection deviceSlug={dSlug} deviceName={dName} />
