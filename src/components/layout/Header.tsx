@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { usePathname } from "next/navigation"
 import { Moon, Sun, Menu, Search } from "lucide-react"
 import { useTheme } from "@ecosy/next-themes"
 import { Button } from "@/components/ui/button"
@@ -20,8 +19,6 @@ const navLinks = [
 ]
 
 export default function Header() {
-  const pathname = usePathname()
-  const isAdmin = pathname === "/admin" || pathname.startsWith("/admin/")
   const [open, setOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const { theme, setTheme } = useTheme()
@@ -38,7 +35,6 @@ export default function Header() {
           />
         </a>
 
-        {!isAdmin && (
         <nav className="hidden md:flex items-center gap-6">
           {navLinks.map((link) => (
             <a
@@ -50,7 +46,6 @@ export default function Header() {
             </a>
           ))}
         </nav>
-        )}
 
         <div className="flex items-center gap-2">
           {/* Desktop search bar */}

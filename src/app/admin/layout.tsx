@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { Raleway } from 'next/font/google'
 import { getAdminUser } from '@/lib/admin/require-admin'
 import Sidebar from '@/components/admin/Sidebar'
+import MobileTopbar from '@/components/admin/MobileTopbar'
 import { AdminProvider } from '@/context/AdminContext'
 import { ThemeProvider } from '@ecosy/next-themes'
 
@@ -41,9 +42,12 @@ export default async function AdminLayout({
         <AdminProvider adminUser={adminUser}>
           <div className="flex h-screen">
             <Sidebar adminUser={adminUser} />
-            <main className="flex-1 overflow-y-auto p-6 lg:p-8 pt-16 lg:pt-8">
-              {children}
-            </main>
+            <div className="flex-1 flex-col overflow-hidden">
+              <MobileTopbar />
+              <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+                {children}
+              </main>
+            </div>
           </div>
         </AdminProvider>
       </ThemeProvider>

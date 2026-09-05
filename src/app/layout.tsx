@@ -126,7 +126,7 @@ export default async function RootLayout({
           <AuthProvider>
             <ComparisonTrayProvider>
               <ChatProvider>
-                <Header />
+                {!isAdminRoute && <Header />}
                 <PageViewBeacon />
                 {isAdminRoute ? (
                   children
