@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { usePathname } from 'next/navigation'
+import { Bot, X, Send, Trash2, Sparkles } from 'lucide-react'
 import type { NavigationCard } from '@/types/chat'
 
 type Message = {
@@ -9,19 +11,77 @@ type Message = {
   content: string
 }
 
-function getCurrentCollection(): { slug?: string; action?: 'list' | 'create' | 'edit' } {
-  if (typeof window === 'undefined') return {}
+type CollectionContext = {
+  slug?: string
+  action?: 'list' | 'create' | 'edit'
+  label?: string
+}
 
-  const path = window.location.pathname
-  const match = path.match(/\/admin\/collections\/([^/]+)(?:\/(create|\w+))?/)
-  if (!match) return {}
+const ROUTE_MAPS: { pattern: RegExp; slug: string; action: CollectionContext['action']; label: string }[] = [
+  { pattern: /^\/admin\/devices\/[\w-]+\/edit/, slug: 'devices', action: 'edit', label: 'Edit Device' },
+  { pattern: /^\/admin\/devices\/create/, slug: 'devices', action: 'create', label: 'New Device' },
+  { pattern: /^\/admin\/devices/, slug: 'devices', action: 'list', label: 'Devices' },
+  { pattern: /^\/admin\/articles\/[\w-]+\/edit/, slug: 'articles', action: 'edit', label: 'Edit Article' },
+  { pattern: /^\/admin\/articles\/create/, slug: 'articles', action: 'create', label: 'New Article' },
+  { pattern: /^\/admin\/articles/, slug: 'articles', action: 'list', label: 'Articles' },
+  { pattern: /^\/admin\/brands/, slug: 'brands', action: 'list', label: 'Brands' },
+  { pattern: /^\/admin\/videos/, slug: 'videos', action: 'list', label: 'Videos' },
+  { pattern: /^\/admin\/coming-soon/, slug: 'coming-soon', action: 'list', label: 'Coming Soon' },
+  { pattern: /^\/admin\/media\//, slug: 'media', action: 'list', label: 'Media Library' },
+  { pattern: /^\/admin\/media$/, slug: 'media', action: 'list', label: 'Media Library' },
+  { pattern: /^\/admin\/sponsors/, slug: 'sponsors', action: 'list', label: 'Sponsors' },
+  { pattern: /^\/admin\/packages/, slug: 'packages', action: 'list', label: 'Packages' },
+  { pattern: /^\/admin\/milestones/, slug: 'milestones', action: 'list', label: 'Milestones' },
+  { pattern: /^\/admin\/awards/, slug: 'awards', action: 'list', label: 'Awards' },
+  { pattern: /^\/admin\/media-kit/, slug: 'media-kit', action: 'list', label: 'Media Kit' },
+  { pattern: /^\/admin\/users/, slug: 'users', action: 'list', label: 'Users' },
+  { pattern: /^\/admin\/settings/, slug: 'settings', action: 'list', label: 'Settings' },
+  { pattern: /^\/admin\/analytics/, slug: 'analytics', action: 'list', label: 'Analytics' },
+]
 
-  const slug = match[1]
-  const subpath = match[2]
+function getCollectionFromPath(path: string): CollectionContext {
+  const match = ROUTE_MAPS.find((r) => r.pattern.test(path))
+  if (match) return { slug: match.slug, action: match.action, label: match.label }
+  if (path === '/' || /^\/admin\/?$/.test(path)) return { label: 'Dashboard' }
+  if (path.startsWith('/admin')) {
+    const seg = path.split('/').filter(Boolean)[1]
+    if (seg) {
+      return {
+        slug: seg,
+        action: 'list',
+        label: seg.charAt(0).toUpperCase() + seg.slice(1),
+      }
+    }
+  }
+  return {}
+}
 
-  if (subpath === 'create') return { slug, action: 'create' }
-  if (subpath) return { slug, action: 'edit' }
-  return { slug, action: 'list' }
+const SUGGESTIONS: Record<string, string[]> = {
+  devices: [
+    'Which devices are still drafts?',
+    'Which devices are missing images?',
+    'How do I publish a device?',
+    'Draft a tagline for the newest device',
+  ],
+  articles: [
+    'Which articles are drafts?',
+    'Help me write an SEO description',
+    'What categories can an article have?',
+  ],
+  brands: ['How do I add a brand?', 'Which brands are featured?'],
+  videos: ['How do I attach a video to a device?', 'Which videos are featured?'],
+  media: ['Where are my device images stored?', 'How do I upload to a specific bucket?'],
+  'coming-soon': ['How do I create a coming-soon device?'],
+}
+
+function suggestionsFor(ctx: CollectionContext): string[] {
+  const list = ctx.slug ? SUGGESTIONS[ctx.slug] : undefined
+  return list ?? [
+    'Which devices are still drafts?',
+    'How do I publish a new device?',
+    'Help me write an SEO description',
+    'How is the Fweezy Score calculated?',
+  ]
 }
 
 export default function AiAssistant() {
@@ -31,38 +91,18 @@ export default function AiAssistant() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [navigationCards, setNavigationCards] = useState<Record<string, NavigationCard[]>>({})
-  const [currentCollection, setCurrentCollection] = useState(getCurrentCollection())
+  const pathname = usePathname() ?? ''
+  const context = useMemo(() => getCollectionFromPath(pathname), [pathname])
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // Track collection changes via URL
-  useEffect(() => {
-    const checkCollection = () => setCurrentCollection(getCurrentCollection())
-    window.addEventListener('popstate', checkCollection)
-
-    const originalPushState = history.pushState
-    history.pushState = function (...args) {
-      originalPushState.apply(this, args)
-      checkCollection()
-    }
-
-    return () => {
-      window.removeEventListener('popstate', checkCollection)
-      history.pushState = originalPushState
-    }
-  }, [])
-
-  // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isLoading])
 
-  // Focus input when panel opens
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 300)
-    }
+    if (isOpen) setTimeout(() => inputRef.current?.focus(), 100)
   }, [isOpen])
 
   const handleSubmit = useCallback(
@@ -78,7 +118,7 @@ export default function AiAssistant() {
       const userMsgId = crypto.randomUUID()
       setMessages((prev) => [...prev, { id: userMsgId, role: 'user', content: userMessage }])
 
-      const collection = getCurrentCollection()
+      const collection = getCollectionFromPath(pathname)
 
       try {
         const response = await fetch('/api/admin/chat', {
@@ -92,7 +132,6 @@ export default function AiAssistant() {
         })
 
         const cardsHeader = response.headers.get('X-Nav-Cards')
-
         if (cardsHeader) {
           try {
             const cards: NavigationCard[] = JSON.parse(cardsHeader)
@@ -108,9 +147,7 @@ export default function AiAssistant() {
         }
 
         const reader = response.body?.getReader()
-        if (!reader) {
-          throw new Error('No response body')
-        }
+        if (!reader) throw new Error('No response body')
 
         const decoder = new TextDecoder()
         let assistantContent = ''
@@ -121,7 +158,6 @@ export default function AiAssistant() {
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
-
           const chunk = decoder.decode(value, { stream: true })
           const lines = chunk.split('\n')
           for (const line of lines) {
@@ -149,10 +185,9 @@ export default function AiAssistant() {
         setIsLoading(false)
       }
     },
-    [input, isLoading, messages],
+    [input, isLoading, messages, pathname],
   )
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSubmit()
@@ -165,341 +200,150 @@ export default function AiAssistant() {
     setError(null)
   }
 
-  const suggestionChips = [
-    'How do I publish a new device?',
-    'What fields are required for articles?',
-    'Help me write an SEO description',
-    'How is the Fweezy Score calculated?',
-  ]
+  const suggestions = suggestionsFor(context)
 
   return (
     <>
       {/* Floating action button */}
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         aria-label={isOpen ? 'Close AI assistant' : 'Open AI assistant'}
-        style={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-          width: 56,
-          height: 56,
-          borderRadius: '50%',
-          background: isOpen ? '#EF4444' : '#0066FF',
-          color: '#fff',
-          border: 'none',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 24,
-          boxShadow: '0 4px 16px rgba(0,102,255,0.35)',
-          zIndex: 9999,
-          transition: 'background 0.2s ease, transform 0.2s ease',
-          transform: isOpen ? 'rotate(45deg)' : 'rotate(0deg)',
-        }}
+        className={`fixed bottom-6 right-6 z-[60] flex h-14 w-14 items-center justify-center rounded-full text-white shadow-xl transition-all duration-200 hover:scale-105 ${
+          isOpen ? 'bg-muted-foreground/80' : 'bg-brand-primary'
+        }`}
       >
-        {isOpen ? '+' : '🤖'}
+        {isOpen ? <X size={22} /> : <Bot size={26} />}
       </button>
 
-      {/* Slide-out panel */}
+      {/* Panel */}
       <div
-        style={{
-          position: 'fixed',
-          bottom: 88,
-          right: 24,
-          width: 380,
-          maxHeight: 'calc(100vh - 120px)',
-          background: 'var(--theme-elevation-0)',
-          border: '1px solid var(--theme-elevation-150)',
-          borderRadius: 16,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
-          zIndex: 9998,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          transition: 'opacity 0.25s ease, transform 0.25s ease',
-          opacity: isOpen ? 1 : 0,
-          transform: isOpen ? 'translateY(0)' : 'translateY(16px)',
-          pointerEvents: isOpen ? 'auto' : 'none',
-        }}
+        className={`fixed bottom-24 right-6 z-[59] flex max-h-[calc(100vh-7rem)] w-[min(92vw,380px)] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl transition-all duration-200 ${
+          isOpen ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-4 opacity-0'
+        }`}
       >
         {/* Header */}
-        <div
-          style={{
-            padding: '14px 16px',
-            borderBottom: '1px solid var(--theme-elevation-150)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 18 }}>🤖</span>
+        <div className="flex items-center justify-between border-b border-border bg-brand-primary px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/15 text-white">
+              <Bot size={18} />
+            </div>
             <div>
-              <div
-                style={{
-                  fontWeight: 600,
-                  fontSize: 14,
-                  color: 'var(--theme-elevation-800)',
-                }}
-              >
-                Fweezy Assistant
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--theme-elevation-500)' }}>
-                {currentCollection.slug
-                  ? `Viewing: ${currentCollection.slug}`
-                  : 'CMS Assistant'}
+              <div className="text-sm font-bold text-white">Fweezy Assistant</div>
+              <div className="text-[11px] text-white/75">
+                {context.label ? (
+                  <>
+                    Viewing: {context.label}
+                    {context.action ? ` · ${context.action}` : ''}
+                  </>
+                ) : (
+                  'CMS Co-pilot'
+                )}
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button
-              onClick={clearChat}
-              title="Clear chat"
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 16,
-                padding: '4px 8px',
-                borderRadius: 6,
-                color: 'var(--theme-elevation-500)',
-              }}
-            >
-              🗑️
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={clearChat}
+            title="Clear chat"
+            className="rounded-md p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+          >
+            <Trash2 size={16} />
+          </button>
         </div>
-
-        {/* Messages */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: 12,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
-            minHeight: 200,
-            maxHeight: 400,
-          }}
-        >
+{/* Messages */}
+        <div className="flex min-h-[220px] max-h-[420px] flex-1 flex-col gap-2 overflow-y-auto p-3">
           {messages.length === 0 && !isLoading && (
-            <div style={{ padding: 8 }}>
-              <div
-                style={{
-                  fontSize: 13,
-                  color: 'var(--theme-elevation-500)',
-                  marginBottom: 12,
-                  lineHeight: 1.5,
-                }}
-              >
-                Hi! I'm your CMS assistant. I can help you manage content, generate drafts, and navigate the admin panel. What would you like to do?
+            <div className="px-1">
+              <div className="mb-3 text-sm leading-relaxed text-muted-foreground">
+                Hi! I'm your CMS co-pilot. I can help you manage content, generate drafts, and
+                navigate the admin panel. What would you like to do?
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {suggestionChips.map((chip) => (
+              <div className="flex flex-wrap gap-1.5">
+                {suggestions.map((s) => (
                   <button
-                    key={chip}
-                    onClick={() => {
-                      setInput(chip)
-                      setTimeout(() => handleSubmit(), 50)
-                    }}
-                    style={{
-                      padding: '6px 12px',
-                      fontSize: 12,
-                      background: 'var(--theme-elevation-100)',
-                      border: '1px solid var(--theme-elevation-150)',
-                      borderRadius: 16,
-                      cursor: 'pointer',
-                      color: 'var(--theme-elevation-700)',
-                      transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'var(--theme-elevation-150)'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'var(--theme-elevation-100)'
-                    }}
+                    key={s}
+                    type="button"
+                    onClick={() => setInput(s)}
+                    className="flex items-center gap-1.5 rounded-full border border-border bg-background/60 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-brand-primary hover:text-foreground"
                   >
-                    {chip}
+                    <Sparkles size={12} className="text-brand-primary" />
+                    {s}
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
-              }}
-            >
+          {messages.map((m) => (
+            <div key={m.id} className="flex flex-col">
               <div
-                style={{
-                  maxWidth: '85%',
-                  padding: '8px 12px',
-                  borderRadius: 12,
-                  fontSize: 13,
-                  lineHeight: 1.5,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                  background:
-                    msg.role === 'user'
-                      ? '#0066FF'
-                      : 'var(--theme-elevation-100)',
-                  color:
-                    msg.role === 'user'
-                      ? '#ffffff'
-                      : 'var(--theme-elevation-800)',
-                  borderBottomRightRadius: msg.role === 'user' ? 4 : 12,
-                  borderBottomLeftRadius: msg.role === 'assistant' ? 4 : 12,
-                }}
+                className={`max-w-[85%] whitespace-pre-wrap rounded-xl px-3 py-2 text-sm ${
+                  m.role === 'user'
+                    ? 'self-end rounded-br-sm bg-brand-primary text-white'
+                    : 'self-start rounded-bl-sm bg-muted text-foreground'
+                }`}
               >
-                {msg.content || (msg.role === 'assistant' ? '…' : '')}
+                {m.content ||
+                  (m.role === 'assistant' && isLoading ? (
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground" />
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:150ms]" />
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:300ms]" />
+                    </span>
+                  ) : (
+                    ''
+                  ))}
               </div>
 
-              {/* Navigation cards for this message */}
-              {navigationCards[msg.id] && navigationCards[msg.id].length > 0 && (
-                <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4, width: '100%' }}>
-                  {navigationCards[msg.id].map((card, i) => (
+              {navigationCards[m.id]?.length ? (
+                <div className="mt-1.5 space-y-1.5">
+                  {navigationCards[m.id]!.map((c) => (
                     <a
-                      key={i}
-                      href={card.url}
+                      key={c.url}
+                      href={c.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{
-                        display: 'block',
-                        padding: '6px 10px',
-                        fontSize: 12,
-                        background: 'rgba(0,102,255,0.08)',
-                        border: '1px solid rgba(0,102,255,0.2)',
-                        borderRadius: 8,
-                        textDecoration: 'none',
-                        color: 'var(--theme-elevation-700)',
-                      }}
+                      className="block rounded-lg border border-border bg-background/60 p-2 transition-colors hover:border-brand-primary"
                     >
-                      <div style={{ fontWeight: 600 }}>{card.title}</div>
-                      <div style={{ fontSize: 11, color: 'var(--theme-elevation-500)' }}>
-                        {card.subtitle}
-                      </div>
+                      <div className="text-xs font-medium text-foreground">{c.title}</div>
+                      <div className="text-[11px] text-muted-foreground">{c.subtitle}</div>
                     </a>
                   ))}
                 </div>
-              )}
+              ) : null}
             </div>
           ))}
 
-          {isLoading && (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4, padding: '4px 0' }}>
-              <div
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background: '#0066FF',
-                  animation: 'aiPulse 1.2s ease-in-out infinite',
-                }}
-              />
-              <div
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background: '#0066FF',
-                  animation: 'aiPulse 1.2s ease-in-out infinite 0.2s',
-                }}
-              />
-              <div
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background: '#0066FF',
-                  animation: 'aiPulse 1.2s ease-in-out infinite 0.4s',
-                }}
-              />
-            </div>
-          )}
-
           {error && (
-            <div
-              style={{
-                padding: '8px 12px',
-                fontSize: 12,
-                color: 'var(--theme-error)',
-                background: 'color-mix(in srgb, var(--theme-error) 10%, transparent)',
-                borderRadius: 8,
-              }}
-            >
-              {error}
-            </div>
+            <div className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-500">{error}</div>
           )}
 
           <div ref={messagesEndRef} />
         </div>
 
         {/* Input */}
-        <div
-          style={{
-            padding: '10px 12px',
-            borderTop: '1px solid var(--theme-elevation-150)',
-          }}
-        >
-          <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 8 }}>
+        <div className="border-t border-border p-3">
+          <form onSubmit={handleSubmit} className="flex items-end gap-2">
             <textarea
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask me anything about the CMS..."
+              placeholder="Ask me anything about the CMS…"
               rows={1}
-              style={{
-                flex: 1,
-                padding: '8px 12px',
-                fontSize: 13,
-                border: '1px solid var(--theme-elevation-150)',
-                borderRadius: 8,
-                background: 'var(--theme-elevation-50)',
-                color: 'var(--theme-elevation-800)',
-                resize: 'none',
-                outline: 'none',
-                fontFamily: 'inherit',
-                lineHeight: 1.4,
-                maxHeight: 80,
-              }}
+              className="max-h-20 min-h-[38px] flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-brand-primary"
             />
             <button
               type="submit"
               disabled={!input.trim() || isLoading}
-              style={{
-                padding: '8px 16px',
-                fontSize: 13,
-                fontWeight: 600,
-                background: !input.trim() || isLoading ? 'var(--theme-elevation-100)' : '#0066FF',
-                color: !input.trim() || isLoading ? 'var(--theme-elevation-500)' : '#ffffff',
-                border: 'none',
-                borderRadius: 8,
-                cursor: !input.trim() || isLoading ? 'not-allowed' : 'pointer',
-                transition: 'background 0.15s',
-              }}
+              className="flex h-[38px] items-center gap-1.5 rounded-lg bg-brand-primary px-3 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
             >
-              Send
+              <Send size={15} />
             </button>
           </form>
         </div>
       </div>
-
-      {/* Keyframes for loading animation */}
-      <style>{`
-        @keyframes aiPulse {
-          0%, 100% { opacity: 0.3; transform: scale(0.8); }
-          50% { opacity: 1; transform: scale(1); }
-        }
-      `}</style>
     </>
   )
 }

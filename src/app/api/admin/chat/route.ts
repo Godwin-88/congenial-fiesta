@@ -1,7 +1,7 @@
 import { createGroq } from '@ai-sdk/groq'
 import { streamText } from 'ai'
 import { NextRequest } from 'next/server'
-import { getUser } from '@/lib/auth/actions'
+import { getAdminUser } from '@/lib/admin/require-admin'
 import { retrieveContext, formatContextForPrompt } from '@/lib/chat/retrieval'
 import { buildAdminSystemPrompt } from '@/lib/chat/admin-system-prompt'
 
@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic'
  * Returns streaming responses with navigation cards and action suggestions.
  */
 export async function POST(req: NextRequest) {
-  // ── 1. Auth check — only authenticated admin/editor users ──
+  // ── 1. Auth check — only users in the admin_users table (admin/editor/viewer) ──
   if (!process.env.GROQ_API_KEY) {
     return new Response(
       JSON.stringify({ error: 'AI service not configured. GROQ_API_KEY is missing.' }),
@@ -25,12 +25,12 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const user = await getUser().catch(() => null)
+  const adminUser = await getAdminUser().catch(() => null)
 
-  if (!user) {
+  if (!adminUser) {
     return new Response(
-      JSON.stringify({ error: 'Authentication required. Please sign in to use the AI assistant.' }),
-      { status: 401, headers: { 'Content-Type': 'application/json' } },
+      JSON.stringify({ error: 'Admin authentication required. Please sign in to the admin panel.' }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
     )
   }
 

@@ -3,6 +3,7 @@ import { Raleway } from 'next/font/google'
 import { getAdminUser } from '@/lib/admin/require-admin'
 import Sidebar from '@/components/admin/Sidebar'
 import MobileTopbar from '@/components/admin/MobileTopbar'
+import AiAssistantWrapper from '@/components/admin/AiAssistantWrapper'
 import { AdminProvider } from '@/context/AdminContext'
 import { ThemeProvider } from '@ecosy/next-themes'
 
@@ -49,6 +50,7 @@ export default async function AdminLayout({
               </main>
             </div>
           </div>
+          <AiAssistantWrapper />
         </AdminProvider>
       </ThemeProvider>
     </div>

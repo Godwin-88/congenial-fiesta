@@ -11,7 +11,7 @@ const COLLECTION_DESCRIPTIONS = `
 
 **brands** — Phone manufacturers & tech brands
   Fields: name (text, required), slug (text, unique), logo (text, Cloudflare URL), website (text), featured (checkbox)
-  Admin: /admin/collections/brands
+  Admin: /admin/brands
 
 **devices** — Device review pages (one per device)
   Fields: name, slug (unique), brand (relationship→brands), releaseYear, category (flagship|mid-range|budget|ultra-premium), priceKES, priceUSD, tagline, status (draft|published)
@@ -23,75 +23,75 @@ const COLLECTION_DESCRIPTIONS = `
   Buy links: buyLinks[] (retailer, url, price, priceDate)
   Related: relatedVideo(YouTube ID), relatedTiktok(URL)
   SEO: seo.metaTitle, seo.metaDescription, seo.ogImageUrl (sidebar, optional)
-  Admin: /admin/collections/devices
+  Admin: /admin/devices
 
 ### Content Group
 
 **videos** — Video content from YouTube, TikTok, Instagram, Facebook
   Fields: title, platform, embedId, thumbnailUrl, viewCount, duration, associatedDevice(relationship→devices), publishedAt, featured(checkbox)
-  Admin: /admin/collections/videos
+  Admin: /admin/videos
 
 **articles** — Written reviews, comparisons, news, buying guides, opinions
   Fields: title, slug(unique), excerpt, featuredImage(Cloudflare URL), body(richText), category(review|comparison|news|buying-guide|opinion), associatedDevice(relationship→devices), tags[], status(draft|published), publishedAt, readingTimeMinutes(auto-computed)
   SEO: seo.metaTitle, seo.metaDescription (sidebar)
-  Admin: /admin/collections/articles
+  Admin: /admin/articles
 
 **coming-soon** — Upcoming device teasers (captures email notifications)
   Fields: deviceName, silhouetteImage, expectedWeek, teaser, notifyEmails[](auto, readOnly), notifyCount(auto), linkedDevice(relationship→devices), active(checkbox)
-  Admin: /admin/collections/coming-soon
+  Admin: /admin/coming-soon
 
 ### Brand Group
 
 **sponsors** — Past and current brand partners
   Fields: companyName, logo, website, associatedVideo, partnershipType(shoutout|dedicated-video|full-campaign|product-seeding), displayOrder, active
-  Admin: /admin/collections/sponsors
+  Admin: /admin/sponsors
 
 **sponsorship-packages** — Three-tier pricing cards (starter|pro|premium)
   Fields: name, tier, description, deliverables[], highlighted, displayOrder
-  Admin: /admin/collections/sponsorship-packages
+  Admin: /admin/packages
 
 **milestones** — Company timeline
   Fields: year, title, description, displayOrder
-  Admin: /admin/collections/milestones
+  Admin: /admin/milestones
 
 **awards** — Awards & recognitions
   Fields: awardName, awardingBody, year, certificateImageUrl, awardUrl, displayOrder
-  Admin: /admin/collections/awards
+  Admin: /admin/awards
 
 **media-kit** — Press kit (only one active at a time)
   Fields: label, shortBio, longBio, totalFollowers, totalViews, yearsActive, youtubeFollowers, tiktokFollowers, instagramFollowers, facebookFollowers, logoLight, logoDark, logoSvgLight, logoSvgDark, headshots[](url, label), brandColours[](name, hex, rgb, cmyk), active
-  Admin: /admin/collections/media-kit
+  Admin: /admin/media-kit
 
 ### Settings Group
 
 **media** — Upload & manage files
   Fields: (upload collection, no custom fields)
-  Admin: /admin/collections/media
+  Admin: /admin/media
 
 **users** — CMS staff accounts
   Fields: email(auth), role(admin|editor|viewer), displayName
   Note: Only admins can change roles. Editor = create & update, Viewer = read-only.
-  Admin: /admin/collections/users
+  Admin: /admin/users
 `
 
 const ADMIN_ROUTES = `
 ## ADMIN ROUTES REFERENCE
 - /admin — Dashboard
 - /admin/analytics — Analytics Dashboard
-- /admin/collections/brands — Brands list
-- /admin/collections/devices — Devices list
-- /admin/collections/videos — Videos list
-- /admin/collections/articles — Articles list
-- /admin/collections/coming-soon — Coming Soon list
-- /admin/collections/sponsors — Sponsors list
-- /admin/collections/sponsorship-packages — Sponsorship Packages list
-- /admin/collections/milestones — Milestones list
-- /admin/collections/awards — Awards list
-- /admin/collections/media-kit — Media Kit list
-- /admin/collections/media — Media files
-- /admin/collections/users — Users list
-- /admin/collections/{slug}/create — Create new entry in collection
-- /admin/collections/{slug}/{id} — Edit existing entry
+- /admin/brands — Brands list
+- /admin/devices — Devices list
+- /admin/videos — Videos list
+- /admin/articles — Articles list
+- /admin/coming-soon — Coming Soon list
+- /admin/sponsors — Sponsors list
+- /admin/packages — Sponsorship Packages list
+- /admin/milestones — Milestones list
+- /admin/awards — Awards list
+- /admin/media-kit — Media Kit list
+- /admin/media — Media files
+- /admin/users — Users list
+- /admin/{slug}/create — Create new entry in collection
+- /admin/{slug}/{id} — Edit existing entry
 `
 
 export function buildAdminSystemPrompt(
@@ -146,7 +146,7 @@ ${collectionContext}
 - Keep it concise and scannable
 - Use bullet points for lists
 - Use **bold** for field names, collection names, and admin routes
-- When suggesting navigation, include the full admin path: /admin/collections/{slug}
+- When suggesting navigation, include the full admin path: /admin/{slug}
 - End with a relevant follow-up question or suggestion
 
 ## CURRENT DATE
