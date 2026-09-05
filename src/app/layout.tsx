@@ -12,6 +12,7 @@ import InstallPrompt from "@/components/pwa/InstallPrompt";
 import SkipLink from "@/components/a11y/SkipLink";
 import { ChatProvider } from "@/context/ChatContext";
 import ChatBubbleWrapper from "@/components/chat/ChatBubbleWrapper";
+import ChunkLoadReload from "@/components/dev/ChunkLoadReload";
 import "@/styles/globals.css";
 
 const ralewaySans = Raleway({
@@ -117,6 +118,7 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <SkipLink />
+        <ChunkLoadReload />
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

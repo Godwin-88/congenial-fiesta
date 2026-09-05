@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { cache } from 'react'
 import { redis, deserializeCache } from '@/lib/upstash/redis'
 import type { Device, Brand, DeviceType, MajorCategory } from '@/types/cms'
 import { mapDevice, MAJOR_CATEGORIES } from '@/types/cms'
@@ -123,10 +124,10 @@ export function getMajorCategories() {
   return MAJOR_CATEGORIES
 }
 
-export async function getDevice(
+export const getDevice = cache(async (
   brandSlug: string,
   deviceSlug: string,
-): Promise<Device | null> {
+): Promise<Device | null> => {
   const cacheKey = `devices:detail:${brandSlug}:${deviceSlug}`
   const cached = await redis.get(cacheKey).catch(() => null)
   const cachedDevice = deserializeCache<Device>(cached)
@@ -137,21 +138,16 @@ export async function getDevice(
   try {
     const supabase = getSupabase()
 
-    const { data: brandData } = await supabase
-      .from('brands')
-      .select('id')
-      .eq('slug', brandSlug)
-      .single()
-
-    if (!brandData) return null
-
+    // Single joined query: the device row, requiring the brand to match by
+    // slug. `brands!inner` enforces the join, so a wrong brand slug yields no
+    // row instead of a second round-trip to look the brand up.
     const { data, error } = await supabase
       .from('devices')
-      .select('*, brand:brands(*)')
+      .select('*, brand:brands!inner(*)')
       .eq('slug', deviceSlug)
-      .eq('brand_id', brandData.id)
+      .eq('brands.slug', brandSlug)
       .eq('status', 'published')
-      .single()
+      .maybeSingle()
 
     if (error || !data) return null
 
@@ -161,7 +157,7 @@ export async function getDevice(
   } catch {
     return null
   }
-}
+})
 
 /**
  * Fetch a single device for the admin preview page (by id).
@@ -339,10 +335,15 @@ export async function getFeaturedBrands(): Promise<Brand[]> {
  * Related devices for a device detail page — same major category (preferred) or
  * same brand, ordered by score. Excludes the current device.
  */
-export async function getRelatedDevices(
+export const getRelatedDevices = cache(async (
   device: Pick<Device, 'id' | 'major_category' | 'brand_id'>,
   limit = 4,
-): Promise<Device[]> {
+): Promise<Device[]> => {
+  const cacheKey = `devices:related:${device.id}:${limit}`
+  const cached = await redis.get(cacheKey).catch(() => null)
+  const cachedDevices = deserializeCache<Device[]>(cached)
+  if (cachedDevices) return cachedDevices
+
   const supabase = getSupabase()
 
   // Same major category first
@@ -364,6 +365,7 @@ export async function getRelatedDevices(
 
   if (error || !data) return []
 
-  const related = (data ?? []).map(mapDevice)
-  return related.slice(0, limit)
-}
+  const related = (data ?? []).map(mapDevice).slice(0, limit)
+  await redis.setex(cacheKey, 300, JSON.stringify(related))
+  return related
+})
