@@ -1,4 +1,3 @@
-import Image from 'next/image'
 import Link from 'next/link'
 import Script from 'next/script'
 import { Suspense } from 'react'
@@ -12,6 +11,7 @@ import NotifyMePanel from '@/components/devices/NotifyMePanel'
 import ShareRow from '@/components/devices/ShareRow'
 import FullSpecsTable from '@/components/devices/FullSpecsTable'
 import RelatedDevices from '@/components/devices/RelatedDevices'
+import DeviceImageGallery, { type GalleryImage } from '@/components/devices/DeviceImageGallery'
 import RatingsSection from '@/components/community/RatingsSection'
 import CommentsSection from '@/components/community/CommentsSection'
 import RatingsSkeleton from '@/components/community/RatingsSkeleton'
@@ -113,44 +113,7 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
         {/* Hero section */}
         <div className="grid gap-8 lg:grid-cols-2">
           {/* Image gallery */}
-          <div>
-            <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-muted">
-              {primaryImage ? (
-                <Image
-                  src={String(primaryImage.url)}
-                  alt={String(primaryImage.alt)}
-                  fill
-                  priority
-                  sizes="(max-width: 1024px) 100vw, 50vw"
-                  className="object-contain p-8"
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center text-muted-foreground">
-                  No image
-                </div>
-              )}
-            </div>
-            {images && images.length > 1 && (
-              <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
-                {images.map((img: any, i: number) => (
-                  <div
-                    key={i}
-                    className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 ${
-                      img.isPrimary ? 'border-brand-primary' : 'border-border'
-                    }`}
-                  >
-                    <Image
-                      src={String(img.url)}
-                      alt={String(img.alt)}
-                      fill
-                      sizes="64px"
-                      className="object-contain p-1"
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <DeviceImageGallery images={images as unknown as GalleryImage[]} deviceName={dName} />
 
           {/* Device info */}
           <div className="space-y-6">
