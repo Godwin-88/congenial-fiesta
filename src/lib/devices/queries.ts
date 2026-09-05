@@ -163,6 +163,31 @@ export async function getDevice(
   }
 }
 
+/**
+ * Fetch a single device for the admin preview page (by id).
+ * Unlike getDevice, this bypasses the Redis cache, applies NO status filter,
+ * and returns the row regardless of whether it is published or a draft.
+ */
+export async function getDevicePreview(
+  id: number,
+): Promise<Device | null> {
+  try {
+    const supabase = getSupabase()
+
+    const { data, error } = await supabase
+      .from('devices')
+      .select('*, brand:brands(*)')
+      .eq('id', id)
+      .single()
+
+    if (error || !data) return null
+
+    return mapDevice(data)
+  } catch {
+    return null
+  }
+}
+
 export async function getAllDevicePaths(): Promise<
   Array<{ brand: string; slug: string }>
 > {

@@ -331,7 +331,7 @@ export default function CreateDevicePage() {
     }
   }
 
-  const previewUrl = brandId && slug ? `/devices/${brands.find(b => b.id === brandId)?.slug ?? ''}/${slug}` : null
+  const previewUrl = deviceId ? `/preview?id=${deviceId}` : null
 
   return (
     <div className="max-w-5xl mx-auto">

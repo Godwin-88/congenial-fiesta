@@ -383,7 +383,7 @@ export default function EditDevicePage() {
     }
   }
 
-  const previewUrl = brandId && slug ? `/devices/${brands.find(b => b.id === brandId)?.slug ?? ''}/${slug}` : null
+  const previewUrl = id ? `/preview?id=${id}` : null
 
   if (loading) {
     return (
