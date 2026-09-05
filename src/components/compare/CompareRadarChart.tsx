@@ -5,16 +5,19 @@ import { useEffect, useRef } from 'react'
 const LABELS = ['Display', 'Performance', 'Camera', 'Battery', 'Value']
 const AXES = 5
 const ANGLE_STEP = (2 * Math.PI) / AXES
-const RADIUS = 100
-const CENTER = 120
+const RADIUS = 112
+const CENTER = 160
 const LABEL_OFFSET = 20
 
 const COLORS = ['#0066FF', '#F59E0B', '#22C55E']
 
 function polarToCartesian(cx: number, cy: number, r: number, angle: number) {
+  // Round to 2 decimals so server- and client-side rendering produce
+  // byte-identical attributes (avoids hydration mismatches from tiny
+  // floating-point differences between JS engines).
   return {
-    x: cx + r * Math.sin(angle),
-    y: cy - r * Math.cos(angle),
+    x: Number((cx + r * Math.sin(angle)).toFixed(2)),
+    y: Number((cy - r * Math.cos(angle)).toFixed(2)),
   }
 }
 
@@ -74,7 +77,7 @@ export default function CompareRadarChart({ devices, className }: CompareRadarCh
     <div className={className}>
       <svg
         ref={svgRef}
-        viewBox="0 0 240 240"
+        viewBox="0 0 320 320"
         className="h-60 w-60 mx-auto"
         role="img"
         aria-label="Comparison radar chart"

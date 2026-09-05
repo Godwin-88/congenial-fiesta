@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { redis } from '@/lib/upstash/redis'
+import { redis, deserializeCache } from '@/lib/upstash/redis'
 import type { Device, Brand, DeviceType, MajorCategory } from '@/types/cms'
 import { mapDevice, MAJOR_CATEGORIES } from '@/types/cms'
 
@@ -26,10 +26,8 @@ export async function getDevices(
 
   const cacheKey = `devices:list:${brand ?? ''}:${category ?? ''}:${majorCategory ?? ''}:${deviceTypeId ?? ''}:${page}`
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) {
-    if (typeof cached === 'string') return JSON.parse(cached)
-    return cached as { devices: Device[]; totalPages: number }
-  }
+  const cachedResult = deserializeCache<{ devices: Device[]; totalPages: number }>(cached)
+  if (cachedResult) return cachedResult
 
   const supabase = getSupabase()
   const offset = (page - 1) * limit
@@ -72,10 +70,8 @@ export async function getDevices(
 export async function getDeviceTypes(): Promise<DeviceType[]> {
   const cacheKey = 'device_types:all'
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) {
-    if (typeof cached === 'string') return JSON.parse(cached)
-    return cached as DeviceType[]
-  }
+  const cachedTypes = deserializeCache<DeviceType[]>(cached)
+  if (cachedTypes) return cachedTypes
 
   const supabase = getSupabase()
   const { data, error } = await supabase
@@ -97,10 +93,8 @@ export async function getDeviceTypes(): Promise<DeviceType[]> {
 export async function getBrandsByCategory(major: MajorCategory): Promise<Brand[]> {
   const cacheKey = `brands:by_category:${major}`
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) {
-    if (typeof cached === 'string') return JSON.parse(cached)
-    return cached as Brand[]
-  }
+  const cachedBrands = deserializeCache<Brand[]>(cached)
+  if (cachedBrands) return cachedBrands
 
   const supabase = getSupabase()
   const { data, error } = await supabase
@@ -135,13 +129,10 @@ export async function getDevice(
 ): Promise<Device | null> {
   const cacheKey = `devices:detail:${brandSlug}:${deviceSlug}`
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) {
-    try {
-      return JSON.parse(cached as string)
-    } catch {
-      return null
-    }
-  }
+  const cachedDevice = deserializeCache<Device>(cached)
+  // A stale/corrupt/mis-shapen cache entry must never cause a miss —
+  // fall through to the database.
+  if (cachedDevice) return cachedDevice
 
   try {
     const supabase = getSupabase()
@@ -177,13 +168,8 @@ export async function getAllDevicePaths(): Promise<
 > {
   const cacheKey = 'devices:static-params'
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) {
-    try {
-      return JSON.parse(cached as string)
-    } catch {
-      // stale cache, fall through
-    }
-  }
+  const cachedPaths = deserializeCache<Array<{ brand: string; slug: string }>>(cached)
+  if (cachedPaths) return cachedPaths
 
   try {
     const supabase = getSupabase()
@@ -212,10 +198,8 @@ export async function getAllDevicePaths(): Promise<
 export async function getTopDevices(limit: number = 6): Promise<Device[]> {
   const cacheKey = `devices:top:${limit}`
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) {
-    if (typeof cached === 'string') return JSON.parse(cached)
-    return cached as Device[]
-  }
+  const cachedDevices = deserializeCache<Device[]>(cached)
+  if (cachedDevices) return cachedDevices
 
   const supabase = getSupabase()
   const { data, error } = await supabase
@@ -253,13 +237,10 @@ export async function searchDevices(query: string): Promise<Device[]> {
 export async function getDeviceBySlug(deviceSlug: string): Promise<Device | null> {
   const cacheKey = `devices:slug:${deviceSlug}`
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) {
-    try {
-      return JSON.parse(cached as string)
-    } catch {
-      return null
-    }
-  }
+  const cachedDevice = deserializeCache<Device>(cached)
+  // A stale/corrupt/mis-shapen cache entry must never cause a miss —
+  // fall through to the database.
+  if (cachedDevice) return cachedDevice
 
   try {
   const supabase = getSupabase()
@@ -288,10 +269,8 @@ export async function getDeviceBySlug(deviceSlug: string): Promise<Device | null
 export async function getAllBrands(): Promise<Brand[]> {
   const cacheKey = 'brands:all'
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) {
-    if (typeof cached === 'string') return JSON.parse(cached)
-    return cached as Brand[]
-  }
+  const cachedBrands = deserializeCache<Brand[]>(cached)
+  if (cachedBrands) return cachedBrands
 
   const supabase = getSupabase()
   const { data, error } = await supabase
@@ -312,10 +291,8 @@ export async function getAllBrands(): Promise<Brand[]> {
 export async function getFeaturedBrands(): Promise<Brand[]> {
   const cacheKey = 'brands:featured'
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) {
-    if (typeof cached === 'string') return JSON.parse(cached)
-    return cached as Brand[]
-  }
+  const cachedBrands = deserializeCache<Brand[]>(cached)
+  if (cachedBrands) return cachedBrands
 
   const supabase = getSupabase()
   const { data, error } = await supabase

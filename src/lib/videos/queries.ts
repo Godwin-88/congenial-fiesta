@@ -5,7 +5,10 @@ import { redis } from '@/lib/upstash/redis'
 type CmsVideo = any
 
 function safeJsonParse<T>(data: unknown): T | null {
-  if (!data || typeof data !== 'string') return null
+  if (!data) return null
+  // @upstash/redis auto-deserializes JSON by default, so hits may arrive
+  // already parsed — accept them as-is.
+  if (typeof data !== 'string') return data as T | null
   try {
     return JSON.parse(data) as T
   } catch {

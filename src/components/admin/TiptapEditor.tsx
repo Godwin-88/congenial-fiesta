@@ -20,7 +20,7 @@ import {
 const lowlight = createLowlight(common)
 
 type TiptapEditorProps = {
-  content?: Record<string, unknown> | null  // Tiptap JSON
+  content?: string | Record<string, unknown> | null  // Tiptap JSON or HTML
   onChange: (json: Record<string, unknown>, html: string) => void
   placeholder?: string
   minHeight?: number

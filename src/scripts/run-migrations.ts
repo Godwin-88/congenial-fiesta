@@ -45,6 +45,8 @@ const migrations = [
   '022_price_tier_optional.sql',
   '023_fix_search_vector_trigger.sql',
   '024_release_year_optional.sql',
+  '024b_clear_draft_devices.sql',
+  '025_seed_phones_batch1.sql',
 ]
 
 async function runMigrations() {

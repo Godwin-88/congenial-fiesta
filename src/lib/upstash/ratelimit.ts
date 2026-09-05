@@ -1,8 +1,8 @@
 import { Ratelimit } from "@upstash/ratelimit"
-import { redis } from "./redis"
+import { redis, isRedisConfigured } from "./redis"
 
 function createSafeRatelimit(limiter: ReturnType<typeof Ratelimit.slidingWindow>) {
-  if (!redis) {
+  if (!isRedisConfigured) {
     // Return a no-op ratelimit that always allows through when Redis isn't configured
     return {
       limit: async (_identifier: string) => ({ success: true, limit: 9999, remaining: 9999, reset: 0 }),

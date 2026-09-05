@@ -9,6 +9,7 @@ import BrandSelect from '@/components/admin/BrandSelect'
 import { CameraSpecSection } from '@/components/admin/CameraSpecSection'
 import { CameraSpec, emptyCamera, cameraHasContent } from '@/lib/camera-spec'
 import { MAJOR_CATEGORIES, type MajorCategory, type DeviceType } from '@/types/cms'
+import { verdictContent } from '@/lib/verdict-content'
 
 const TiptapEditor = dynamic(
   () => import('@/components/admin/TiptapEditor'),
@@ -528,7 +529,7 @@ export default function CreateDevicePage() {
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Full Verdict</label>
-                <TiptapEditor content={verdictFull ? JSON.parse(verdictFull) : null} onChange={(_, html) => setVerdictFull(html)} placeholder="Write full verdict…" />
+                <TiptapEditor content={verdictContent(verdictFull)} onChange={(_, html) => setVerdictFull(html)} placeholder="Write full verdict…" />
               </div>
             </div>
           </CollapsibleSection>

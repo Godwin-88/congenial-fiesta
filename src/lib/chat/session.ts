@@ -1,4 +1,4 @@
-import { redis } from '@/lib/upstash/redis'
+import { redis, deserializeCache } from '@/lib/upstash/redis'
 import { v4 as uuidv4 } from 'uuid'
 
 export type ChatMessage = {
@@ -22,9 +22,10 @@ export async function getSession(sessionId: string): Promise<ChatSession> {
   const key = `${SESSION_PREFIX}${sessionId}`
   try {
     const raw = await redis.get(key)
-    if (raw) {
+    const parsed = deserializeCache<ChatSession>(raw)
+    if (parsed) {
       await redis.expire(key, TTL)
-      return JSON.parse(raw as string) as ChatSession
+      return parsed
     }
   } catch {
     // Key not found or parse error — create new

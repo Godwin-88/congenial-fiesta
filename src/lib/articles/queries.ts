@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { redis } from '@/lib/upstash/redis'
+import { redis, deserializeCache } from '@/lib/upstash/redis'
 import type { Article } from '@/types/cms'
 import { mapArticle } from '@/types/cms'
 
@@ -23,10 +23,8 @@ export async function getArticles(
 
   const cacheKey = `articles:list:${category ?? 'all'}:${page}`
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) {
-    if (typeof cached === 'string') return JSON.parse(cached)
-    return cached as { articles: Article[]; totalPages: number }
-  }
+  const cachedResult = deserializeCache<{ articles: Article[]; totalPages: number }>(cached)
+  if (cachedResult) return cachedResult
 
   const supabase = getSupabase()
   const offset = (page - 1) * limit
@@ -58,10 +56,8 @@ export async function getArticles(
 export async function getArticle(slug: string): Promise<Article | null> {
   const cacheKey = `articles:detail:${slug}`
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) {
-    if (typeof cached === 'string') return JSON.parse(cached)
-    return cached as Article
-  }
+  const cachedArticle = deserializeCache<Article>(cached)
+  if (cachedArticle) return cachedArticle
 
   const supabase = getSupabase()
   const { data, error } = await supabase
@@ -84,10 +80,8 @@ export async function getArticle(slug: string): Promise<Article | null> {
 export async function getAllArticlePaths(): Promise<Array<{ slug: string }>> {
   const cacheKey = 'articles:static-params'
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) {
-    if (typeof cached === 'string') return JSON.parse(cached)
-    return cached as Array<{ slug: string }>
-  }
+  const cachedPaths = deserializeCache<Array<{ slug: string }>>(cached)
+  if (cachedPaths) return cachedPaths
 
   const supabase = getSupabase()
   const { data } = await supabase
@@ -103,10 +97,8 @@ export async function getAllArticlePaths(): Promise<Array<{ slug: string }>> {
 export async function getRecentArticles(limit: number = 4): Promise<Article[]> {
   const cacheKey = `articles:recent:${limit}`
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) {
-    if (typeof cached === 'string') return JSON.parse(cached)
-    return cached as Article[]
-  }
+  const cachedArticles = deserializeCache<Article[]>(cached)
+  if (cachedArticles) return cachedArticles
 
   const supabase = getSupabase()
   const { data } = await supabase
@@ -124,10 +116,8 @@ export async function getRecentArticles(limit: number = 4): Promise<Article[]> {
 export async function getArticlesForDevice(deviceSlug: string): Promise<Article[]> {
   const cacheKey = `articles:device:${deviceSlug}`
   const cached = await redis.get(cacheKey).catch(() => null)
-  if (cached) {
-    if (typeof cached === 'string') return JSON.parse(cached)
-    return cached as Article[]
-  }
+  const cachedArticles = deserializeCache<Article[]>(cached)
+  if (cachedArticles) return cachedArticles
 
   const supabase = getSupabase()
 
