@@ -47,6 +47,7 @@ const migrations = [
   '024_release_year_optional.sql',
   '024b_clear_draft_devices.sql',
   '025_seed_phones_batch1.sql',
+  '026_agent_run_log.sql',
 ]
 
 async function runMigrations() {
