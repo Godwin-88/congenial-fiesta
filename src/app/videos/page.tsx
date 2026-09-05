@@ -1,6 +1,4 @@
 import { fetchYouTubeVideos, fetchTopYouTubeVideos } from '@/lib/youtube/client'
-import { fetchTikTokVideos } from '@/lib/tiktok/client'
-import { fetchInstagramVideos } from '@/lib/instagram/client'
 import { getCmsVideos, getFeaturedCmsVideos } from '@/lib/videos/queries'
 import { VideoCard } from '@/components/videos/VideoCard'
 import VideoFeed from './video-feed'
@@ -11,10 +9,8 @@ export const metadata = {
 }
 
 export default async function VideosPage() {
-  const [youtubeVideos, tiktokVideos, instagramVideos, cmsVideosResult, _featuredCmsVideos] = await Promise.all([
+  const [youtubeVideos, cmsVideosResult, _featuredCmsVideos] = await Promise.all([
     fetchYouTubeVideos(20).catch(() => []),
-    fetchTikTokVideos(20).catch(() => []),
-    fetchInstagramVideos(20).catch(() => []),
     getCmsVideos({ limit: 50 }).catch(() => ({ videos: [], totalPages: 0 })),
     getFeaturedCmsVideos().catch(() => []),
   ])
@@ -56,22 +52,6 @@ export default async function VideosPage() {
         const m = id.match(/youtu\.be\/([a-zA-Z0-9_-]+)/) || id.match(/[?&]v=([a-zA-Z0-9_-]+)/)
         return m ? m[1] : id.split('?')[0]
       }),
-  )
-
-  // Deduplicate: CMS TikTok URLs should not appear twice
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cmsTikTokIds = new Set(
-    cmsVideos
-      .filter((v: any) => v.platform === 'tiktok' && (v.embed_id ?? v.embedId))
-      .map((v: any) => String(v.embed_id ?? v.embedId ?? '').trim()),
-  )
-
-  // Deduplicate: CMS Instagram URLs should not appear twice
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cmsInstagramIds = new Set(
-    cmsVideos
-      .filter((v: any) => v.platform === 'instagram' && (v.embed_id ?? v.embedId))
-      .map((v: any) => String(v.embed_id ?? v.embedId ?? '').trim()),
   )
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -129,32 +109,6 @@ export default async function VideosPage() {
         viewCount: yv.viewCount,
         duration: yv.duration,
         publishedAt: yv.publishedAt,
-      })),
-    // TikTok videos from RSS not already in CMS
-    ...tiktokVideos
-      .filter((tv) => !cmsTikTokIds.has(tv.id))
-      .map((tv) => ({
-        id: tv.id,
-        dbId: `tiktok-${tv.id}`,
-        title: tv.title,
-        thumbnailUrl: tv.thumbnailUrl,
-        platform: 'tiktok',
-        viewCount: tv.viewCount,
-        duration: tv.duration,
-        publishedAt: tv.publishedAt,
-      })),
-    // Instagram videos from RSS not already in CMS
-    ...instagramVideos
-      .filter((iv) => !cmsInstagramIds.has(iv.id))
-      .map((iv) => ({
-        id: iv.id,
-        dbId: `ig-${iv.id}`,
-        title: iv.title,
-        thumbnailUrl: iv.thumbnailUrl,
-        platform: 'instagram',
-        viewCount: iv.viewCount,
-        duration: iv.duration,
-        publishedAt: iv.publishedAt,
       })),
   ]
 

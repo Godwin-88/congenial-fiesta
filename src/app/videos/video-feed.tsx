@@ -64,6 +64,7 @@ export default function VideoFeed({ videos }: { videos: any[] }) {
               viewCount={video.viewCount}
               duration={video.duration}
               publishedAt={video.publishedAt}
+              priority={i < 3}
             />
           ))}
         </div>

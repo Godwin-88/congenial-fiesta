@@ -9,9 +9,11 @@ type VideoCardProps = {
   viewCount?: number
   duration?: string
   publishedAt: string
+  /** Marks above-the-fold images so next/image loads them eagerly (LCP). */
+  priority?: boolean
 }
 
-export function VideoCard({ id, title, thumbnailUrl, platform, viewCount, duration, publishedAt }: VideoCardProps) {
+export function VideoCard({ id, title, thumbnailUrl, platform, viewCount, duration, publishedAt, priority = false }: VideoCardProps) {
   const platformColors: Record<string, string> = {
     youtube: 'bg-red-600',
     tiktok: 'bg-black',
@@ -36,6 +38,7 @@ export function VideoCard({ id, title, thumbnailUrl, platform, viewCount, durati
             src={thumbnailUrl}
             alt={title}
             fill
+            priority={priority}
             className="object-cover transition-transform group-hover:scale-105"
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           />
