@@ -221,7 +221,7 @@ export default function MediaKitPage() {
       </div>
 
       <div className="space-y-6">
-        <section className="bg-card rounded-lg border border-border p-6">
+        <section className="bg-card rounded-lg border-2 border-border p-6">
           <h2 className="text-lg font-semibold text-white mb-4">Bios</h2>
           <div className="space-y-4">
             <div>
@@ -249,7 +249,7 @@ export default function MediaKitPage() {
           </div>
         </section>
 
-        <section className="bg-card rounded-lg border border-border p-6">
+        <section className="bg-card rounded-lg border-2 border-border p-6">
           <h2 className="text-lg font-semibold text-white mb-4">Platform Followers</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
@@ -326,7 +326,7 @@ export default function MediaKitPage() {
           </div>
         </section>
 
-        <section className="bg-card rounded-lg border border-border p-6">
+        <section className="bg-card rounded-lg border-2 border-border p-6">
           <h2 className="text-lg font-semibold text-white mb-4">Logos</h2>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -372,7 +372,7 @@ export default function MediaKitPage() {
           </div>
         </section>
 
-        <section className="bg-card rounded-lg border border-border p-6">
+        <section className="bg-card rounded-lg border-2 border-border p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-white">Headshots</h2>
             <button
@@ -415,7 +415,7 @@ export default function MediaKitPage() {
           </div>
         </section>
 
-        <section className="bg-card rounded-lg border border-border p-6">
+        <section className="bg-card rounded-lg border-2 border-border p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-white">Brand Colours</h2>
             <button

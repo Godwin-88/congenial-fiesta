@@ -1,8 +1,9 @@
 'use client'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { ChevronDown, ChevronUp, Eye, Save, Upload, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Eye, Save, Upload, Trash2, ArrowLeft } from 'lucide-react'
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 import BrandSelect from '@/components/admin/BrandSelect'
@@ -58,7 +59,7 @@ interface CollapsibleSectionProps {
 function CollapsibleSection({ title, children, defaultOpen = false }: CollapsibleSectionProps) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="bg-card rounded-lg border border-border mb-4">
+    <div className="bg-card rounded-lg border-2 border-border mb-4">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -430,6 +431,12 @@ export default function EditDevicePage() {
       <div className="flex gap-8">
         {/* Main Content */}
         <div className="flex-1 min-w-0">
+          <Link
+            href="/admin/devices"
+            className="inline-flex items-center gap-2 mb-3 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft size={16} /> Back to Devices
+          </Link>
           <h1 className="text-2xl font-bold text-white font-heading mb-6">Edit Device</h1>
 
           {/* Identity */}
@@ -713,7 +720,7 @@ export default function EditDevicePage() {
         {/* Sidebar */}
         <div className="w-72 shrink-0">
           <div className="sticky top-8 space-y-4">
-            <div className="bg-card rounded-lg border border-border p-4">
+            <div className="bg-card rounded-lg border-2 border-border p-4">
               <h3 className="text-sm font-medium text-white mb-3">Status</h3>
               <select value={status} onChange={e => setStatus(e.target.value as 'draft' | 'published')}
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none">
@@ -738,12 +745,12 @@ export default function EditDevicePage() {
               )}
             </div>
 
-            <div className="bg-card rounded-lg border border-border p-4">
+            <div className="bg-card rounded-lg border-2 border-border p-4">
               <h3 className="text-sm font-medium text-white mb-3">Brand</h3>
               <BrandSelect brands={brands} value={brandId} onChange={setBrandId} />
             </div>
 
-            <div className="bg-card rounded-lg border border-border p-4 text-center">
+            <div className="bg-card rounded-lg border-2 border-border p-4 text-center">
               <h3 className="text-sm font-medium text-white mb-2">Overall Score</h3>
               <p className={`text-4xl font-bold ${overallScore >= 80 ? 'text-score-high' : overallScore >= 60 ? 'text-score-mid' : 'text-score-low'}`}>
                 {overallScore || '—'}
@@ -777,7 +784,7 @@ export default function EditDevicePage() {
       {/* Delete confirmation */}
       {deleteOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-lg border border-border p-6 max-w-md w-full">
+          <div className="bg-card rounded-lg border-2 border-border p-6 max-w-md w-full">
             <h3 className="text-lg font-semibold text-white mb-2">Delete Device</h3>
             <p className="text-sm text-gray-400 mb-4">
               Are you sure you want to delete &ldquo;{name}&rdquo;? This cannot be undone.

@@ -81,7 +81,7 @@ export default function DeviceTypesPage() {
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Add form */}
-        <form onSubmit={handleAdd} className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <form onSubmit={handleAdd} className="rounded-lg border-2 border-border bg-background/50 p-4 space-y-3">
           <h2 className="text-sm font-medium text-white">Add Device Type</h2>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Label</label>

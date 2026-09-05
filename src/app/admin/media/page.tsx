@@ -239,7 +239,7 @@ export default function MediaPage() {
       </div>
 
       {/* Tabs + search */}
-      <div className="bg-card rounded-lg border border-border p-4 mb-4">
+      <div className="bg-card rounded-lg border-2 border-border p-4 mb-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             {TABS.map(t => (
@@ -357,7 +357,7 @@ export default function MediaPage() {
       {/* Upload modal */}
       {uploadOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-lg border border-border p-6 max-w-lg w-full">
+          <div className="bg-card rounded-lg border-2 border-border p-6 max-w-lg w-full">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-white">Upload Image</h3>
               <button
@@ -471,7 +471,7 @@ export default function MediaPage() {
       {/* Delete confirmation */}
       {deleteTarget && isAdmin && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-lg border border-border p-6 max-w-md w-full">
+          <div className="bg-card rounded-lg border-2 border-border p-6 max-w-md w-full">
             <h3 className="text-lg font-semibold text-white mb-2">Delete Image</h3>
             <p className="text-sm text-gray-400 mb-4">
               Are you sure you want to delete &ldquo;{deleteTarget.filename}&rdquo;?

@@ -171,7 +171,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="space-y-6">
-        <section className="bg-card rounded-lg border border-border p-6">
+        <section className="bg-card rounded-lg border-2 border-border p-6">
           <h2 className="text-lg font-semibold text-white mb-4">Score Weights</h2>
           <p className="text-sm text-gray-400 mb-4">
             Weights must sum to 1.00. Current sum: <span className={canSave ? 'text-green-400' : 'text-red-400'}>{weightsSum.toFixed(2)}</span>
@@ -194,7 +194,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="bg-card rounded-lg border border-border p-6">
+        <section className="bg-card rounded-lg border-2 border-border p-6">
           <h2 className="text-lg font-semibold text-white mb-4">General</h2>
           <div className="space-y-4">
             <div>
@@ -222,7 +222,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="bg-card rounded-lg border border-border p-6">
+        <section className="bg-card rounded-lg border-2 border-border p-6">
           <h2 className="text-lg font-semibold text-white mb-4">Search Index</h2>
           <p className="text-sm text-gray-400 mb-4">
             Reindex all published content (devices, articles, videos) in Upstash Search.

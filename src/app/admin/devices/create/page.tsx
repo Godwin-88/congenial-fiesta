@@ -60,7 +60,7 @@ interface CollapsibleSectionProps {
 function CollapsibleSection({ title, children, defaultOpen = false }: CollapsibleSectionProps) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="bg-card rounded-lg border border-border mb-4">
+    <div className="bg-card rounded-lg border-2 border-border mb-4">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -644,7 +644,7 @@ export default function CreateDevicePage() {
         {/* Sidebar */}
         <div className="w-72 shrink-0">
           <div className="sticky top-8 space-y-4">
-            <div className="bg-card rounded-lg border border-border p-4">
+            <div className="bg-card rounded-lg border-2 border-border p-4">
               <h3 className="text-sm font-medium text-white mb-3">Status</h3>
               <select value={status} onChange={e => setStatus(e.target.value as 'draft' | 'published')}
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none">
@@ -663,12 +663,12 @@ export default function CreateDevicePage() {
               </div>
             </div>
 
-              <div className="bg-card rounded-lg border border-border p-4">
+              <div className="bg-card rounded-lg border-2 border-border p-4">
                 <h3 className="text-sm font-medium text-white mb-3">Brand</h3>
                 <BrandSelect brands={brands} value={brandId} onChange={setBrandId} disabled={loadingBrands} />
               </div>
 
-            <div className="bg-card rounded-lg border border-border p-4 text-center">
+            <div className="bg-card rounded-lg border-2 border-border p-4 text-center">
               <h3 className="text-sm font-medium text-white mb-2">Overall Score</h3>
               <p className={`text-4xl font-bold ${overallScore >= 80 ? 'text-score-high' : overallScore >= 60 ? 'text-score-mid' : 'text-score-low'}`}>
                 {overallScore || '—'}

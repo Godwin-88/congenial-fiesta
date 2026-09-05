@@ -316,7 +316,7 @@ export default function ComingSoonPage() {
               {editingItem ? 'Update coming-soon teaser details.' : 'Create a new upcoming device teaser.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 rounded-lg border-2 border-border bg-background/50 p-4">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Device Name</label>
               <input
@@ -417,7 +417,7 @@ export default function ComingSoonPage() {
 
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-lg border border-border p-6 max-w-md w-full">
+          <div className="bg-card rounded-lg border-2 border-border p-6 max-w-md w-full">
             <h3 className="text-lg font-semibold text-white mb-2">Delete Teaser</h3>
             <p className="text-sm text-gray-400 mb-4">
               Are you sure you want to delete &ldquo;{deleteName}&rdquo;?

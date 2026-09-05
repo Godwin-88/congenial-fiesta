@@ -322,7 +322,7 @@ export default function CreateArticlePage() {
         <div className="w-72 shrink-0 space-y-4">
 
           {/* Actions */}
-          <div className="bg-card rounded-lg p-4 space-y-3 border border-border">
+          <div className="bg-card rounded-lg p-4 space-y-3 border-2 border-border">
             <button
               onClick={() => handleSave('draft')}
               disabled={!canSave || isSaving}

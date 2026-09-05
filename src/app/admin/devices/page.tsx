@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Plus, Edit2, Trash2, Search } from 'lucide-react'
+import { Plus, Edit2, Trash2, Search, Tag } from 'lucide-react'
 import Image from 'next/image'
 
 type Device = {
@@ -144,18 +144,28 @@ export default function DevicesPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-white font-heading">Devices</h1>
-        <a
-          href="/admin/devices/create"
-          className="flex items-center gap-2 px-4 py-2 bg-brand-primary text-white rounded-lg
-                     hover:bg-brand-primary/80 transition-colors text-sm font-medium"
-        >
-          <Plus size={16} />
-          Add Device
-        </a>
+        <div className="flex items-center gap-2">
+          <a
+            href="/admin/device-types"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg
+                       hover:bg-blue-500 transition-colors text-sm font-medium"
+          >
+            <Tag size={16} />
+            Add Device Category
+          </a>
+          <a
+            href="/admin/devices/create"
+            className="flex items-center gap-2 px-4 py-2 bg-brand-primary text-white rounded-lg
+                       hover:bg-brand-primary/80 transition-colors text-sm font-medium"
+          >
+            <Plus size={16} />
+            Add Device
+          </a>
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-card rounded-lg border border-border p-4 mb-4">
+      <div className="bg-card rounded-lg border-2 border-border p-4 mb-4">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-2.5 text-gray-500" size={16} />
@@ -330,7 +340,7 @@ export default function DevicesPage() {
       {/* Delete confirmation */}
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-lg border border-border p-6 max-w-md w-full">
+          <div className="bg-card rounded-lg border-2 border-border p-6 max-w-md w-full">
             <h3 className="text-lg font-semibold text-white mb-2">Delete Device</h3>
             <p className="text-sm text-gray-400 mb-4">
               Are you sure you want to delete &ldquo;{deleteName}&rdquo;? This cannot be undone.
