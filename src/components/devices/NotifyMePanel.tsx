@@ -53,9 +53,9 @@ export default function NotifyMePanel({ deviceSlug, deviceName, label }: NotifyM
   }
 
   return (
-    <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+    <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-4">
       <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-        <Bell size={16} className="text-amber-400" />
+        <Bell size={16} className="text-sky-400" />
         {label ?? `Where available — get notified when ${deviceName} drops`}
       </div>
       <div className="mt-3 flex gap-2">

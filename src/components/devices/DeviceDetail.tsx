@@ -17,12 +17,35 @@ import CommentsSection from '@/components/community/CommentsSection'
 import RatingsSkeleton from '@/components/community/RatingsSkeleton'
 import CommentsSkeleton from '@/components/community/CommentsSkeleton'
 import AddToCompareButton from '@/components/devices/AddToCompareButton'
+import SectionJumpNav from '@/components/devices/SectionJumpNav'
+import BackToTop from '@/components/devices/BackToTop'
 import { getRelatedDevices } from '@/lib/devices/queries'
 import type { Device } from '@/types/cms'
 
 interface DeviceDetailProps {
   device: Device
   isPreview?: boolean
+}
+
+/** Flatten the nested camera JSONB into display-ready rows for the specs accordion. */
+function cameraToRows(cam?: Record<string, unknown>): { label: string; value?: string }[] {
+  if (!cam) return []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const c = cam as any
+  const rows: { label: string; value?: string }[] = []
+  const rear = Array.isArray(c.rear) ? c.rear : []
+  if (rear.length > 0) {
+    rear.forEach((r: any, i: number) => {
+      if (r?.sensorType) rows.push({ label: `Rear camera ${i + 1}`, value: String(r.sensorType) })
+    })
+  } else if (c.main) {
+    rows.push({ label: 'Rear camera', value: String(c.main) })
+  }
+  if (c.selfie?.sensorType) rows.push({ label: 'Selfie camera', value: String(c.selfie.sensorType) })
+  if (c.video?.rear) rows.push({ label: 'Video (rear)', value: String(c.video.rear) })
+  if (c.video?.front) rows.push({ label: 'Video (front)', value: String(c.video.front) })
+  if (c.extras) rows.push({ label: 'Camera extras', value: String(c.extras) })
+  return rows
 }
 
 export default async function DeviceDetail({ device, isPreview = false }: DeviceDetailProps) {
@@ -70,6 +93,40 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
     }).catch(() => []),
   ])
 
+  // Section anchors for the sticky jump nav (ids must be unique & stable).
+  const specSections = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'quick-specs', label: 'Quick Specs' },
+    { id: 'full-specs', label: 'Full Specs' },
+    { id: 'video-review', label: 'Video' },
+    { id: 'related-devices', label: 'Related' },
+    { id: 'reviews', label: 'Reviews' },
+  ]
+
+  // Convert the unstructured JSONB spec objects into stable {title, rows} groups.
+  const specGroups = [
+    { title: 'Design & Build', data: dSpecsDesign, keys: ['Dimensions', 'Weight', 'Front', 'Back', 'Colours', 'IP Rating'] },
+    { title: 'Display', data: dSpecsDisplay, keys: ['Size', 'Type', 'Resolution', 'Refresh Rate', 'Pixel Density', 'Peak Brightness', 'HDR', 'Protection'] },
+    { title: 'Processor', data: dSpecsProcessor, keys: ['Chipset', 'CPU', 'GPU'] },
+    { title: 'Memory', data: dSpecsMemory, keys: ['RAM', 'RAM type', 'Storage', 'Expandable'] },
+    { title: 'Battery', data: dSpecsBattery, keys: ['Capacity', 'Battery type', 'Wired charging', 'Wireless charging', 'Reverse charging'] },
+    { title: 'Camera', data: dSpecsCamera, keys: [] },
+    { title: 'Connectivity', data: d.specs_connectivity as Record<string, unknown> | undefined, keys: ['WiFi', 'Bluetooth', 'NFC', 'USB', 'Positioning', 'IR blaster'] },
+    { title: 'Network', data: d.specs_network as Record<string, unknown> | undefined, keys: ['SIM', 'Technology', '2G bands', '3G bands', '4G bands', '5G bands'] },
+    { title: 'Software', data: d.specs_software as Record<string, unknown> | undefined, keys: ['OS', 'UI layer', 'Major OS upgrades', 'Security patches'] },
+  ]
+  const fullSpecGroups = specGroups.map((g) => ({
+    title: g.title,
+    rows: [
+      ...g.keys.map((k) => {
+        const val = (g.data as Record<string, unknown> | undefined)?.[k]
+        return { label: k, value: val ? String(val) : undefined }
+      }),
+      // Camera gets a custom flatten for rear/selfie/video arrays.
+      ...(g.title === 'Camera' ? cameraToRows(dSpecsCamera) : []),
+    ],
+  }))
+
   const schemaOrg = {
     '@context': 'https://schema.org',
     '@type': 'Product',
@@ -110,8 +167,11 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
           </ol>
         </nav>
 
+        {/* Sticky section jump navigation (mobile-first) */}
+        <SectionJumpNav items={specSections} />
+
         {/* Hero section */}
-        <div className="grid gap-8 lg:grid-cols-2">
+        <section id="overview" className="grid scroll-mt-28 gap-8 lg:grid-cols-2">
           {/* Image gallery */}
           <DeviceImageGallery images={images as unknown as GalleryImage[]} deviceName={dName} />
 
@@ -143,6 +203,24 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
               )}
             </div>
 
+            <div className="flex items-center gap-4">
+              <ScoreBadge score={overallScore} size="lg" />
+              <div>
+                <p className="font-heading text-lg font-bold text-foreground">Fweezy Score</p>
+                <p className="text-sm text-muted-foreground">Overall rating</p>
+              </div>
+            </div>
+
+            <RadarChart
+              scores={{
+                display: dScoreDisplay,
+                performance: dScorePerformance,
+                camera: dScoreCamera,
+                battery: dScoreBattery,
+                value: dScoreValue,
+              }}
+            />
+
             <BuyBox
               buyLinks={dBuyLinks}
               deviceName={dName}
@@ -157,14 +235,6 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
               />
             )}
 
-            <div className="flex items-center gap-4">
-              <ScoreBadge score={overallScore} size="lg" />
-              <div>
-                <p className="font-heading text-lg font-bold text-foreground">Fweezy Score</p>
-                <p className="text-sm text-muted-foreground">Overall rating</p>
-              </div>
-            </div>
-
             <div className="flex flex-wrap items-center gap-3 pt-1">
               <AddToCompareButton
                 device={{
@@ -178,16 +248,6 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
               <ShareRow title={`${dName} review by Fweezy`} path={`/devices/${String(brandData.slug ?? '')}/${dSlug}`} />
             </div>
 
-            <RadarChart
-              scores={{
-                display: dScoreDisplay,
-                performance: dScorePerformance,
-                camera: dScoreCamera,
-                battery: dScoreBattery,
-                value: dScoreValue,
-              }}
-            />
-
             <VerdictBlock
               verdict={{
                 pros: d.verdict_pros ?? [],
@@ -197,51 +257,45 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
               }}
             />
           </div>
-        </div>
+        </section>
 
-        {/* Quick specs */}
-        <div className="mt-12 rounded-xl border border-border bg-card p-4">
-          {[
-            { Icon: Smartphone, label: 'Display', value: dSpecsDisplay?.['Size'] },
-            { Icon: Cpu, label: 'Chipset', value: dSpecsProcessor?.['Chipset'] },
-            { Icon: Camera, label: 'Camera', value: dCamMain },
-            { Icon: BatteryFull, label: 'Battery', value: dSpecsBattery?.['Capacity'] },
-            { Icon: MemoryStick, label: 'RAM', value: dSpecsMemory?.['RAM']?.toString().split(' ')[0] },
-            { Icon: ShieldCheck, label: 'IP Rating', value: dSpecsDesign?.['IP Rating'] },
-          ]
-            .filter((s) => s.value)
-            .map((spec) => (
-              <div
-                key={spec.label}
-                className="flex items-center gap-3 border-b border-border py-2.5 last:border-0"
-              >
-                <spec.Icon className="h-5 w-5 shrink-0 text-brand-primary" aria-hidden="true" />
-                <span className="text-sm text-muted-foreground">{spec.label}</span>
-                <span className="ml-auto text-sm font-semibold text-foreground">
-                  {String(spec.value)}
-                </span>
-              </div>
-            ))}
-        </div>
+        {/* Quick specs — dense stat grid (was a tall vertical list) */}
+        <section id="quick-specs" className="mt-12 scroll-mt-28">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              { Icon: Smartphone, label: 'Display', value: dSpecsDisplay?.['Size'] },
+              { Icon: Cpu, label: 'Chipset', value: dSpecsProcessor?.['Chipset'] },
+              { Icon: Camera, label: 'Camera', value: dCamMain },
+              { Icon: BatteryFull, label: 'Battery', value: dSpecsBattery?.['Capacity'] },
+              { Icon: MemoryStick, label: 'RAM', value: dSpecsMemory?.['RAM']?.toString().split(' ')[0] },
+              { Icon: ShieldCheck, label: 'IP Rating', value: dSpecsDesign?.['IP Rating'] },
+            ]
+              .filter((s) => s.value)
+              .map((spec) => (
+                <div
+                  key={spec.label}
+                  className="flex flex-col items-start gap-1.5 rounded-xl border border-border bg-card p-3"
+                >
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-primary/10">
+                    <spec.Icon className="h-4 w-4 text-brand-primary" aria-hidden="true" />
+                  </span>
+                  <span className="text-xs text-muted-foreground">{spec.label}</span>
+                  <span className="text-sm font-semibold leading-tight text-foreground">
+                    {String(spec.value)}
+                  </span>
+                </div>
+              ))}
+          </div>
+        </section>
 
-        {/* Full Specifications */}
-        <FullSpecsTable
-          specs={{
-            design: dSpecsDesign,
-            display: dSpecsDisplay,
-            processor: dSpecsProcessor,
-            memory: dSpecsMemory,
-            camera: dSpecsCamera,
-            battery: dSpecsBattery,
-            connectivity: d.specs_connectivity as Record<string, unknown> | undefined,
-            network: d.specs_network as Record<string, unknown> | undefined,
-            software: d.specs_software as Record<string, unknown> | undefined,
-          }}
-        />
+        {/* Full Specifications — collapsible accordion */}
+        <section id="full-specs" className="scroll-mt-28">
+          <FullSpecsTable groups={fullSpecGroups} />
+        </section>
 
         {/* Full Verdict */}
         {d.verdict_full && (
-          <section className="mt-12">
+          <section id="full-verdict" className="mt-12 scroll-mt-28">
             <div className="rounded-xl border-l-4 border-brand-primary bg-card p-6">
               <h2 className="mb-4 font-heading text-xl font-bold text-foreground">
                 Fweezytech's Full Verdict
@@ -255,7 +309,7 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
 
         {/* Video Review */}
         {(dRelatedVideoId || dRelatedTiktokUrl) && (
-          <section className="mt-12">
+          <section id="video-review" className="mt-12 scroll-mt-28">
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-heading text-2xl font-bold text-foreground">
                 Fweezytech's Video Review
@@ -300,15 +354,19 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
           </section>
         )}
 
-        <RelatedDevices devices={relatedDevices} currentSlug={dSlug} />
+        <section id="related-devices" className="scroll-mt-28">
+          <RelatedDevices devices={relatedDevices} currentSlug={dSlug} />
+        </section>
 
-        <Suspense fallback={<RatingsSkeleton />}>
-          <RatingsSection deviceSlug={dSlug} deviceName={dName} />
-        </Suspense>
+        <section id="reviews" className="scroll-mt-28">
+          <Suspense fallback={<RatingsSkeleton />}>
+            <RatingsSection deviceSlug={dSlug} deviceName={dName} />
+          </Suspense>
 
-        <Suspense fallback={<CommentsSkeleton />}>
-          <CommentsSection contentType="device" contentSlug={dSlug} />
-        </Suspense>
+          <Suspense fallback={<CommentsSkeleton />}>
+            <CommentsSection contentType="device" contentSlug={dSlug} />
+          </Suspense>
+        </section>
 
         {/* Schema.org JSON-LD */}
         {!isPreview && (
@@ -318,6 +376,8 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
           />
         )}
       </div>
+
+      <BackToTop />
     </div>
   )
 }
