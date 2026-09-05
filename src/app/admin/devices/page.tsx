@@ -12,7 +12,15 @@ type Device = {
   major_category: string | null
   scores_overall: number | null
   status: string
+  images?: { url: string; alt?: string | null; isPrimary?: boolean }[] | null
   brand?: { name: string; logo_url: string | null } | null
+}
+
+function getDeviceImageUrl(device: Device): string | null {
+  if (!Array.isArray(device.images) || device.images.length === 0) return null
+  const primary = device.images.find((img) => img?.isPrimary)
+  const first = device.images.find((img) => img && typeof img.url === 'string' && img.url.length > 0)
+  return primary?.url ?? first?.url ?? null
 }
 
 type Brand = {
@@ -218,13 +226,25 @@ export default function DevicesPage() {
               {!loading && filteredDevices.map(device => (
                 <tr key={device.id} className="hover:bg-muted/50 transition-colors">
                   <td className="px-4 py-3">
-                    <div className="w-10 h-10 bg-muted rounded flex items-center justify-center text-xs text-gray-500">
-                      {device.brand?.logo_url ? (
-                        <Image src={device.brand.logo_url} alt={device.name} width={40} height={40} className="object-contain rounded" />
-                      ) : (
-                        device.name[0]
-                      )}
-                    </div>
+                    {getDeviceImageUrl(device) ? (
+                      <div className="relative w-10 h-10 overflow-hidden rounded bg-muted">
+                        <Image
+                          src={getDeviceImageUrl(device)!}
+                          alt={device.name}
+                          width={40}
+                          height={40}
+                          className="object-contain rounded"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-10 h-10 bg-muted rounded flex items-center justify-center text-xs text-gray-500">
+                        {device.brand?.logo_url ? (
+                          <Image src={device.brand.logo_url} alt={device.name} width={40} height={40} className="object-contain rounded" />
+                        ) : (
+                          device.name[0]
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-white font-medium">{device.name}</td>
                   <td className="px-4 py-3 text-gray-400">{device.brand?.name ?? '—'}</td>
