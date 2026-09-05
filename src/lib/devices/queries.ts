@@ -163,6 +163,31 @@ export async function getDevice(
   }
 }
 
+/**
+ * Fetch a single device for the admin preview page (by id).
+ * Unlike getDevice, this bypasses the Redis cache, applies NO status filter,
+ * and returns the row regardless of whether it is published or a draft.
+ */
+export async function getDevicePreview(
+  id: number,
+): Promise<Device | null> {
+  try {
+    const supabase = getSupabase()
+
+    const { data, error } = await supabase
+      .from('devices')
+      .select('*, brand:brands(*)')
+      .eq('id', id)
+      .single()
+
+    if (error || !data) return null
+
+    return mapDevice(data)
+  } catch {
+    return null
+  }
+}
+
 export async function getAllDevicePaths(): Promise<
   Array<{ brand: string; slug: string }>
 > {
@@ -309,4 +334,36 @@ export async function getFeaturedBrands(): Promise<Brand[]> {
   const brands = (data ?? []) as Brand[]
   await redis.setex(cacheKey, 3600, JSON.stringify(brands))
   return brands
+}
+/**
+ * Related devices for a device detail page — same major category (preferred) or
+ * same brand, ordered by score. Excludes the current device.
+ */
+export async function getRelatedDevices(
+  device: Pick<Device, 'id' | 'major_category' | 'brand_id'>,
+  limit = 4,
+): Promise<Device[]> {
+  const supabase = getSupabase()
+
+  // Same major category first
+  let query = supabase
+    .from('devices')
+    .select('*, brand:brands(*)')
+    .eq('status', 'published')
+    .neq('id', device.id)
+    .order('scores_overall', { ascending: false })
+    .limit(limit + 8)
+
+  if (device.major_category) {
+    query = query.eq('major_category', device.major_category)
+  } else if (device.brand_id) {
+    query = query.eq('brand_id', device.brand_id)
+  }
+
+  const { data, error } = await query
+
+  if (error || !data) return []
+
+  const related = (data ?? []).map(mapDevice)
+  return related.slice(0, limit)
 }

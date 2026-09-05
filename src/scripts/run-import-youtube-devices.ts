@@ -26,17 +26,22 @@ async function run() {
   const videos = await fetchYouTubeVideos(50)
   console.log(`✓ Fetched ${videos.length} videos`)
 
-  console.log('Importing devices...')
-  const result = await importDevicesFromYouTube(supabase, videos)
+  console.log('Running agent pipeline (Groq extraction + web-search image curation)...')
+  const result = await importDevicesFromYouTube(supabase, videos, {
+    aiExtract: true,
+    curateImages: true,
+  })
 
   console.log('')
   console.log('── Import Summary ─────────────────────────')
-  console.log(`  Fetched:  ${result.fetched}`)
-  console.log(`  Created:  ${result.created}`)
-  console.log(`  Updated:  ${result.updated}`)
-  console.log(`  Skipped:  ${result.skipped}`)
+  console.log(`  Fetched:        ${result.fetched}`)
+  console.log(`  Created:        ${result.created}`)
+  console.log(`  Updated:        ${result.updated}`)
+  console.log(`  Skipped:        ${result.skipped}`)
+  console.log(`  AI extracted:   ${result.aiExtracted}`)
+  console.log(`  Images curated: ${result.imagesCurated}`)
   console.log('───────────────────────────────────────────')
-  console.log('Done. New devices are published with 0 scores and can be scored in the admin panel.')
+  console.log('Done. New devices are DRAFTS — review + publish them in /admin/devices.')
 }
 
 run().catch((error) => {

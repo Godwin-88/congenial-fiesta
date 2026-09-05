@@ -97,6 +97,7 @@ export default function CreateDevicePage() {
   const [priceUsd, setPriceUsd] = useState('')
   const [tagline, setTagline] = useState('')
   const [status, setStatus] = useState<'draft' | 'published'>('draft')
+  const [availability, setAvailability] = useState<'in-stock' | 'coming-soon' | 'out-of-stock' | ''>('')
 
   // Taxonomy (replaces the old single price-tier "category")
   const [priceTier, setPriceTier] = useState('')
@@ -277,6 +278,7 @@ export default function CreateDevicePage() {
         price_usd: priceUsd ? parseInt(priceUsd) : null,
         tagline: tagline.trim() || null,
         status: publish ? 'published' : 'draft',
+        availability: availability || null,
         images: images.filter(img => img.url.trim()),
         score_display: scoreDisplay ? parseFloat(scoreDisplay) : null,
         score_performance: scorePerformance ? parseFloat(scorePerformance) : null,
@@ -331,7 +333,7 @@ export default function CreateDevicePage() {
     }
   }
 
-  const previewUrl = brandId && slug ? `/devices/${brands.find(b => b.id === brandId)?.slug ?? ''}/${slug}` : null
+  const previewUrl = deviceId ? `/preview?id=${deviceId}` : null
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -649,6 +651,16 @@ export default function CreateDevicePage() {
                 <option value="draft">Draft</option>
                 <option value="published">Published</option>
               </select>
+              <div className="mt-3">
+                <label className="block text-xs text-gray-500 mb-1">Availability</label>
+                <select value={availability} onChange={e => setAvailability(e.target.value as never)}
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none">
+                  <option value="">Not set</option>
+                  <option value="in-stock">In stock</option>
+                  <option value="coming-soon">Coming soon</option>
+                  <option value="out-of-stock">Out of stock</option>
+                </select>
+              </div>
             </div>
 
               <div className="bg-card rounded-lg border border-border p-4">

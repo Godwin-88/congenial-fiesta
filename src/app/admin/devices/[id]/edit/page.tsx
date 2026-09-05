@@ -95,6 +95,7 @@ export default function EditDevicePage() {
   const [priceUsd, setPriceUsd] = useState('')
   const [tagline, setTagline] = useState('')
   const [status, setStatus] = useState<'draft' | 'published'>('draft')
+  const [availability, setAvailability] = useState<'in-stock' | 'coming-soon' | 'out-of-stock' | ''>('')
 
   // Taxonomy
   const [priceTier, setPriceTier] = useState('')
@@ -209,6 +210,7 @@ export default function EditDevicePage() {
         setPriceUsd(device.price_usd ?? '')
         setTagline(device.tagline ?? '')
         setStatus(device.status)
+        setAvailability(device.availability ?? '')
         setImages(device.images ?? [])
         setScoreDisplay(device.score_display ?? '')
         setScorePerformance(device.score_performance ?? '')
@@ -321,6 +323,7 @@ export default function EditDevicePage() {
         price_usd: priceUsd ? parseInt(priceUsd) : null,
         tagline: tagline.trim() || null,
         status: publish ? 'published' : 'draft',
+        availability: availability || null,
         images: images.filter(img => img.url.trim()),
         score_display: scoreDisplay ? parseFloat(scoreDisplay) : null,
         score_performance: scorePerformance ? parseFloat(scorePerformance) : null,
@@ -383,7 +386,7 @@ export default function EditDevicePage() {
     }
   }
 
-  const previewUrl = brandId && slug ? `/devices/${brands.find(b => b.id === brandId)?.slug ?? ''}/${slug}` : null
+  const previewUrl = id ? `/preview?id=${id}` : null
 
   if (loading) {
     return (
@@ -717,6 +720,16 @@ export default function EditDevicePage() {
                 <option value="draft">Draft</option>
                 <option value="published">Published</option>
               </select>
+              <div className="mt-3">
+                <label className="block text-xs text-gray-500 mb-1">Availability</label>
+                <select value={availability} onChange={e => setAvailability(e.target.value as never)}
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none">
+                  <option value="">Not set</option>
+                  <option value="in-stock">In stock</option>
+                  <option value="coming-soon">Coming soon</option>
+                  <option value="out-of-stock">Out of stock</option>
+                </select>
+              </div>
               {status === 'published' && (
                 <button type="button" onClick={() => setStatus('draft')}
                   className="mt-2 w-full text-xs text-amber-400 hover:text-amber-300 border border-amber-500/30 rounded px-3 py-1.5">

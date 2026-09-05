@@ -12,6 +12,9 @@ function getAdminClient() {
   )
 }
 
+// Agent pipeline needs time for Groq extraction + image curation.
+export const maxDuration = 120
+
 export const GET = verifySignatureAppRouter(async () => {
   if (!process.env.QSTASH_CURRENT_SIGNING_KEY) {
     return NextResponse.json({ error: 'Missing signing key' }, { status: 500 })
@@ -28,7 +31,13 @@ export const GET = verifySignatureAppRouter(async () => {
     return NextResponse.json({ status: 'error', error: 'YouTube fetch failed' }, { status: 500 })
   }
 
-  const result = await importDevicesFromYouTube(supabase, videos)
+  // Agent pipeline: Groq Device Analyzer (extraction) + Image Curator (Groq
+  // web search finds the best official press renders). Devices are created as
+  // DRAFTS for admin review — never auto-published.
+  const result = await importDevicesFromYouTube(supabase, videos, {
+    aiExtract: true,
+    curateImages: true,
+  })
 
   return NextResponse.json({ status: 'ok', ...result })
 })

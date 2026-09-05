@@ -169,6 +169,7 @@ export async function POST(request: NextRequest) {
       price_usd: body.price_usd ?? null,
       tagline: body.tagline?.trim() ?? null,
       status: body.status ?? 'draft',
+      availability: body.availability ?? null,
       score_display: body.score_display ?? null,
       score_performance: body.score_performance ?? null,
       score_camera: body.score_camera ?? null,

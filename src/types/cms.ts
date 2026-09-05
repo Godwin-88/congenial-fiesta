@@ -56,6 +56,7 @@ export interface Device {
   price_usd: number | null
   tagline: string | null
   status: 'draft' | 'published'
+  availability: 'in-stock' | 'coming-soon' | 'out-of-stock' | null
   score_display: number | null
   score_performance: number | null
   score_camera: number | null
@@ -259,6 +260,7 @@ export function mapDevice(row: Record<string, unknown>): Device {
     price_usd: (row.price_usd as number) ?? null,
     tagline: (row.tagline as string) ?? null,
     status: (row.status as 'draft' | 'published'),
+    availability: (row.availability as Device['availability']) ?? null,
     score_display: (row.score_display as number) ?? null,
     score_performance: (row.score_performance as number) ?? null,
     score_camera: (row.score_camera as number) ?? null,
