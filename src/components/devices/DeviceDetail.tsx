@@ -19,6 +19,8 @@ import CommentsSkeleton from '@/components/community/CommentsSkeleton'
 import AddToCompareButton from '@/components/devices/AddToCompareButton'
 import SectionJumpNav from '@/components/devices/SectionJumpNav'
 import BackToTop from '@/components/devices/BackToTop'
+import PageProgress from '@/components/devices/PageProgress'
+import VideoReview from '@/components/devices/VideoReview'
 import { getRelatedDevices } from '@/lib/devices/queries'
 import type { Device } from '@/types/cms'
 
@@ -94,11 +96,12 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
   ])
 
   // Section anchors for the sticky jump nav (ids must be unique & stable).
+  // Phase 2: video is prominent — place it right after Overview.
   const specSections = [
     { id: 'overview', label: 'Overview' },
+    { id: 'video-review', label: 'Video' },
     { id: 'quick-specs', label: 'Quick Specs' },
     { id: 'full-specs', label: 'Full Specs' },
-    { id: 'video-review', label: 'Video' },
     { id: 'related-devices', label: 'Related' },
     { id: 'reviews', label: 'Reviews' },
   ]
@@ -136,7 +139,7 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
     image: primaryImage?.url ? String(primaryImage.url) : '',
     review: {
       '@type': 'Review',
-      author: { '@type': 'Person', name: 'Fweezy' },
+      author: { '@type': 'Person', name: 'Millan Wafulla' },
       reviewRating: {
         '@type': 'Rating',
         ratingValue: overallScore,
@@ -147,6 +150,7 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
 
   return (
     <div>
+      <PageProgress />
       {isPreview && (
         <div className="sticky top-0 z-50 border-b border-amber-500/40 bg-amber-500 px-4 py-2 text-center text-sm font-medium text-amber-950">
           <Link href="/admin/devices" className="underline underline-offset-2">Exit preview</Link>
@@ -155,8 +159,8 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
       )}
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Breadcrumb */}
-        <nav aria-label="breadcrumb" className="mb-6">
-          <ol className="flex items-center gap-2 text-sm text-muted-foreground">
+        <nav aria-label="breadcrumb" className="mb-6 -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <ol className="flex w-max items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
             <li><Link href="/" className="hover:text-foreground">Home</Link></li>
             <li aria-hidden="true">›</li>
             <li><Link href="/devices" className="hover:text-foreground">Devices</Link></li>
@@ -173,7 +177,15 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
         {/* Hero section */}
         <section id="overview" className="grid scroll-mt-28 gap-8 lg:grid-cols-2">
           {/* Image gallery */}
-          <DeviceImageGallery images={images as unknown as GalleryImage[]} deviceName={dName} />
+          <div>
+            <Link
+              href="/devices"
+              className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground lg:hidden"
+            >
+              ← All Devices
+            </Link>
+            <DeviceImageGallery images={images as unknown as GalleryImage[]} deviceName={dName} />
+          </div>
 
           {/* Device info */}
           <div className="space-y-6">
@@ -245,7 +257,7 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
                   score: overallScore,
                 }}
               />
-              <ShareRow title={`${dName} review by Fweezy`} path={`/devices/${String(brandData.slug ?? '')}/${dSlug}`} />
+              <ShareRow title={`${dName} review by Millan Wafulla`} path={`/devices/${String(brandData.slug ?? '')}/${dSlug}`} />
             </div>
 
             <VerdictBlock
@@ -258,6 +270,33 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
             />
           </div>
         </section>
+
+        {/* Video Review — prominent, right after overview, poster-play lazy load */}
+        {(dRelatedVideoId || dRelatedTiktokUrl) && (
+          <section id="video-review" className="mt-12 scroll-mt-28">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="font-heading text-2xl font-bold text-foreground">
+                Fweezytech's Video Review
+              </h2>
+              {dRelatedVideoId && (
+                <a
+                  href={`https://www.youtube.com/watch?v=${dRelatedVideoId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                >
+                  <Play size={16} className="text-red-500" />
+                  Watch on YouTube
+                </a>
+              )}
+            </div>
+            <VideoReview
+              deviceName={dName}
+              videoId={dRelatedVideoId}
+              tiktokUrl={dRelatedTiktokUrl}
+            />
+          </section>
+        )}
 
         {/* Quick specs — dense stat grid (was a tall vertical list) */}
         <section id="quick-specs" className="mt-12 scroll-mt-28">
@@ -303,53 +342,6 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
               <div className="prose prose-sm dark:prose-invert max-w-none text-foreground/80">
                 {d.verdict_full}
               </div>
-            </div>
-          </section>
-        )}
-
-        {/* Video Review */}
-        {(dRelatedVideoId || dRelatedTiktokUrl) && (
-          <section id="video-review" className="mt-12 scroll-mt-28">
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="font-heading text-2xl font-bold text-foreground">
-                Fweezytech's Video Review
-              </h2>
-              {dRelatedVideoId && (
-                <a
-                  href={`https://www.youtube.com/watch?v=${dRelatedVideoId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-                >
-                  <Play size={16} className="text-red-500" />
-                  Watch on YouTube
-                </a>
-              )}
-            </div>
-            <div className="space-y-6">
-              {dRelatedVideoId && (
-                <div className="aspect-video w-full overflow-hidden rounded-xl">
-                  <iframe
-                    src={`https://www.youtube.com/embed/${dRelatedVideoId}`}
-                    title={`${dName} Review by Fweezy`}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="h-full w-full"
-                    loading="lazy"
-                  />
-                </div>
-              )}
-              {dRelatedTiktokUrl && (
-                <div>
-                  <blockquote className="tiktok-embed" cite={dRelatedTiktokUrl}>
-                    <section>
-                      <a target="_blank" rel="noopener" href={dRelatedTiktokUrl}>
-                        View on TikTok
-                      </a>
-                    </section>
-                  </blockquote>
-                </div>
-              )}
             </div>
           </section>
         )}

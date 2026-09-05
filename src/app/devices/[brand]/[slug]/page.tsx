@@ -27,7 +27,7 @@ export async function generateMetadata({
   const metaDescription =
     d.seo_description
       ? String(d.seo_description)
-      : `In-depth ${dName} review by Fweezy. Score: ${dScore}/100. Full specs, benchmarks, pros & cons, and best prices in Kenya.`
+      : `In-depth ${dName} review by Millan Wafulla. Score: ${dScore}/100. Full specs, benchmarks, pros & cons, and best prices in Kenya.`
 
   const ogImages: Array<{ url: string }> = []
   if (d.seo_og_image) {
