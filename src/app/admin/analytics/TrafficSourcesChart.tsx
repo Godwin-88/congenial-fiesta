@@ -9,11 +9,19 @@ type Props = {
   totalViews: number
 }
 
-const COLORS = ['#0066FF', '#F59E0B', '#10B981', '#EF4444', '#8B5CF6', '#EC4899', '#6366F1']
+const COLORS = ['var(--brand-primary)', '#F59E0B', '#10B981', '#EF4444', '#8B5CF6', '#EC4899', '#6366F1']
+
+const tooltipStyle = {
+  backgroundColor: 'var(--card)',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+}
+
+const tooltipLabelStyle = { color: 'var(--card-foreground)' }
 
 export default function TrafficSourcesChart({ data, totalViews }: Props) {
   if (data.length === 0) {
-    return <p className="text-gray-500 text-center py-8">No traffic data available</p>
+    return <p className="text-muted-foreground text-center py-8 text-sm">No traffic data available</p>
   }
 
   const chartData = data.map((d) => ({
@@ -40,8 +48,8 @@ export default function TrafficSourcesChart({ data, totalViews }: Props) {
             ))}
           </Pie>
           <Tooltip
-            contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px' }}
-            labelStyle={{ color: '#F9FAFB' }}
+            contentStyle={tooltipStyle}
+            labelStyle={tooltipLabelStyle}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             formatter={(value: any, name: any) => [`${(value as number).toLocaleString()} views`, name as string]}
           />
@@ -50,11 +58,11 @@ export default function TrafficSourcesChart({ data, totalViews }: Props) {
       <div className="mt-4 space-y-1">
         {chartData.map((item, i) => (
           <div key={item.name} className="flex justify-between text-sm">
-            <span className="text-gray-400 flex items-center gap-2">
+            <span className="text-muted-foreground flex items-center gap-2">
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
               {item.name}
             </span>
-            <span className="text-gray-300">{item.percentage}% ({item.value.toLocaleString()})</span>
+            <span className="text-foreground">{item.percentage}% ({item.value.toLocaleString()})</span>
           </div>
         ))}
       </div>

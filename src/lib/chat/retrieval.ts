@@ -1,6 +1,15 @@
 import { semanticSearch } from '@/lib/upstash/vector'
 import { searchDocuments } from '@/lib/upstash/search'
 import { fetchYouTubeVideos } from '@/lib/youtube/client'
+import { graphRetrieve } from '@/lib/graph/index'
+import { createClient } from '@supabase/supabase-js'
+
+function serviceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return null
+  return createClient(url, key)
+}
 
 export type RetrievedDevice = {
   name: string
@@ -44,18 +53,23 @@ export type RetrievedContext = {
   articles: RetrievedArticle[]
   videos: RetrievedVideo[]
   navigationCards: NavigationCard[]
+  /** GraphRAG blast (HybridRAG merge) — optional, added when KG yields hits */
+  graph?: string
 }
 
 export async function retrieveContext(query: string): Promise<RetrievedContext> {
-  const [vectorResults, searchResults, youtubeResults] = await Promise.allSettled([
+  const db = serviceClient()
+  const [vectorResults, searchResults, youtubeResults, graphResults] = await Promise.allSettled([
     semanticSearch(query, 6),
     searchDocuments(query),
     fetchYouTubeVideos(15),
+    db ? graphRetrieve(db, query) : Promise.resolve({ nodes: [], edges: [], text: '' }),
   ])
 
   const vectorDocs = vectorResults.status === 'fulfilled' ? vectorResults.value : []
   const searchDocs = searchResults.status === 'fulfilled' ? searchResults.value : []
   const youtubeVideos = youtubeResults.status === 'fulfilled' ? youtubeResults.value : []
+  const graphText = graphResults.status === 'fulfilled' ? graphResults.value.text : ''
 
   const seenIds = new Set(vectorDocs.map(r => r.id))
   const mergedDocs = [
@@ -201,11 +215,16 @@ export async function retrieveContext(query: string): Promise<RetrievedContext> 
     return true
   }).slice(0, 4)
 
-  return { devices, articles, videos, navigationCards: uniqueCards }
+  return { devices, articles, videos, navigationCards: uniqueCards, graph: graphText || undefined }
 }
 
 export function formatContextForPrompt(context: RetrievedContext): string {
   const lines: string[] = []
+
+  // GraphRAG first (relational insights — most decision-relevant)
+  if (context.graph) {
+    lines.push(context.graph)
+  }
 
   if (context.devices.length > 0) {
     lines.push('## Relevant Devices from FweezyTech Database:')

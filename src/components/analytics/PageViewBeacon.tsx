@@ -3,20 +3,27 @@
 import { useEffect, useRef } from 'react'
 import { usePathname } from 'next/navigation'
 
-const BEACON_TOKEN = process.env.NEXT_PUBLIC_ANALYTICS_BEACON_TOKEN ?? ''
+function isTrackablePath(path: string): boolean {
+  if (!path || path === '/') return true
+  return (
+    !path.startsWith('/admin') &&
+    !path.startsWith('/preview') &&
+    !path.startsWith('/api') &&
+    !path.startsWith('/_next')
+  )
+}
 
 export default function PageViewBeacon() {
   const pathname = usePathname()
-  const lastPathRef = useRef<string>('')
+  const lastPathRef = useRef<string | null>(null)
 
   useEffect(() => {
-    // Skip initial render — track only navigations
-    if (!lastPathRef.current) {
+    if (!isTrackablePath(pathname)) {
       lastPathRef.current = pathname
       return
     }
-
-    // Skip if path hasn't changed
+    // Fire on the FIRST mount too — direct landings/refreshes are the majority
+    // of visits and were previously never recorded (only SPA navigations were).
     if (lastPathRef.current === pathname) return
     lastPathRef.current = pathname
 
@@ -26,14 +33,10 @@ export default function PageViewBeacon() {
       userAgent: navigator.userAgent,
     })
 
-    // Use fetch with keepalive to send Authorization header
     fetch('/api/track', {
       method: 'POST',
       keepalive: true,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${BEACON_TOKEN}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: payload,
     }).catch(() => {
       // Silently fail — tracking is non-critical

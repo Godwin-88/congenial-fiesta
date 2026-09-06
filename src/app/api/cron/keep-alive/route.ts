@@ -5,7 +5,7 @@ if (!process.env.QSTASH_CURRENT_SIGNING_KEY) {
   throw new Error("Missing env var QSTASH_CURRENT_SIGNING_KEY")
 }
 
-export const GET = verifySignatureAppRouter(async () => {
+const cronHandler = verifySignatureAppRouter(async () => {
   // Keep Supabase free tier database from pausing
   // by issuing a trivial API request
   try {
@@ -30,3 +30,6 @@ export const GET = verifySignatureAppRouter(async () => {
     timestamp: new Date().toISOString(),
   })
 })
+
+export const GET = cronHandler
+export const POST = cronHandler

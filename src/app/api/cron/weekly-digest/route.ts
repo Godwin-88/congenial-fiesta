@@ -33,7 +33,7 @@ function getWeekBounds(): { weekStart: Date; weekEnd: Date } {
   return { weekStart: monday, weekEnd: sunday }
 }
 
-export const GET = verifySignatureAppRouter(async () => {
+const cronHandler = verifySignatureAppRouter(async () => {
   if (!adminEmail) {
     console.error('ADMIN_EMAIL not set — skipping weekly digest')
     return NextResponse.json({ error: 'ADMIN_EMAIL not configured' }, { status: 500 })
@@ -143,3 +143,6 @@ export const GET = verifySignatureAppRouter(async () => {
     return NextResponse.json({ error: 'Failed to send email' }, { status: 500 })
   }
 })
+
+export const GET = cronHandler
+export const POST = cronHandler

@@ -50,6 +50,10 @@ const migrations = [
   '026_agent_run_log.sql',
   '027_drop_devices_not_null.sql',
   '028_device_purchase_features.sql',
+  '029_search_queries.sql',
+  '030_analytics_grants.sql',
+  '031_analytics_insert_policies.sql',
+  '032_upstash_knowledge_graph.sql',
 ]
 
 async function runMigrations() {

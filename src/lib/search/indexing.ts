@@ -1,6 +1,17 @@
 import { indexDocument, removeDocument, type SearchDocument } from '@/lib/upstash/search'
-import { upsertVector } from '@/lib/upstash/vector'
+import { upsertVector, deleteVector } from '@/lib/upstash/vector'
+import { createClient } from '@supabase/supabase-js'
+import { indexDeviceGraph, indexArticleGraph } from '@/lib/graph/index'
+import { buildDeviceText, sha256Hex } from '@/lib/search/spec-text'
 import type { Device, Article } from '@/types/cms'
+
+/** Service-role client reused by indexing (best-effort; never throw if missing). */
+function serviceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return null
+  return createClient(url, key)
+}
 
 export async function indexDevice(device: Device): Promise<void> {
   if (device.status !== 'published') return
@@ -19,11 +30,18 @@ export async function indexDevice(device: Device): Promise<void> {
     publishedAt: device.created_at,
   }
   await indexDocument(doc)
+  // Rich spec-aware text for the dense index
+  const richText = buildDeviceText(device)
   await upsertVector({
     id: `device:${device.slug}`,
-    text: `${device.name} ${brand} ${device.device_type ?? ''} ${device.major_category ?? ''} ${device.tagline ?? ''} ${(device.specs_processor as Record<string, unknown>)?.chipset ?? ''} ${device.price_tier ?? ''}`,
+    text: richText,
     metadata: { url: doc.url, type: 'device', title: doc.title, imageUrl: doc.imageUrl },
   })
+  // Knowledge graph + index state (best-effort, non-blocking for search)
+  const db = serviceClient()
+  if (db) {
+    await indexDeviceGraph(db, device).catch(() => {})
+  }
 }
 
 export async function indexArticle(article: Article): Promise<void> {
@@ -44,6 +62,10 @@ export async function indexArticle(article: Article): Promise<void> {
     text: `${article.title} ${article.excerpt ?? ''} ${article.category ?? ''}`,
     metadata: { url: doc.url, type: 'article', title: doc.title, imageUrl: doc.imageUrl },
   })
+  const db = serviceClient()
+  if (db) {
+    await indexArticleGraph(db, article).catch(() => {})
+  }
 }
 
 export async function indexVideo(video: {
@@ -98,6 +120,16 @@ export async function indexYouTubeVideo(video: {
   })
 }
 
+/** Remove from Search AND Vector (previously only Search — stale embeddings lingered). */
 export async function removeFromIndex(id: string): Promise<void> {
-  await removeDocument(id)
+  try {
+    await removeDocument(id)
+  } catch {
+    // allow vector deletion to proceed even if search deletion failed
+  }
+  try {
+    await deleteVector(id)
+  } catch {
+    // idempotent
+  }
 }

@@ -89,3 +89,62 @@ export async function searchDocuments(
     }
   })
 }
+
+// List a page of ids currently in the Search index (reconciliation).
+export async function listIndexIds(limit = 500, cursor?: string): Promise<{ ids: string[]; cursor?: string }> {
+  try {
+    const { documents, nextCursor } = await searchIndex.range({ cursor: cursor ?? '', limit, prefix: '' })
+    return {
+      ids: (documents ?? []).map((d) => d.id as string),
+      cursor: nextCursor,
+    }
+  } catch {
+    return { ids: [], cursor: undefined }
+  }
+}
+
+/** Wipe the whole search index (full reconcile — used by reindex-all). */
+export async function resetSearchIndex(): Promise<void> {
+  await searchIndex.reset()
+}
+
+/**
+ * Top search queries from Upstash's native query analytics.
+ * Hits the REST `/analytics/top` endpoint directly (not exposed by the SDK
+ * wrapper). Callers fall back to the first-party SQL `search_queries` table
+ * when this fails — the "upstash + supabase merge" your architecture wants.
+ */
+export async function fetchUpstashTopQueries(limit = 10): Promise<Array<{ query: string; count: number }>> {
+  const url = process.env.UPSTASH_SEARCH_REST_URL
+  const token = process.env.UPSTASH_SEARCH_REST_TOKEN
+  if (!url || !token) return []
+  try {
+    const res = await fetch(`${url}/analytics/top`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ limit }),
+    })
+    if (!res.ok) return []
+    const data = (await res.json()) as unknown
+    // Response shape: { results: [{ query, count }] } or { queries: [...] }
+    const arr = Array.isArray(data)
+      ? data
+      : Array.isArray((data as { results?: unknown }).results)
+        ? (data as { results: Array<{ query?: string; value?: string; count?: number; hits?: number }> }).results
+        : Array.isArray((data as { queries?: unknown }).queries)
+          ? (data as { queries: Array<{ query?: string; value?: string; count?: number; hits?: number }> }).queries
+          : []
+    return arr
+      .map((r) => ({
+        query: String(r.query ?? r.value ?? ''),
+        count: Number(r.count ?? r.hits ?? 0),
+      }))
+      .filter((r) => r.query.length > 0)
+      .slice(0, limit)
+  } catch {
+    return []
+  }
+}

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { fetchUpstashTopQueries } from '@/lib/upstash/search'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -8,22 +9,26 @@ if (!supabaseServiceKey) throw new Error('Missing env var SUPABASE_SERVICE_ROLE_
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-function periodToInterval(period: string): string {
+function periodToMs(period: string): number {
   switch (period) {
-    case '7d': return '7 days'
-    case '30d': return '30 days'
-    case '90d': return '90 days'
-    default: return '30 days'
+    case '7d': return 7 * 24 * 60 * 60 * 1000
+    case '30d': return 30 * 24 * 60 * 60 * 1000
+    case '90d': return 90 * 24 * 60 * 60 * 1000
+    default: return 30 * 24 * 60 * 60 * 1000
   }
+}
+
+function sinceISO(period: string): string {
+  return new Date(Date.now() - periodToMs(period)).toISOString()
 }
 
 // Total page views in period
 export async function getTotalPageViews(period: string): Promise<number> {
-  const interval = periodToInterval(period)
+  const since = sinceISO(period)
   const { count } = await supabase
     .from('page_views')
     .select('*', { count: 'exact', head: true })
-    .gte('created_at', `now() - interval '${interval}'`)
+    .gte('created_at', since)
   return count ?? 0
 }
 
@@ -31,11 +36,11 @@ export async function getTotalPageViews(period: string): Promise<number> {
 export async function getPageViewsOverTime(
   period: string
 ): Promise<Array<{ date: string; views: number }>> {
-  const interval = periodToInterval(period)
+  const since = sinceISO(period)
   const { data } = await supabase
     .from('page_views')
     .select('created_at')
-    .gte('created_at', `now() - interval '${interval}'`)
+    .gte('created_at', since)
     .order('created_at', { ascending: true })
 
   if (!data) return []
@@ -47,7 +52,19 @@ export async function getPageViewsOverTime(
     grouped[date] = (grouped[date] ?? 0) + 1
   }
 
-  return Object.entries(grouped).map(([date, views]) => ({ date, views }))
+  // Zero-fill every day in the selected period so the trend line is continuous
+  // (a gap day just means 0 views, not "no data" — a common analytics mistake)
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30
+  const now = new Date()
+  const filled: Array<{ date: string; views: number }> = []
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(d.getDate() - i)
+    const key = d.toISOString().split('T')[0]
+    filled.push({ date: key, views: grouped[key] ?? 0 })
+  }
+
+  return filled
 }
 
 // Top N paths by view count in period
@@ -55,11 +72,11 @@ export async function getTopPages(
   period: string,
   limit: number = 20
 ): Promise<Array<{ path: string; views: number }>> {
-  const interval = periodToInterval(period)
+  const since = sinceISO(period)
   const { data } = await supabase
     .from('page_views')
     .select('path')
-    .gte('created_at', `now() - interval '${interval}'`)
+    .gte('created_at', since)
 
   if (!data) return []
 
@@ -78,11 +95,11 @@ export async function getTopPages(
 export async function getTrafficSources(
   period: string
 ): Promise<Array<{ source: string; platform: string | null; views: number }>> {
-  const interval = periodToInterval(period)
+  const since = sinceISO(period)
   const { data } = await supabase
     .from('page_views')
     .select('source, platform')
-    .gte('created_at', `now() - interval '${interval}'`)
+    .gte('created_at', since)
 
   if (!data) return []
 
@@ -102,11 +119,11 @@ export async function getTrafficSources(
 export async function getDeviceTypeBreakdown(
   period: string
 ): Promise<Array<{ deviceType: string; views: number }>> {
-  const interval = periodToInterval(period)
+  const since = sinceISO(period)
   const { data } = await supabase
     .from('page_views')
     .select('device_type')
-    .gte('created_at', `now() - interval '${interval}'`)
+    .gte('created_at', since)
 
   if (!data) return []
 
@@ -119,58 +136,63 @@ export async function getDeviceTypeBreakdown(
   return Object.entries(grouped).map(([deviceType, views]) => ({ deviceType, views }))
 }
 
-// Top affiliate pages by clicks in period — from affiliate_click_stats
+// Top affiliate pages by clicks in period — from raw affiliate_clicks (has created_at)
 export async function getTopAffiliatePages(
   period: string,
   limit: number = 20
 ): Promise<Array<{ deviceSlug: string; retailer: string; clicks: number }>> {
+  const since = sinceISO(period)
   const { data } = await supabase
-    .from('affiliate_click_stats')
-    .select('device_slug, retailer, click_count')
-    .eq('period', period)
-    .order('click_count', { ascending: false })
-    .limit(limit)
+    .from('affiliate_clicks')
+    .select('device_slug, retailer')
+    .gte('created_at', since)
 
   if (!data) return []
 
-  return data.map((r) => ({
-    deviceSlug: r.device_slug,
-    retailer: r.retailer,
-    clicks: r.click_count,
-  }))
+  const grouped: Record<string, { deviceSlug: string; retailer: string; clicks: number }> = {}
+  for (const row of data) {
+    const key = `${row.device_slug}:${row.retailer}`
+    if (!grouped[key]) grouped[key] = { deviceSlug: row.device_slug, retailer: row.retailer, clicks: 0 }
+    grouped[key].clicks++
+  }
+
+  return Object.values(grouped)
+    .sort((a, b) => b.clicks - a.clicks)
+    .slice(0, limit)
 }
 
 // CTR per device page (affiliate clicks / page views)
 export async function getAffiliateCTR(
   period: string
 ): Promise<Array<{ deviceSlug: string; clicks: number; views: number; ctr: number }>> {
-  // Get clicks from affiliate_click_stats
+  // Get clicks from raw affiliate_clicks (has created_at), group by device_slug
+  const since = sinceISO(period)
   const { data: clickData } = await supabase
-    .from('affiliate_click_stats')
-    .select('device_slug, retailer, click_count')
-    .eq('period', period === '90d' ? '90d' : period === '7d' ? '7d' : '30d')
+    .from('affiliate_clicks')
+    .select('device_slug')
+    .gte('created_at', since)
 
   if (!clickData || clickData.length === 0) return []
 
   // Group clicks by device_slug
   const clicksByDevice: Record<string, number> = {}
   for (const row of clickData) {
-    clicksByDevice[row.device_slug] = (clicksByDevice[row.device_slug] ?? 0) + row.click_count
+    clicksByDevice[row.device_slug] = (clicksByDevice[row.device_slug] ?? 0) + 1
   }
 
   // Get page views for /devices/ paths
-  const interval = periodToInterval(period)
   const { data: viewData } = await supabase
     .from('page_views')
     .select('path')
-    .gte('created_at', `now() - interval '${interval}'`)
+    .gte('created_at', since)
     .like('path', '/devices/%')
 
   // Count views per device slug
   const viewsByDevice: Record<string, number> = {}
   if (viewData) {
     for (const row of viewData) {
-      const slug = row.path.replace('/devices/', '').split('/')[0]
+      // Path shape: /devices/{brand}/{slug}
+      const slug = row.path.replace('/devices/', '').split('/')[1] ?? row.path.replace('/devices/', '')
       viewsByDevice[slug] = (viewsByDevice[slug] ?? 0) + 1
     }
   }
@@ -185,20 +207,21 @@ export async function getAffiliateCTR(
   return result.sort((a, b) => b.clicks - a.clicks)
 }
 
-// Clicks per retailer for period
+// Clicks per retailer for period — from raw affiliate_clicks (fresh, no cron dependency)
 export async function getClicksByRetailer(
   period: string
 ): Promise<Array<{ retailer: string; clicks: number }>> {
+  const since = sinceISO(period)
   const { data } = await supabase
-    .from('affiliate_click_stats')
-    .select('retailer, click_count')
-    .eq('period', period)
+    .from('affiliate_clicks')
+    .select('retailer')
+    .gte('created_at', since)
 
   if (!data) return []
 
   const grouped: Record<string, number> = {}
   for (const row of data) {
-    grouped[row.retailer] = (grouped[row.retailer] ?? 0) + row.click_count
+    grouped[row.retailer] = (grouped[row.retailer] ?? 0) + 1
   }
 
   return Object.entries(grouped)
@@ -206,32 +229,37 @@ export async function getClicksByRetailer(
     .sort((a, b) => b.clicks - a.clicks)
 }
 
-// Top search queries from Upstash Search analytics
-// Note: This requires Upstash Search with analytics enabled
+// Top search queries from the first-party search_queries table (logged in /api/search).
+// (The previous Upstash "/analytics/top" REST call never existed → always returned [].)
 export async function getTopSearchQueries(
   limit: number = 20
 ): Promise<Array<{ query: string; count: number }>> {
+  // 1. Try Upstash Search native analytics first (Upstash-first).
   try {
-    const response = await fetch(
-      `${process.env.UPSTASH_SEARCH_REST_URL}/analytics/top`,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.UPSTASH_SEARCH_REST_TOKEN}`,
-        },
-        cache: 'no-store',
-      }
-    )
-
-    if (!response.ok) return []
-
-    const data = await response.json()
-    if (!Array.isArray(data)) return []
-
-    return data.slice(0, limit).map((item: { term?: string; count?: number }) => ({
-      query: item.term ?? 'unknown',
-      count: item.count ?? 0,
-    }))
+    const upstash = await fetchUpstashTopQueries(limit)
+    if (upstash.length > 0) return upstash
   } catch {
-    return []
+    // fall through
   }
+
+  // 2. Supabase first-party search_queries fallback.
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const { data } = await supabase
+    .from('search_queries')
+    .select('query')
+    .gte('created_at', since)
+
+  if (!data) return []
+
+  const grouped: Record<string, number> = {}
+  for (const row of data) {
+    const key = row.query.trim().toLowerCase().slice(0, 200)
+    if (!key) continue
+    grouped[key] = (grouped[key] ?? 0) + 1
+  }
+
+  return Object.entries(grouped)
+    .map(([query, count]) => ({ query, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit)
 }

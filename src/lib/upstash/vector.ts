@@ -28,6 +28,34 @@ export async function upsertVector(params: {
   }
 }
 
+// Delete a single vector by id (used by removeFromIndex, keeps search+vector in sync)
+export async function deleteVector(id: string): Promise<void> {
+  try {
+    await vectorIndex.delete(id)
+  } catch {
+    // idempotent: deleting a missing id is a no-op
+  }
+}
+
+// List a page of vector ids (for reconciliation / clearing stale entries)
+export async function listVectorIds(limit = 1000, cursor?: string): Promise<{ ids: string[]; cursor?: string }> {
+  const page = await vectorIndex.range({ limit, cursor: cursor ?? '', includeMetadata: false })
+  return {
+    ids: (page.vectors ?? []).map((v) => v.id as string),
+    cursor: page.nextCursor,
+  }
+}
+
+// Refresh the embedding model value at runtime
+export function getVectorEmbeddingModel(): string {
+  return process.env.UPSTASH_VECTOR_EMBEDDING_MODEL === 'openai' ? 'openai' : 'auto'
+}
+
+/** Wipe the whole vector namespace (full reconcile — used by reindex-all). */
+export async function resetVectorIndex(): Promise<void> {
+  await vectorIndex.reset()
+}
+
 // Semantic similarity search
 export async function semanticSearch(
   query: string,

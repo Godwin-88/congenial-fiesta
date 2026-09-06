@@ -6,6 +6,8 @@ config({ path: '.env.local' })
 async function reindexAll() {
   const { createClient } = await import('@supabase/supabase-js')
   const { indexDevice, indexArticle, indexYouTubeVideo } = await import('@/lib/search/indexing')
+  const { resetSearchIndex } = await import('@/lib/upstash/search')
+  const { resetVectorIndex } = await import('@/lib/upstash/vector')
   const { fetchAllYouTubeVideos } = await import('@/lib/youtube/client')
 
   const supabase = createClient(
@@ -13,7 +15,14 @@ async function reindexAll() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 
-  console.log('Starting reindex of all content into Upstash Search + Vector...\n')
+  console.log('Starting FULL reindex (stale-clear + rebuild) of Search, Vector and Knowledge Graph...\n')
+
+  // ── Clear stale entries first ─────────────────────────────────────────
+  // Prevents orphaned embeddings/documents silently decaying the index.
+  console.log('Clearing Upstash Search index...')
+  await resetSearchIndex().catch((err) => console.error('  search reset failed (continuing):', err))
+  console.log('Clearing Upstash Vector index...\n')
+  await resetVectorIndex().catch((err) => console.error('  vector reset failed (continuing):', err))
 
   // ── Index Devices ─────────────────────────────────────────
   console.log('Fetching published devices...')

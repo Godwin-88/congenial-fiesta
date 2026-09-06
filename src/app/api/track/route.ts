@@ -9,15 +9,21 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabase = supabaseUrl && supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey) : null
 
 export async function POST(request: Request) {
-  // If analytics not configured, silently drop
-  if (!supabase || !process.env.ANALYTICS_BEACON_TOKEN) {
+  // If Supabase isn't configured, silently drop
+  if (!supabase) {
     return new NextResponse(null, { status: 204 })
   }
 
-  // Check beacon token — silently drop if invalid (return 204)
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader || authHeader !== `Bearer ${process.env.ANALYTICS_BEACON_TOKEN}`) {
-    return new NextResponse(null, { status: 204 })
+  // Optional shared-secret gate for abuse prevention in production.
+  // When unset, rely on the per-IP rate limit + path validation below.
+  // (Both beacon tokens were empty in .env.local, which silently disabled
+  // ALL tracking — the optional gate must never hard-require the token.)
+  const token = process.env.ANALYTICS_BEACON_TOKEN
+  if (token) {
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader || authHeader !== `Bearer ${token}`) {
+      return new NextResponse(null, { status: 204 })
+    }
   }
 
   // Rate limit: generous — page navigation
@@ -42,6 +48,16 @@ export async function POST(request: Request) {
 
   // Validate path
   if (!path || typeof path !== 'string' || !path.startsWith('/') || path.length > 500) {
+    return new NextResponse(null, { status: 204 })
+  }
+
+  // Never track internal/admin/API paths — they pollute audience metrics
+  if (
+    path.startsWith('/admin') ||
+    path.startsWith('/preview') ||
+    path.startsWith('/api') ||
+    path.startsWith('/_next')
+  ) {
     return new NextResponse(null, { status: 204 })
   }
 

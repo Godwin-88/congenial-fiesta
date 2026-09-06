@@ -68,6 +68,24 @@ export async function GET(request: NextRequest) {
     // Cap at 20 results
     const results = merged.slice(0, 20)
 
+    // Log the search query for first-party "top searches" analytics (async, non-blocking)
+    if (query && query.trim().length > 0) {
+      const { createClient } = await import('@supabase/supabase-js')
+      const suUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const suKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      if (suUrl && suKey) {
+        const analyticsClient = createClient(suUrl, suKey)
+        // fire-and-forget (never block search results on logging)
+        void (async () => {
+          try {
+            await analyticsClient.from('search_queries').insert({ query: query.trim() })
+          } catch {
+            // ignore logging failures
+          }
+        })()
+      }
+    }
+
     if (preview) {
       // Return top 4 per type grouped
       const grouped = {

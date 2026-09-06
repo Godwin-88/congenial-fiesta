@@ -76,7 +76,7 @@ function getAdminClient() {
   )
 }
 
-export const GET = verifySignatureAppRouter(async () => {
+const cronHandler = verifySignatureAppRouter(async () => {
   if (!process.env.QSTASH_CURRENT_SIGNING_KEY) {
     return NextResponse.json({ error: "Missing signing key" }, { status: 500 })
   }
@@ -143,3 +143,6 @@ export const GET = verifySignatureAppRouter(async () => {
     feeds: FEEDS.length,
   })
 })
+
+export const GET = cronHandler
+export const POST = cronHandler

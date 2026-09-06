@@ -89,7 +89,7 @@ async function aggregateTopContent() {
   }
 }
 
-export const GET = verifySignatureAppRouter(async () => {
+const cronHandler = verifySignatureAppRouter(async () => {
   // 1. Refresh materialized view
   try {
     await supabase.rpc('refresh_daily_summary')
@@ -116,3 +116,6 @@ export const GET = verifySignatureAppRouter(async () => {
     aggregatedAt: new Date().toISOString(),
   })
 })
+
+export const GET = cronHandler
+export const POST = cronHandler

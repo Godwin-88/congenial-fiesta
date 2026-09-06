@@ -8,36 +8,47 @@ type Props = {
   data: Array<{ date: string; views: number }>
 }
 
+const axisColor = 'var(--muted-foreground)'
+const gridColor = 'var(--border)'
+const tooltipStyle = {
+  backgroundColor: 'var(--card)',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+}
+
+const tooltipLabelStyle = { color: 'var(--card-foreground)' }
+const tooltipItemStyle = { color: 'var(--brand-primary)' }
+
 export default function PageViewsChart({ data }: Props) {
   if (data.length === 0) {
-    return <p className="text-gray-500 text-center py-8">No view data available</p>
+    return <p className="text-muted-foreground text-center py-8 text-sm">No view data available</p>
   }
 
   return (
     <ResponsiveContainer width="100%" height={300}>
       <LineChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+        <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
         <XAxis
           dataKey="date"
-          stroke="#9CA3AF"
+          stroke={axisColor}
           fontSize={12}
           tickFormatter={(val: string) => {
             const d = new Date(val)
             return `${d.getMonth() + 1}/${d.getDate()}`
           }}
         />
-        <YAxis stroke="#9CA3AF" fontSize={12} />
+        <YAxis stroke={axisColor} fontSize={12} />
         <Tooltip
-          contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px' }}
-          labelStyle={{ color: '#F9FAFB' }}
-          itemStyle={{ color: '#0066FF' }}
+          contentStyle={tooltipStyle}
+          labelStyle={tooltipLabelStyle}
+          itemStyle={tooltipItemStyle}
         />
         <Line
           type="monotone"
           dataKey="views"
-          stroke="#0066FF"
+          stroke="var(--brand-primary)"
           strokeWidth={2}
-          dot={{ fill: '#0066FF', r: 3 }}
+          dot={{ fill: 'var(--brand-primary)', r: 3 }}
           activeDot={{ r: 5 }}
         />
       </LineChart>
