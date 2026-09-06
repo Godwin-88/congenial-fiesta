@@ -6,6 +6,15 @@ import Logo from '@/components/admin/Logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
+// Single shared client so the recovery session established by verifyOtp is
+// still attached when updateUser runs. Creating a fresh client per call would
+// lose the session and fail with "Auth session missing!".
+let sharedSupabase: ReturnType<typeof createClient> | null = null
+function getSupabase() {
+  if (!sharedSupabase) sharedSupabase = createClient()
+  return sharedSupabase
+}
+
 function ResetPasswordForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -19,26 +28,30 @@ function ResetPasswordForm() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
-  const [codeVerified, setCodeVerified] = useState(!!(tokenHash || token))
+  const [verified, setVerified] = useState(false)
 
+  // ALWAYS verify the token before showing the form. This is what creates the
+  // recovery session. The old code pre-set codeVerified = true when a token
+  // existed, so verifyOtp never ran and updateUser had no session.
   useEffect(() => {
-    if ((tokenHash || token) && !codeVerified) {
+    if ((tokenHash || token) && !verified) {
       const verifyCode = async () => {
         setLoading(true)
         try {
-          const supabase = createClient()
-          // Recovery links generated via the Admin API ("recovery") must be
-          // verified with type: 'recovery'; plain Supabase email links use 'email'.
+          // Recovery links generated via the Admin API carry `token` / `token_hash`
+          // in the query string. BOTH are the hashed token that GoTrue's
+          // `verifyOtp` expects as `token_hash` (link tokens are NOT the 6-digit
+          // OTP form `{ email, token }`). Passing it as `token_hash` with
+          // `type: 'recovery'` is what actually establishes the session.
           const verifyType = linkType === 'recovery' ? 'recovery' : 'email'
-          const { error: verifyError } = await supabase.auth.verifyOtp(
-            tokenHash
-              ? { token_hash: tokenHash, type: verifyType }
-              : { email, token, type: verifyType }
-          )
+          const { error: verifyError } = await getSupabase().auth.verifyOtp({
+            token_hash: tokenHash || token,
+            type: verifyType,
+          })
           if (verifyError) {
             setError(verifyError.message)
           } else {
-            setCodeVerified(true)
+            setVerified(true)
           }
         } catch {
           setError('Something went wrong. Please try again.')
@@ -48,7 +61,7 @@ function ResetPasswordForm() {
       }
       verifyCode()
     }
-  }, [tokenHash, token, email, codeVerified, linkType])
+  }, [tokenHash, token, email, linkType, verified])
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,8 +76,9 @@ function ResetPasswordForm() {
     }
     setLoading(true)
     try {
-      const supabase = createClient()
-      const { error: updateError } = await supabase.auth.updateUser({
+      // Same client instance as verifyOtp above — the recovery session is
+      // attached here, so updateUser resolves with the session present.
+      const { error: updateError } = await getSupabase().auth.updateUser({
         password,
       })
       if (updateError) {
@@ -108,7 +122,7 @@ function ResetPasswordForm() {
     )
   }
 
-  if (!codeVerified && !token) {
+  if (!verified) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="w-full max-w-sm text-center">
@@ -118,12 +132,21 @@ function ResetPasswordForm() {
             </div>
           </div>
           <h1 className="text-xl font-bold text-foreground mb-4">Reset Password</h1>
-          <p className="text-sm text-muted-foreground mb-6">
-            This link is invalid or has expired. Please request a new password reset link.
-          </p>
-          <Button onClick={() => router.push('/auth/login')}>
-            Back to Sign In
-          </Button>
+          {error ? (
+            <p className="text-sm text-red-400 mb-6">{error}</p>
+          ) : (
+            <p className="text-sm text-muted-foreground mb-6">
+              This link is invalid or has expired. Please request a new password reset link.
+            </p>
+          )}
+          <div className="space-y-2">
+            <Button onClick={() => router.push('/auth/login')}>
+              Back to Sign In
+            </Button>
+            <Button variant="ghost" onClick={() => router.push('/auth/login?forgot=1')}>
+              Request a new link
+            </Button>
+          </div>
         </div>
       </div>
     )

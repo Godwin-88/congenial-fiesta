@@ -4,6 +4,12 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createServerClient } from '@supabase/ssr'
 import { sendAuthEmail } from '@/lib/auth/emails'
+import { sendEmail } from '@/lib/email'
+
+const AUTH_FROM =
+  process.env.RESEND_FROM_EMAIL ??
+  process.env.MAIL_FROM ??
+  'FweezyTech <no-reply@fweezytech.com>'
 
 export async function signInWithMagicLink(email: string, redirectTo?: string): Promise<{ error?: string }> {
   const supabase = await createClient()
@@ -86,14 +92,14 @@ async function generateAuthLink(
 
   if (type === 'recovery') {
     const u = new URL(`${getServerUrl()}/auth/reset-password`)
-    u.searchParams.set('token', token)
+    u.searchParams.set('token_hash', token)
     u.searchParams.set('type', 'recovery')
     u.searchParams.set('email', email)
     return { link: u.toString() }
   }
 
   const u = new URL(`${getServerUrl()}/auth/callback`)
-  u.searchParams.set('token', token)
+  u.searchParams.set('token_hash', token)
   u.searchParams.set('type', 'signup')
   u.searchParams.set('email', email)
   return { link: u.toString() }
@@ -267,9 +273,20 @@ export async function resetPassword(email: string): Promise<{ error?: string }> 
         ctaLabel: 'Reset my password',
         ctaUrl: link,
       })
-      if (!sent.sent) {
-        return { error: 'We could not send the reset email right now. Please try again shortly.' }
-      }
+      if (sent.sent) return {}
+
+      // Our own delivery (Resend -> SMTP) failed. Log the REAL reason so Vercel
+      // logs can be debugged (e.g. missing RESEND_API_KEY / SMTP creds, or an
+      // unverified Resend sender domain), then fail-open to Supabase's native
+      // emailer so the user still receives a reset link if it's able to send.
+      console.error('[auth] Self-hosted reset email failed:', sent.error ?? 'unknown')
+
+      const supabase = await createClient()
+      const { error: supabaseErr } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: `${getServerUrl()}/auth/reset-password`,
+      })
+      if (!supabaseErr) return {}
+      console.error('[auth] Supabase reset email fallback also failed:', supabaseErr.message)
     }
     // No leak: if the email isn't registered (linkError), still report success.
     return {}
@@ -299,4 +316,89 @@ export async function getUser() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   return user
+}
+
+/**
+ * Send a magic-link OTP code to the user's email for sign-in.
+ *
+ * Uses the GoTrue Admin API (`generateLink` with `type: 'magiclink'`), which
+ * returns BOTH an action link AND a short-lived `email_otp` code. We deliver
+ * the code through our own email stack (Resend → SMTP) so Supabase's
+ * rate-limited built-in emailer is never required. Falls back to
+ * `signInWithOtp` (Supabase's emailer) when no service-role key is configured.
+ */
+export async function sendOtpCode(
+  email: string,
+  redirectTo?: string
+): Promise<{ error?: string; sent?: boolean }> {
+  const cleanEmail = email.trim().toLowerCase()
+  if (!cleanEmail) return { error: 'Please enter your email.' }
+
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const adminClient = makeAdminClient()
+    const { data, error: genError } = await adminClient.auth.admin.generateLink({
+      type: 'magiclink',
+      email: cleanEmail,
+      options: {
+        redirectTo: redirectTo ? `${getServerUrl()}${redirectTo}` : undefined,
+      },
+    })
+
+    if (genError || !data) {
+      return { error: genError?.message ?? 'Could not generate an OTP code.' }
+    }
+
+    const otpCode = data.properties?.email_otp
+    if (!otpCode) {
+      console.error('[auth] generateLink(magiclink) returned no email_otp property')
+      return { error: 'Could not generate an OTP code. Please try again.' }
+    }
+
+    const sent = await sendEmail({
+      to: cleanEmail,
+      subject: 'Your FweezyTech sign-in code',
+      from: AUTH_FROM,
+      html: `<p style="font-size:16px;line-height:1.6;">Your FweezyTech sign-in code is:</p><p style="font-size:32px;font-weight:bold;letter-spacing:4px;">${otpCode}</p><p style="font-size:14px;color:#666;">Enter this code to sign in. It expires in 10 minutes.</p>`,
+      text: `Your FweezyTech sign-in code is: ${otpCode}\nEnter this code to sign in. It expires in 10 minutes.`,
+    })
+
+    if (!sent.sent) {
+      return { error: sent.error ?? 'Could not deliver the OTP email. Please try again.' }
+    }
+    return { sent: true }
+  }
+
+  // No service-role key → use Supabase's built-in OTP delivery.
+  const supabase = await createClient()
+  const { error } = await supabase.auth.signInWithOtp({
+    email: cleanEmail,
+    options: {
+      emailRedirectTo: redirectTo ? `${getServerUrl()}${redirectTo}` : undefined,
+    },
+  })
+  if (error) return { error: error.message }
+  return { sent: true }
+}
+
+/**
+ * Verify a 6-digit OTP code and sign the user in.
+ * Uses the server-side supabase client (with cookies) so the session cookie
+ * is set automatically on success.
+ */
+export async function verifyOtpCode(
+  email: string,
+  token: string,
+  redirectTo?: string
+): Promise<{ error?: string; success?: boolean }> {
+  const cleanEmail = email.trim().toLowerCase()
+  const supabase = await createClient()
+
+  const { error } = await supabase.auth.verifyOtp({
+    email: cleanEmail,
+    token,
+    type: 'email',
+  })
+
+  if (error) return { error: error.message }
+  return { success: true }
 }

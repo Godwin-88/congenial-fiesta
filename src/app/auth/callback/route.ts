@@ -30,11 +30,10 @@ export async function GET(request: NextRequest) {
         },
       }
     )
-    const { error } = await supabase.auth.verifyOtp(
-      token
-        ? { email, token, type: 'signup' }
-        : { token_hash: tokenHash!, type: 'signup' }
-    )
+    const { error } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash ?? token ?? '',
+      type: 'signup',
+    })
     if (!error) {
       return NextResponse.redirect(
         `${origin}/auth/login?confirmed=1&next=${encodeURIComponent(next)}`

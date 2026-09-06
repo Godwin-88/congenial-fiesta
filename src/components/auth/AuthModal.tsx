@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { signInWithMagicLink, signUpWithEmail, signInWithEmail, resetPassword } from '@/lib/auth/actions'
+import { signUpWithEmail, signInWithEmail, resetPassword, sendOtpCode, verifyOtpCode } from '@/lib/auth/actions'
 import {
   Dialog,
   DialogContent,
@@ -25,29 +25,14 @@ export default function AuthModal({ isOpen, onClose, redirectTo }: AuthModalProp
   const [authMode, setAuthMode] = useState<AuthMode>('signup')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [emailSent, setEmailSent] = useState(false)
   const [emailError, setEmailError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [verificationSent, setVerificationSent] = useState(false)
   const [showReset, setShowReset] = useState(false)
   const [resetSent, setResetSent] = useState(false)
-
-  const handleMagicLink = async () => {
-    setEmailError(null)
-    setIsSubmitting(true)
-    try {
-      const result = await signInWithMagicLink(email, redirectTo)
-      if (result.error) {
-        setEmailError(result.error)
-      } else {
-        setEmailSent(true)
-      }
-    } catch {
-      setEmailError('Something went wrong. Please try again.')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
+  const [otpMode, setOtpMode] = useState(false)
+  const [otpCode, setOtpCode] = useState('')
+  const [otpSent, setOtpSent] = useState(false)
 
   const handleSignUp = async () => {
     setEmailError(null)
@@ -90,6 +75,48 @@ export default function AuthModal({ isOpen, onClose, redirectTo }: AuthModalProp
       } else {
         onClose()
       }
+      } catch {
+      setEmailError('Something went wrong. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleSendOtp = async () => {
+    if (!email.trim()) {
+      setEmailError('Please enter your email.')
+      return
+    }
+    setEmailError(null)
+    setIsSubmitting(true)
+    try {
+      const result = await sendOtpCode(email)
+      if (result.error) {
+        setEmailError(result.error)
+      } else {
+        setOtpSent(true)
+      }
+    } catch {
+      setEmailError('Something went wrong. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode.trim() || otpCode.length < 6) {
+      setEmailError('Please enter the 6-digit code.')
+      return
+    }
+    setEmailError(null)
+    setIsSubmitting(true)
+    try {
+      const result = await verifyOtpCode(email, otpCode)
+      if (result.error) {
+        setEmailError(result.error)
+      } else {
+        onClose()
+      }
     } catch {
       setEmailError('Something went wrong. Please try again.')
     } finally {
@@ -121,11 +148,13 @@ export default function AuthModal({ isOpen, onClose, redirectTo }: AuthModalProp
   const resetForm = () => {
     setEmail('')
     setPassword('')
-    setEmailSent(false)
     setEmailError(null)
     setVerificationSent(false)
     setShowReset(false)
     setResetSent(false)
+    setOtpMode(false)
+    setOtpCode('')
+    setOtpSent(false)
   }
 
   return (
@@ -270,41 +299,90 @@ export default function AuthModal({ isOpen, onClose, redirectTo }: AuthModalProp
                     </div>
                   </div>
 
-                  {!emailSent ? (
-                    <div className="space-y-3">
-                      <Input
-                        type="email"
-                        placeholder="you@example.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !isSubmitting) handleMagicLink()
-                        }}
-                        className="w-full"
-                      />
-                      <Button
-                        onClick={handleMagicLink}
-                        disabled={isSubmitting || !email.trim()}
-                        variant="outline"
-                        className="w-full"
+                  {!otpMode ? (
+                    <div className="text-center">
+                      <button
+                        onClick={() => setOtpMode(true)}
+                        className="text-sm text-brand-primary hover:underline py-2"
                       >
-                        {isSubmitting ? 'Sending...' : 'Send Magic Link'}
-                      </Button>
-                      {emailError && (
-                        <p className="text-sm text-red-400">{emailError}</p>
-                      )}
+                        Sign in with a code sent to your email
+                      </button>
                     </div>
                   ) : (
-                    <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-4 text-center">
-                      <p className="text-sm text-green-400">
-                        Check your email — we sent you a link!
-                      </p>
+                    /* ── OTP CODE SIGN-IN ───────────────────────────── */
+                    <div className="space-y-3">
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">
+                          {otpSent
+                            ? `Enter the 6-digit code sent to ${email}.`
+                            : 'Enter your email to receive a 6-digit sign-in code.'}
+                        </p>
+                      </div>
+
+                      {!otpSent ? (
+                        <>
+                          <Input
+                            type="email"
+                            placeholder="you@example.com"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !isSubmitting) handleSendOtp()
+                            }}
+                            className="w-full"
+                          />
+                          <Button
+                            onClick={handleSendOtp}
+                            disabled={isSubmitting || !email.trim()}
+                            className="w-full"
+                          >
+                            {isSubmitting ? 'Sending...' : 'Send Code'}
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={otpCode}
+                            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            placeholder="000000"
+                            required
+                            className="w-full text-center text-2xl tracking-[0.2em]"
+                          />
+                          <Button
+                            onClick={handleVerifyOtp}
+                            disabled={isSubmitting || otpCode.length < 6}
+                            className="w-full"
+                          >
+                            {isSubmitting ? 'Signing in...' : 'Sign In'}
+                          </Button>
+                          <div className="text-center">
+                            <button
+                              onClick={async () => {
+                                setOtpCode('')
+                                await handleSendOtp()
+                              }}
+                              disabled={isSubmitting}
+                              className="text-sm text-brand-primary hover:underline disabled:opacity-50"
+                            >
+                              Resend code
+                            </button>
+                          </div>
+                        </>
+                      )}
+
+                      <div className="text-center">
+                        <button
+                          onClick={() => { setOtpMode(false); setOtpCode(''); setOtpSent(false); setEmailError(null) }}
+                          className="text-sm text-muted-foreground hover:text-foreground"
+                        >
+                          Back to password sign in
+                        </button>
+                    </div>
                     </div>
                   )}
-
-                  <p className="text-center text-xs text-muted-foreground">
-                    No password needed for magic link. We don't sell your data.
-                  </p>
                 </>
               ) : (
                 /* ── INLINE RESET PASSWORD ─────────────────────── */

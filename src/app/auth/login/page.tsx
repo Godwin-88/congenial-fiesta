@@ -2,7 +2,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { signUpWithEmail, resetPassword } from '@/lib/auth/actions'
+import { signUpWithEmail, resetPassword, sendOtpCode, verifyOtpCode } from '@/lib/auth/actions'
 import Link from 'next/link'
 import Logo from '@/components/admin/Logo'
 import { Button } from '@/components/ui/button'
@@ -24,6 +24,9 @@ function LoginForm() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [showReset, setShowReset] = useState(false)
   const [resending, setResending] = useState(false)
+  const [otpMode, setOtpMode] = useState(false)
+  const [otpSent, setOtpSent] = useState(false)
+  const [otpCode, setOtpCode] = useState('')
 
   useEffect(() => {
     async function checkSession() {
@@ -74,6 +77,54 @@ function LoginForm() {
     }
   }
 
+  const handleSendOtp = async () => {
+    if (!email.trim()) {
+      setError('Please enter your email.')
+      return
+    }
+    setError('')
+    setSending(true)
+    try {
+      const result = await sendOtpCode(email.trim(), next)
+      if (result.error) {
+        setError(result.error)
+      } else {
+        setOtpSent(true)
+        setOtpMode(true)
+      }
+    } catch {
+      setError('Something went wrong. Please try again.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode.trim()) {
+      setError('Please enter the code from your email.')
+      return
+    }
+    setError('')
+    setSending(true)
+    try {
+      const result = await verifyOtpCode(email.trim(), otpCode.trim())
+      if (result.error) {
+        setError(result.error)
+      } else {
+        router.push(next)
+      }
+    } catch {
+      setError('Something went wrong. Please try again.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleResendOtp = async () => {
+    setOtpCode('')
+    await handleSendOtp()
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -122,78 +173,177 @@ function LoginForm() {
             <TabsTrigger value="signup">Sign Up</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="signin" className="mt-0 space-y-4">
-            <form onSubmit={handleEmailPassword} className="space-y-3">
-              <Input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-                className="w-full"
-              />
-              <Input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Password"
-                required
-                className="w-full"
-              />
-               <Button
-                 type="submit"
-                 disabled={sending}
-                 className="w-full"
-               >
-                 {sending ? 'Signing in…' : 'Sign In'}
-               </Button>
-             </form>
+           <TabsContent value="signin" className="mt-0 space-y-4">
+             {!otpMode ? (
+               <>
+                 <form onSubmit={handleEmailPassword} className="space-y-3">
+                   <Input
+                     type="email"
+                     value={email}
+                     onChange={e => setEmail(e.target.value)}
+                     placeholder="you@example.com"
+                     required
+                     className="w-full"
+                   />
+                   <Input
+                     type="password"
+                     value={password}
+                     onChange={e => setPassword(e.target.value)}
+                     placeholder="Password"
+                     required
+                     className="w-full"
+                   />
+                   <Button
+                     type="submit"
+                     disabled={sending}
+                     className="w-full"
+                   >
+                     {sending ? 'Signing in…' : 'Sign In'}
+                   </Button>
+                 </form>
 
-             <div className="text-center">
-               <button
-                 onClick={() => setShowReset(!showReset)}
-                 className="text-sm text-brand-primary hover:underline"
-               >
-                 Forgot password?
-               </button>
-             </div>
+                 <div className="relative py-2">
+                   <div className="absolute inset-0 flex items-center">
+                     <span className="w-full border-t border-border" />
+                   </div>
+                   <div className="relative flex justify-center text-xs">
+                     <span className="bg-background px-2 text-muted-foreground">or</span>
+                   </div>
+                 </div>
 
-             {showReset && (
-               <form
-                 onSubmit={async (e) => {
-                   e.preventDefault()
-                   setError('')
-                   setSending(true)
-                   try {
-                     const result = await resetPassword(email.trim())
-                     if (result.error) {
-                       setError(result.error)
-                     } else {
-                       setError('If that email exists, a reset link has been sent.')
-                       setShowReset(false)
-                     }
-                   } catch {
-                     setError('Something went wrong. Please try again.')
-                   } finally {
-                     setSending(false)
-                   }
-                 }}
-                 className="space-y-3"
-               >
-                 <p className="text-xs text-muted-foreground">
-                   Enter your email to receive a password reset link.
-                 </p>
-                 <Button
-                   type="submit"
-                   disabled={sending || !email.trim()}
-                   variant="outline"
-                   className="w-full"
-                 >
-                   {sending ? 'Sending…' : 'Send Reset Link'}
-                 </Button>
-               </form>
+                 <div className="text-center">
+                   <button
+                     onClick={() => { setOtpMode(true); setOtpSent(false); setOtpCode('') }}
+                     className="text-sm text-brand-primary hover:underline"
+                   >
+                     Sign in with a code sent to your email
+                   </button>
+                   <div className="mt-2">
+                     <button
+                       onClick={() => setShowReset(!showReset)}
+                       className="text-sm text-brand-primary hover:underline"
+                     >
+                       Forgot password?
+                     </button>
+                   </div>
+                 </div>
+
+                 {showReset && (
+                   <form
+                     onSubmit={async (e) => {
+                       e.preventDefault()
+                       setError('')
+                       setSending(true)
+                       try {
+                         const result = await resetPassword(email.trim())
+                         if (result.error) {
+                           setError(result.error)
+                         } else {
+                           setError('If that email exists, a reset link has been sent.')
+                           setShowReset(false)
+                         }
+                       } catch {
+                         setError('Something went wrong. Please try again.')
+                       } finally {
+                         setSending(false)
+                       }
+                     }}
+                     className="space-y-3"
+                   >
+                     <p className="text-xs text-muted-foreground">
+                       Enter your email to receive a password reset link.
+                     </p>
+                     <Button
+                       type="submit"
+                       disabled={sending || !email.trim()}
+                       variant="outline"
+                       className="w-full"
+                     >
+                       {sending ? 'Sending…' : 'Send Reset Link'}
+                     </Button>
+                   </form>
+                 )}
+               </>
+             ) : (
+               <div className="space-y-4">
+                 <div className="text-center">
+                   <h3 className="text-sm font-semibold text-foreground">
+                     {otpSent ? 'Enter your code' : 'Sign in with OTP'}
+                   </h3>
+                   <p className="mt-1 text-xs text-muted-foreground">
+                     {otpSent
+                       ? `We sent an 8-digit code to ${email}.`
+                       : 'Enter your email and we’ll send you an 8-digit sign-in code.'}
+                   </p>
+                 </div>
+
+                 {!otpSent ? (
+                   <div className="space-y-3">
+                     <Input
+                       type="email"
+                       value={email}
+                       onChange={e => setEmail(e.target.value)}
+                       placeholder="you@example.com"
+                       required
+                       className="w-full"
+                     />
+                     <Button
+                       onClick={handleSendOtp}
+                       disabled={sending || !email.trim()}
+                       className="w-full"
+                     >
+                       {sending ? 'Sending…' : 'Send Code'}
+                     </Button>
+                   </div>
+                 ) : (
+                   <form
+                     onSubmit={async (e) => {
+                       e.preventDefault()
+                       await handleVerifyOtp()
+                     }}
+                     className="space-y-3"
+                   >
+                     <Input
+                       type="text"
+                       inputMode="numeric"
+                       maxLength={8}
+                       value={otpCode}
+                       onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                       placeholder="00000000"
+                       required
+                       className="w-full text-center text-2xl tracking-[0.2em]"
+                     />
+                     <Button
+                       type="submit"
+                       disabled={sending || otpCode.length < 8}
+                       className="w-full"
+                     >
+                       {sending ? 'Signing in…' : 'Sign In'}
+                     </Button>
+                   </form>
+                 )}
+
+                 <div className="text-center">
+                   <button
+                     onClick={handleResendOtp}
+                     disabled={sending}
+                     className="text-sm text-brand-primary hover:underline disabled:opacity-50"
+                   >
+                     {otpSent ? 'Resend code' : ''}
+                   </button>
+                 </div>
+
+                 <div className="text-center">
+                   <button
+                     onClick={() => { setOtpMode(false); setOtpSent(false); setOtpCode('') }}
+                     className="text-sm text-muted-foreground hover:text-foreground"
+                   >
+                     Back to password sign in
+                   </button>
+                 </div>
+               </div>
              )}
-          </TabsContent>
+           </TabsContent>
 
           <TabsContent value="signup" className="mt-0 space-y-4">
             <form onSubmit={handleEmailPassword} className="space-y-3">
@@ -251,9 +401,7 @@ function LoginForm() {
           </TabsContent>
         </Tabs>
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          Admin access? <Link href="/auth/admin-login" className="text-brand-primary hover:underline">Sign in here</Link>
-        </p>
+        
       </div>
     </div>
   )

@@ -21,7 +21,17 @@ function emailHtml(opts: {
   ctaUrl: string
 }): string {
   const { headline, body, ctaLabel, ctaUrl } = opts
-  const safeUrl = ctaUrl.replace(/[<>&'"]/g, '')
+  // HTML-escape the URL so the href can never break out of the attribute,
+  // while PRESERVING query-string separators (`&` → `&amp;`, which browsers
+  // decode back to `&` on click). The old `.replace(/[<>&'"]/g, '')` deleted
+  // every `&` — mangling `?token=…&type=recovery&email=…` into one broken
+  // parameter, which made the reset/confirm link unusable.
+  const safeUrl = ctaUrl
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
   return `<!doctype html>
 <html lang="en">
   <body style="margin:0;padding:0;background:#f6f6f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
