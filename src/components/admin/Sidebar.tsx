@@ -84,6 +84,8 @@ export default function Sidebar({ adminUser }: SidebarProps) {
 
   const canShow = (item: NavItem) => {
     if (!item.roles) return true
+    // Owner is a superset of admin — owners see every admin-visible item.
+    if (adminUser.role === 'owner') return item.roles.includes('admin')
     return item.roles.includes(adminUser.role)
   }
 

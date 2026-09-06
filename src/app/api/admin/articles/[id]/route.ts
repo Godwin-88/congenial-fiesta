@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth, getAdminClient } from '@/lib/admin/require-admin'
+import { isAdminRole } from '@/lib/admin/roles'
 
 export async function GET(
   _request: NextRequest,
@@ -119,7 +120,7 @@ export async function DELETE(
 ) {
   try {
     const adminUser = await requireAdminAuth()
-    if (adminUser.role !== 'admin') {
+    if (!isAdminRole(adminUser.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

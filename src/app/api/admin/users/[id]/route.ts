@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth, getAdminClient } from '@/lib/admin/require-admin'
+import { isAdminRole, isOwnerRole, isValidAdminRole } from '@/lib/admin/roles'
 
 export async function PATCH(
   request: NextRequest,
@@ -7,7 +8,7 @@ export async function PATCH(
 ) {
   try {
     const adminUser = await requireAdminAuth()
-    if (adminUser.role !== 'admin') {
+    if (!isAdminRole(adminUser.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -19,8 +20,29 @@ export async function PATCH(
       return NextResponse.json({ error: 'Cannot change your own role' }, { status: 400 })
     }
 
-    if (!['admin', 'editor', 'viewer'].includes(body.role)) {
+    if (body.role === 'owner' && !isOwnerRole(adminUser.role)) {
+      return NextResponse.json({ error: 'Only the owner can grant the owner role' }, { status: 403 })
+    }
+
+    if (!isValidAdminRole(body.role)) {
       return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+    }
+
+    // Prevent demoting the last remaining owner (would lock everyone out).
+    if (body.role !== 'owner') {
+      const { count } = await supabase
+        .from('admin_users')
+        .select('id', { count: 'exact', head: true })
+        .eq('role', 'owner')
+      if (count !== null && count <= 1) {
+        const target = await supabase.from('admin_users').select('role').eq('id', id).maybeSingle()
+        if (target.data?.role === 'owner') {
+          return NextResponse.json(
+            { error: 'Cannot demote the last owner. Promote another user to owner first.' },
+            { status: 400 }
+          )
+        }
+      }
     }
 
     const { data, error } = await supabase
@@ -51,7 +73,7 @@ export async function DELETE(
 ) {
   try {
     const adminUser = await requireAdminAuth()
-    if (adminUser.role !== 'admin') {
+    if (!isAdminRole(adminUser.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -60,6 +82,18 @@ export async function DELETE(
 
     if (id === adminUser.id) {
       return NextResponse.json({ error: 'Cannot delete your own account' }, { status: 400 })
+    }
+
+    // Prevent deleting the last remaining owner (would lock everyone out).
+    const { count } = await supabase
+      .from('admin_users')
+      .select('id', { count: 'exact', head: true })
+      .eq('role', 'owner')
+    if (count !== null && count <= 1) {
+      const target = await supabase.from('admin_users').select('role').eq('id', id).maybeSingle()
+      if (target.data?.role === 'owner') {
+        return NextResponse.json({ error: 'Cannot delete the last owner' }, { status: 400 })
+      }
     }
 
     const { error } = await supabase

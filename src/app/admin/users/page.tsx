@@ -15,11 +15,12 @@ type AdminUser = {
   id: string
   display_name: string
   email?: string
-  role: 'admin' | 'editor' | 'viewer'
+  role: 'owner' | 'admin' | 'editor' | 'viewer'
   created_at: string
 }
 
 const ROLES = [
+  { value: 'owner', label: 'Owner', color: 'bg-amber-500/20 text-amber-400' },
   { value: 'admin', label: 'Admin', color: 'bg-red-500/20 text-red-400' },
   { value: 'editor', label: 'Editor', color: 'bg-blue-500/20 text-blue-400' },
   { value: 'viewer', label: 'Viewer', color: 'bg-gray-500/20 text-gray-400' },
@@ -35,6 +36,7 @@ export default function UsersPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [saving, setSaving] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
   const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
 
   const [formEmail, setFormEmail] = useState('')
@@ -57,6 +59,7 @@ export default function UsersPage() {
       if (meRes?.ok) {
         const meData = await meRes.json()
         setCurrentUserId(meData.user?.id ?? null)
+        setCurrentUserRole(meData.user?.role ?? null)
       }
     } catch (e) {
       console.error('Failed to fetch users:', e)
@@ -304,7 +307,7 @@ export default function UsersPage() {
                 disabled={!!editingUser && editingUser.id === currentUserId}
                 className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none disabled:opacity-50"
               >
-                {ROLES.map(r => (
+                {ROLES.filter(r => r.value !== 'owner' || currentUserRole === 'owner').map(r => (
                   <option key={r.value} value={r.value}>{r.label}</option>
                 ))}
               </select>
