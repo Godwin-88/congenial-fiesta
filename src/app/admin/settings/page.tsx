@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Save, RefreshCw, Home, Server, KeyRound, SlidersHorizontal, SearchCheck, History } from 'lucide-react'
+import { Save, RefreshCw, Home, Server, KeyRound, SlidersHorizontal, SearchCheck, History, UserCog } from 'lucide-react'
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 import { useAdmin } from '@/context/AdminContext'
@@ -11,14 +11,16 @@ import { SecretsPanel } from '@/components/admin/settings/SecretsPanel'
 import { GeneralPanel } from '@/components/admin/settings/GeneralPanel'
 import { SearchIndexPanel } from '@/components/admin/settings/SearchIndexPanel'
 import { AuditPanel } from '@/components/admin/settings/AuditPanel'
+import { AccountPanel } from '@/components/admin/settings/AccountPanel'
 import type { HealthProbe } from '@/lib/settings/health'
 
-type TabId = 'overview' | 'integrations' | 'secrets' | 'general' | 'search' | 'logs'
+type TabId = 'overview' | 'integrations' | 'secrets' | 'account' | 'general' | 'search' | 'logs'
 
 const TABS: { id: TabId; label: string; icon: typeof Home; ownerOnly?: boolean }[] = [
   { id: 'overview', label: 'Overview', icon: Home },
   { id: 'integrations', label: 'Integrations', icon: Server },
   { id: 'secrets', label: 'Secrets & Keys', icon: KeyRound, ownerOnly: true },
+  { id: 'account', label: 'Account & Security', icon: UserCog },
   { id: 'general', label: 'General', icon: SlidersHorizontal },
   { id: 'search', label: 'Search & Index', icon: SearchCheck },
   { id: 'logs', label: 'Audit Log', icon: History },
@@ -244,6 +246,9 @@ return (
       )}
       {activeTab === 'secrets' && (
         <SecretsPanel notify={notify} />
+      )}
+      {activeTab === 'account' && (
+        <AccountPanel notify={notify} />
       )}
       {activeTab === 'general' && (
         <GeneralPanel

@@ -56,6 +56,7 @@ const migrations = [
   '032_upstash_knowledge_graph.sql',
   '033_app_secrets.sql',
   '034_app_config.sql',
+  '035_auth_audit.sql',
 ]
 
 async function runMigrations() {
