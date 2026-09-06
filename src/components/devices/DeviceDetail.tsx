@@ -18,8 +18,8 @@ import RatingsSkeleton from '@/components/community/RatingsSkeleton'
 import CommentsSkeleton from '@/components/community/CommentsSkeleton'
 import AddToCompareButton from '@/components/devices/AddToCompareButton'
 import SectionJumpNav from '@/components/devices/SectionJumpNav'
-import BackToTop from '@/components/devices/BackToTop'
 import PageProgress from '@/components/devices/PageProgress'
+import SectionHeader from '@/components/ui/SectionHeader'
 import VideoReview from '@/components/devices/VideoReview'
 import { getRelatedDevices } from '@/lib/devices/queries'
 import type { Device } from '@/types/cms'
@@ -27,6 +27,8 @@ import type { Device } from '@/types/cms'
 interface DeviceDetailProps {
   device: Device
   isPreview?: boolean
+  /** Absolute site origin (https://host) computed server-side for hydration-safe share links. */
+  origin?: string
 }
 
 /** Flatten the nested camera JSONB into display-ready rows for the specs accordion. */
@@ -50,7 +52,7 @@ function cameraToRows(cam?: Record<string, unknown>): { label: string; value?: s
   return rows
 }
 
-export default async function DeviceDetail({ device, isPreview = false }: DeviceDetailProps) {
+export default async function DeviceDetail({ device, isPreview = false, origin = '' }: DeviceDetailProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d = device as any
   const brandData = (d.brand as Record<string, unknown> | null) ?? {}
@@ -171,8 +173,19 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
           </ol>
         </nav>
 
-        {/* Sticky section jump navigation (mobile-first) */}
-        <SectionJumpNav items={specSections} />
+        {/* Two-column layout (desktop): vertical table of contents + content.
+            Mobile keeps the horizontal pill-row jump nav above the content. */}
+        <div className="lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start lg:gap-10">
+          {/* Desktop vertical table of contents (sticky) */}
+          <div className="hidden lg:sticky lg:top-24 lg:block">
+            <SectionJumpNav items={specSections} variant="vertical" />
+          </div>
+
+          <div className="min-w-0">
+            {/* Mobile horizontal jump navigation */}
+            <div className="lg:hidden">
+              <SectionJumpNav items={specSections} variant="horizontal" />
+            </div>
 
         {/* Hero section */}
         <section id="overview" className="grid scroll-mt-28 gap-8 lg:grid-cols-2">
@@ -257,7 +270,10 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
                   score: overallScore,
                 }}
               />
-              <ShareRow title={`${dName} review by Millan Wafulla`} path={`/devices/${String(brandData.slug ?? '')}/${dSlug}`} />
+              <ShareRow
+                title={`${dName} review by Millan Wafulla`}
+                absoluteUrl={`${origin}/devices/${String(brandData.slug ?? '')}/${dSlug}`}
+              />
             </div>
 
             <VerdictBlock
@@ -300,6 +316,11 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
 
         {/* Quick specs — dense stat grid (was a tall vertical list) */}
         <section id="quick-specs" className="mt-12 scroll-mt-28">
+          <SectionHeader
+            eyebrow="AT A GLANCE"
+            title="Quick Specs"
+            description="The essentials you care about most, at a glance."
+          />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             {[
               { Icon: Smartphone, label: 'Display', value: dSpecsDisplay?.['Size'] },
@@ -359,6 +380,8 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
             <CommentsSection contentType="device" contentSlug={dSlug} />
           </Suspense>
         </section>
+          </div>
+        </div>
 
         {/* Schema.org JSON-LD */}
         {!isPreview && (
@@ -368,8 +391,6 @@ export default async function DeviceDetail({ device, isPreview = false }: Device
           />
         )}
       </div>
-
-      <BackToTop />
     </div>
   )
 }

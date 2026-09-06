@@ -4,18 +4,18 @@ import { Link2, Send, MessageCircle } from 'lucide-react'
 
 interface ShareRowProps {
   title: string
-  path: string
+  /** Absolute URL of the device page, computed server-side (hydration-safe). */
+  absoluteUrl: string
 }
 
-export default function ShareRow({ title, path }: ShareRowProps) {
+export default function ShareRow({ title, absoluteUrl }: ShareRowProps) {
   const [copied, setCopied] = useState(false)
-  const url = (typeof window !== 'undefined' ? window.location.origin : '') + path
-  const encoded = encodeURIComponent(url)
+  const encoded = encodeURIComponent(absoluteUrl)
   const text = encodeURIComponent(title)
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(url)
+      await navigator.clipboard.writeText(absoluteUrl)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch {
