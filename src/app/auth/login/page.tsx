@@ -13,6 +13,7 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const next = searchParams.get('next') ?? '/'
+  const justConfirmed = searchParams.get('confirmed') === '1'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -22,6 +23,7 @@ function LoginForm() {
   const [info, setInfo] = useState('')
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [showReset, setShowReset] = useState(false)
+  const [resending, setResending] = useState(false)
 
   useEffect(() => {
     async function checkSession() {
@@ -48,7 +50,8 @@ function LoginForm() {
         if (result.error) {
           setError(result.error)
         } else if (result.needsVerification) {
-          setInfo('Account created! Please check your email to verify your account.')
+          setInfo('Account created! We sent a confirmation link to your email. Click it, then sign in with your password.')
+          setMode('signin')
         } else {
           router.refresh()
           router.push(next)
@@ -105,6 +108,11 @@ function LoginForm() {
         {info && (
           <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-sm text-center">
             {info}
+          </div>
+        )}
+        {justConfirmed && !info && (
+          <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-sm text-center">
+            ✓ Your email is confirmed. Sign in with your password to continue.
           </div>
         )}
 
@@ -213,6 +221,32 @@ function LoginForm() {
               >
                 {sending ? 'Creating account…' : 'Create Account'}
               </Button>
+              {info && (
+                <button
+                  type="button"
+                  disabled={resending}
+                  onClick={async () => {
+                    setResending(true)
+                    setError('')
+                    try {
+                      const { resendConfirmationLink } = await import('@/lib/auth/actions')
+                      const result = await resendConfirmationLink(email.trim())
+                      if (result.error) {
+                        setError(result.error)
+                      } else {
+                        setError('A fresh confirmation link has been sent to your email.')
+                      }
+                    } catch {
+                      setError('Something went wrong. Please try again.')
+                    } finally {
+                      setResending(false)
+                    }
+                  }}
+                  className="w-full text-center text-sm text-brand-primary hover:underline disabled:opacity-50"
+                >
+                  {resending ? 'Sending…' : 'Resend confirmation link'}
+                </button>
+              )}
             </form>
           </TabsContent>
         </Tabs>

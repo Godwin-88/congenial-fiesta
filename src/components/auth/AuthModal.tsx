@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { signInWithMagicLink, signUpWithEmail, signInWithEmail } from '@/lib/auth/actions'
+import { signInWithMagicLink, signUpWithEmail, signInWithEmail, resetPassword } from '@/lib/auth/actions'
 import {
   Dialog,
   DialogContent,
@@ -29,6 +29,8 @@ export default function AuthModal({ isOpen, onClose, redirectTo }: AuthModalProp
   const [emailError, setEmailError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [verificationSent, setVerificationSent] = useState(false)
+  const [showReset, setShowReset] = useState(false)
+  const [resetSent, setResetSent] = useState(false)
 
   const handleMagicLink = async () => {
     setEmailError(null)
@@ -95,12 +97,35 @@ export default function AuthModal({ isOpen, onClose, redirectTo }: AuthModalProp
     }
   }
 
+  const handleResetPassword = async () => {
+    setEmailError(null)
+    if (!email.trim()) {
+      setEmailError('Please enter your email.')
+      return
+    }
+    setIsSubmitting(true)
+    try {
+      const result = await resetPassword(email.trim())
+      if (result.error) {
+        setEmailError(result.error)
+      } else {
+        setResetSent(true)
+      }
+    } catch {
+      setEmailError('Something went wrong. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const resetForm = () => {
     setEmail('')
     setPassword('')
     setEmailSent(false)
     setEmailError(null)
     setVerificationSent(false)
+    setShowReset(false)
+    setResetSent(false)
   }
 
   return (
@@ -191,97 +216,147 @@ export default function AuthModal({ isOpen, onClose, redirectTo }: AuthModalProp
 
             {/* ── SIGN IN ──────────────────────────────── */}
             <TabsContent value="signin" className="mt-4 space-y-4">
-              {/* Email & Password Sign In */}
-              <div className="space-y-3">
-                <Input
-                  type="email"
-                  placeholder="Email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !isSubmitting) handleSignIn()
-                  }}
-                  className="w-full"
-                />
-                <Input
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !isSubmitting) handleSignIn()
-                  }}
-                  className="w-full"
-                />
-                <Button
-                  onClick={handleSignIn}
-                  disabled={isSubmitting || !email.trim() || !password.trim()}
-                  className="w-full"
-                >
-                  {isSubmitting ? 'Signing in...' : 'Sign In'}
-                </Button>
-                {emailError && (
-                  <p className="text-sm text-red-400">{emailError}</p>
-                )}
-              </div>
+              {!showReset ? (
+                <>
+                  {/* Email & Password Sign In */}
+                  <div className="space-y-3">
+                    <Input
+                      type="email"
+                      placeholder="Email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !isSubmitting) handleSignIn()
+                      }}
+                      className="w-full"
+                    />
+                    <Input
+                      type="password"
+                      placeholder="Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !isSubmitting) handleSignIn()
+                      }}
+                      className="w-full"
+                    />
+                    <Button
+                      onClick={handleSignIn}
+                      disabled={isSubmitting || !email.trim() || !password.trim()}
+                      className="w-full"
+                    >
+                      {isSubmitting ? 'Signing in...' : 'Sign In'}
+                    </Button>
+                    {emailError && (
+                      <p className="text-sm text-red-400">{emailError}</p>
+                    )}
+                  </div>
 
-              <div className="text-center">
-                <button
-                  onClick={() => {
-                    resetForm()
-                    onClose()
-                    window.location.href = '/auth/login'
-                  }}
-                  className="text-sm text-brand-primary hover:underline"
-                >
-                  Forgot password?
-                </button>
-              </div>
+                  <div className="text-center">
+                    <button
+                      onClick={() => setShowReset(true)}
+                      className="text-sm text-brand-primary hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
 
-              <div className="relative py-2">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border" />
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="bg-popover px-2 text-muted-foreground">or via email</span>
-                </div>
-              </div>
+                  <div className="relative py-2">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-border" />
+                    </div>
+                    <div className="relative flex justify-center text-xs">
+                      <span className="bg-popover px-2 text-muted-foreground">or via email</span>
+                    </div>
+                  </div>
 
-              {!emailSent ? (
-                <div className="space-y-3">
-                  <Input
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !isSubmitting) handleMagicLink()
-                    }}
-                    className="w-full"
-                  />
-                  <Button
-                    onClick={handleMagicLink}
-                    disabled={isSubmitting || !email.trim()}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    {isSubmitting ? 'Sending...' : 'Send Magic Link'}
-                  </Button>
-                  {emailError && (
-                    <p className="text-sm text-red-400">{emailError}</p>
+                  {!emailSent ? (
+                    <div className="space-y-3">
+                      <Input
+                        type="email"
+                        placeholder="you@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !isSubmitting) handleMagicLink()
+                        }}
+                        className="w-full"
+                      />
+                      <Button
+                        onClick={handleMagicLink}
+                        disabled={isSubmitting || !email.trim()}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        {isSubmitting ? 'Sending...' : 'Send Magic Link'}
+                      </Button>
+                      {emailError && (
+                        <p className="text-sm text-red-400">{emailError}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-4 text-center">
+                      <p className="text-sm text-green-400">
+                        Check your email — we sent you a link!
+                      </p>
+                    </div>
                   )}
-                </div>
-              ) : (
-                <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-4 text-center">
-                  <p className="text-sm text-green-400">
-                    Check your email — we sent you a link!
+
+                  <p className="text-center text-xs text-muted-foreground">
+                    No password needed for magic link. We don't sell your data.
                   </p>
+                </>
+              ) : (
+                /* ── INLINE RESET PASSWORD ─────────────────────── */
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <h3 className="text-sm font-semibold text-foreground">Reset your password</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Enter your email and we'll send you a link to set a new password.
+                    </p>
+                  </div>
+
+                  {resetSent ? (
+                    <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-4 text-center">
+                      <p className="text-sm text-green-400">
+                        Check your email — we sent you a password reset link!
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <Input
+                        type="email"
+                        placeholder="you@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !isSubmitting) handleResetPassword()
+                        }}
+                        className="w-full"
+                      />
+                      <Button
+                        onClick={handleResetPassword}
+                        disabled={isSubmitting || !email.trim()}
+                        className="w-full"
+                      >
+                        {isSubmitting ? 'Sending...' : 'Send Reset Link'}
+                      </Button>
+                      {emailError && (
+                        <p className="text-sm text-red-400">{emailError}</p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="text-center">
+                    <button
+                      onClick={() => setShowReset(false)}
+                      className="text-sm text-brand-primary hover:underline"
+                    >
+                      Back to Sign In
+                    </button>
+                  </div>
                 </div>
               )}
-
-              <p className="text-center text-xs text-muted-foreground">
-                No password needed for magic link. We don't sell your data.
-              </p>
             </TabsContent>
           </Tabs>
         </div>

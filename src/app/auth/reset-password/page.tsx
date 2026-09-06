@@ -11,24 +11,30 @@ function ResetPasswordForm() {
   const searchParams = useSearchParams()
   const token = searchParams.get('token') ?? ''
   const tokenHash = searchParams.get('token_hash') ?? ''
+  const linkType = searchParams.get('type') ?? 'email'
+  const email = searchParams.get('email') ?? ''
 
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
-  const [codeVerified, setCodeVerified] = useState(!!tokenHash)
+  const [codeVerified, setCodeVerified] = useState(!!(tokenHash || token))
 
   useEffect(() => {
-    if (tokenHash && !codeVerified) {
+    if ((tokenHash || token) && !codeVerified) {
       const verifyCode = async () => {
         setLoading(true)
         try {
           const supabase = createClient()
-          const { error: verifyError } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: 'email',
-          })
+          // Recovery links generated via the Admin API ("recovery") must be
+          // verified with type: 'recovery'; plain Supabase email links use 'email'.
+          const verifyType = linkType === 'recovery' ? 'recovery' : 'email'
+          const { error: verifyError } = await supabase.auth.verifyOtp(
+            tokenHash
+              ? { token_hash: tokenHash, type: verifyType }
+              : { email, token, type: verifyType }
+          )
           if (verifyError) {
             setError(verifyError.message)
           } else {
@@ -42,7 +48,7 @@ function ResetPasswordForm() {
       }
       verifyCode()
     }
-  }, [tokenHash, codeVerified])
+  }, [tokenHash, token, email, codeVerified, linkType])
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -92,10 +98,10 @@ function ResetPasswordForm() {
           </div>
           <h1 className="text-xl font-bold text-foreground mb-4">Password Reset</h1>
           <p className="text-sm text-muted-foreground mb-6">
-            Your password has been reset successfully.
+            Your password has been updated. You&apos;re now signed in with your new password.
           </p>
-          <Button onClick={() => router.push('/auth/login')}>
-            Sign In
+          <Button onClick={() => router.push('/')}>
+            Continue to FweezyTech
           </Button>
         </div>
       </div>
