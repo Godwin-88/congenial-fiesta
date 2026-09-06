@@ -13,6 +13,8 @@ import SkipLink from "@/components/a11y/SkipLink";
 import { ChatProvider } from "@/context/ChatContext";
 import ChatBubbleWrapper from "@/components/chat/ChatBubbleWrapper";
 import ChunkLoadReload from "@/components/dev/ChunkLoadReload";
+import MobileBottomNav from "@/components/layout/MobileBottomNav";
+import BackToTop from "@/components/devices/BackToTop";
 import "@/styles/globals.css";
 
 const ralewaySans = Raleway({
@@ -22,11 +24,14 @@ const ralewaySans = Raleway({
   display: "swap",
 });
 
+// Heading instance: preload already happens via ralewaySans — skip the
+// duplicate preload so the browser stops warning about the 2nd woff2.
 const ralewayHeading = Raleway({
   variable: "--font-heading",
   subsets: ["latin"],
   weight: ["400", "500", "700"],
   display: "swap",
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -139,8 +144,12 @@ export default async function RootLayout({
                     <InstallPrompt />
                     <ChatBubbleWrapper />
                     <Footer />
+                    {/* Clearance so the fixed mobile bottom nav never covers the footer */}
+                    <div className="h-16 lg:hidden" aria-hidden="true" />
                   </>
                 )}
+                {!isAdminRoute && <BackToTop />}
+                {!isAdminRoute && <MobileBottomNav />}
               </ChatProvider>
             </ComparisonTrayProvider>
           </AuthProvider>

@@ -53,7 +53,7 @@ export default function VideoFeed({ videos }: { videos: any[] }) {
           <p>No videos found for this platform.</p>
         </div>
       ) : (
-        <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3" onClick={handleCardClick}>
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3" onClick={handleCardClick}>
           {filteredVideos.map((video, i) => (
             <VideoCard
               key={`${video.dbId}-${i}`}

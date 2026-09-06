@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Moon, Sun, Menu, Search } from "lucide-react"
 import { useTheme } from "@ecosy/next-themes"
+import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import SearchBar from "@/components/search/SearchBar"
@@ -21,17 +22,37 @@ const navLinks = [
 export default function Header() {
   const [open, setOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
   const { theme, setTheme } = useTheme()
   const { user } = useAuth()
+  const pathname = usePathname()
+
+  // Shrink the header bar once the user scrolls (more content visible).
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8)
+    onScroll()
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
+
+  // Dismiss the mobile search overlay + nav sheet on any route change.
+  useEffect(() => {
+    setSearchOpen(false)
+    setOpen(false)
+  }, [pathname])
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div
+        className={`mx-auto flex max-w-7xl items-center justify-between px-4 transition-[height] duration-200 sm:px-6 lg:px-8 ${
+          scrolled ? "h-14" : "h-16"
+        }`}
+      >
         <a href="/videos" className="block shrink-0">
           <img
             src="/images/logo.jpeg"
             alt="FweezyTech"
-            className="h-10 w-auto"
+            className={`w-auto transition-[height] duration-200 ${scrolled ? "h-8" : "h-10"}`}
           />
         </a>
 

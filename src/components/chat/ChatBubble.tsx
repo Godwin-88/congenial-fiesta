@@ -40,7 +40,7 @@ export default function ChatBubble() {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-brand-primary text-white shadow-lg hover:bg-brand-primary/90 transition-all duration-200 flex items-center justify-center"
+        className="fixed bottom-20 right-4 z-40 w-14 h-14 rounded-full bg-brand-primary text-white shadow-lg hover:bg-brand-primary/90 transition-all duration-200 flex items-center justify-center lg:bottom-6 lg:right-6"
         aria-label={isOpen ? 'Close Fweezy Assistant chat' : 'Open Fweezy Assistant chat'}
       >
         {isOpen ? (
@@ -55,7 +55,7 @@ export default function ChatBubble() {
       </button>
 
       {!isOpen && messages.length > 0 && (
-        <span className="fixed bottom-[4.5rem] right-4 z-40 w-3 h-3 rounded-full bg-amber-500 border-2 border-background" />
+        <span className="fixed bottom-[5.5rem] right-4 z-40 w-3 h-3 rounded-full bg-amber-500 border-2 border-background lg:bottom-[4.5rem] lg:right-4" />
       )}
     </>
   )

@@ -16,7 +16,7 @@ export default function ComparisonTray() {
   const compareUrl = `/compare?devices=${devices.map((d) => d.slug).sort().join(',')}`
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-brand-primary/30 bg-[#1a1a1a]/95 backdrop-blur-sm transition-transform duration-300">
+    <div className="fixed bottom-14 left-0 right-0 z-50 border-t border-brand-primary/30 bg-[#1a1a1a]/95 backdrop-blur-sm transition-transform duration-300 lg:bottom-0">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           {devices.map((device) => (
