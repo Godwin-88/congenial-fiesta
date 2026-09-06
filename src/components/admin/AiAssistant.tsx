@@ -2,8 +2,11 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { usePathname } from 'next/navigation'
-import { Bot, X, Send, Trash2, Sparkles } from 'lucide-react'
+import { Bot, X, Send, Trash2, Sparkles, Wand2 } from 'lucide-react'
 import type { NavigationCard } from '@/types/chat'
+import PrefillReviewPanel from '@/components/admin/PrefillReviewPanel'
+import { useAdmin } from '@/context/AdminContext'
+import type { PrefillCollection } from '@/lib/chat/prefill-schemas'
 
 type Message = {
   id: string
@@ -91,8 +94,16 @@ export default function AiAssistant() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [navigationCards, setNavigationCards] = useState<Record<string, NavigationCard[]>>({})
+  const [prefillOpen, setPrefillOpen] = useState(false)
   const pathname = usePathname() ?? ''
   const context = useMemo(() => getCollectionFromPath(pathname), [pathname])
+  const { isViewer } = useAdmin()
+
+  // Auto-fill is only offered on create/edit forms, and never to viewers.
+  const prefillCollection: PrefillCollection | null =
+    !isViewer && (context.slug === 'devices' || context.slug === 'articles') && (context.action === 'create' || context.action === 'edit')
+      ? (context.slug as PrefillCollection)
+      : null
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -200,6 +211,34 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
     setError(null)
   }
 
+  // Apply the prefill payload to the form by dispatching a typed CustomEvent.
+  // The create/edit page listens and populates its state, then the admin can
+  // review and Save/Publish — the agent never writes to the DB.
+  const handlePrefillApply = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (!prefillCollection) return
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('fweezy:prefill-apply', {
+            detail: { collection: prefillCollection, payload },
+          }),
+        )
+      }
+      setPrefillOpen(false)
+      const fieldCount = Object.keys(payload).length
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant' as const,
+          content: `✓ Filled ${fieldCount} field group${fieldCount === 1 ? '' : 's'} into the ${prefillCollection} form. Review the highlighted sections, then Save Draft or Publish when ready.`,
+        },
+      ])
+      setIsOpen(true)
+    },
+    [prefillCollection],
+  )
+
   const suggestions = suggestionsFor(context)
 
   return (
@@ -242,18 +281,40 @@ const handleKeyDown = (e: React.KeyboardEvent) => {
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={clearChat}
-            title="Clear chat"
-            className="rounded-md p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
-          >
-            <Trash2 size={16} />
-          </button>
+          <div className="flex items-center gap-1">
+            {prefillCollection && (
+              <button
+                type="button"
+                onClick={() => setPrefillOpen((v) => !v)}
+                title={`Auto-fill ${prefillCollection} form`}
+                aria-label={`Auto-fill ${prefillCollection} form`}
+                className={`rounded-md p-1.5 transition-colors hover:bg-white/15 ${
+                  prefillOpen ? 'bg-white/20 text-white' : 'text-white/80 hover:text-white'
+                }`}
+              >
+                <Wand2 size={16} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={clearChat}
+              title="Clear chat"
+              className="rounded-md p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
         </div>
 {/* Messages */}
         <div className="flex min-h-[220px] max-h-[420px] flex-1 flex-col gap-2 overflow-y-auto p-3">
-          {messages.length === 0 && !isLoading && (
+          {prefillOpen && prefillCollection && (
+            <PrefillReviewPanel
+              collection={prefillCollection}
+              onApply={handlePrefillApply}
+              onClose={() => setPrefillOpen(false)}
+            />
+          )}
+          {messages.length === 0 && !isLoading && !prefillOpen && (
             <div className="px-1">
               <div className="mb-3 text-sm leading-relaxed text-muted-foreground">
                 Hi! I'm your CMS co-pilot. I can help you manage content, generate drafts, and

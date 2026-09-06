@@ -30,7 +30,7 @@ export function AdminProvider({
   const role = user?.role ?? 'viewer'
   const isAdmin = role === 'admin'
   const isEditor = role === 'admin' || role === 'editor'
-  const isViewer = true
+  const isViewer = role === 'viewer'
 
   useEffect(() => {
     setUser(adminUser)
