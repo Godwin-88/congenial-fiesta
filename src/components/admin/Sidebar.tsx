@@ -16,7 +16,7 @@ interface NavItem {
   label: string
   icon: React.ReactNode
   href: string
-  roles?: ('admin' | 'editor' | 'viewer')[]
+  roles?: ('admin' | 'editor' | 'viewer' | 'owner')[]
 }
 
 interface NavSection {
@@ -98,10 +98,13 @@ export default function Sidebar({ adminUser }: SidebarProps) {
   }
 
   const roleBadgeColor = {
+    owner: 'bg-brand-primary/20 text-brand-primary',
     admin: 'bg-red-500/20 text-red-400',
     editor: 'bg-blue-500/20 text-blue-400',
     viewer: 'bg-gray-500/20 text-gray-400',
   }
+
+  const userRoles: Array<'admin' | 'editor' | 'viewer' | 'owner'> = ['owner', 'admin', 'editor', 'viewer']
 
   const sidebarContent = (
     <div className="flex flex-col h-full">

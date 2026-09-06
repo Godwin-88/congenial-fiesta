@@ -9,6 +9,7 @@ interface AdminContextType {
   isAdmin: boolean
   isEditor: boolean
   isViewer: boolean
+  isOwner: boolean
 }
 
 const AdminContext = createContext<AdminContextType>({
@@ -17,6 +18,7 @@ const AdminContext = createContext<AdminContextType>({
   isAdmin: false,
   isEditor: false,
   isViewer: true,
+  isOwner: false,
 })
 
 export function AdminProvider({
@@ -31,13 +33,14 @@ export function AdminProvider({
   const isAdmin = role === 'admin'
   const isEditor = role === 'admin' || role === 'editor'
   const isViewer = role === 'viewer'
+  const isOwner = role === 'owner'
 
   useEffect(() => {
     setUser(adminUser)
   }, [adminUser])
 
   return (
-    <AdminContext.Provider value={{ user, role, isAdmin, isEditor, isViewer }}>
+    <AdminContext.Provider value={{ user, role, isAdmin, isEditor, isViewer, isOwner }}>
       {children}
     </AdminContext.Provider>
   )

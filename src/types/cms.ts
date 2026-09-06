@@ -4,7 +4,7 @@
 export interface AdminUser {
   id: string
   display_name: string
-  role: 'admin' | 'editor' | 'viewer'
+  role: 'admin' | 'editor' | 'viewer' | 'owner'
   created_at: string
   updated_at: string
 }

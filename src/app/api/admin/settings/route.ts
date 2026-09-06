@@ -1,22 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth, getAdminClient } from '@/lib/admin/require-admin'
+import { CONFIG_REGISTRY, defaultConfigMap, getConfigDef } from '@/lib/settings/config'
 
 export async function GET() {
   try {
     await requireAdminAuth()
-    const supabase = await getAdminClient()
+    const supabase = getAdminClient()
 
-    const { data, error } = await supabase
-      .from('site_settings')
-      .select('*')
-      .limit(1)
-      .maybeSingle()
+    const [settingsRes, configRes] = await Promise.all([
+      supabase.from('site_settings').select('*').limit(1).maybeSingle(),
+      supabase.from('app_config').select('key, value'),
+    ])
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (settingsRes.error) {
+      return NextResponse.json({ error: settingsRes.error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ data: data ?? null })
+    // Merge stored config over defaults so unset keys always have a value.
+    const defaults = defaultConfigMap()
+    for (const row of configRes.data ?? []) {
+      const def = getConfigDef(row.key)
+      if (def) defaults[def.key] = row.value as never
+    }
+
+    return NextResponse.json({
+      data: settingsRes.data ?? null,
+      config: defaults,
+    })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unauthorized'
     return NextResponse.json({ error: message }, { status: message === 'Forbidden' ? 403 : 401 })
@@ -26,7 +36,7 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   try {
     const adminUser = await requireAdminAuth()
-    if (adminUser.role !== 'admin') {
+    if (adminUser.role !== 'admin' && adminUser.role !== 'owner') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -90,7 +100,50 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: result.error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ data: result.data })
+    // ── Pillar 3: managed config (app_config) ──────────────────────────────
+    const config = (body.config ?? {}) as Record<string, unknown>
+    let configUpdated = 0
+    for (const [key, value] of Object.entries(config)) {
+      const def = getConfigDef(key)
+      if (!def) return NextResponse.json({ error: `Unknown config key: ${key}` }, { status: 400 })
+
+      // Validate
+      if (def.type === 'boolean' && typeof value !== 'boolean') {
+        return NextResponse.json({ error: `${key} must be a boolean` }, { status: 400 })
+      }
+      if (def.type === 'number' && typeof value !== 'number') {
+        return NextResponse.json({ error: `${key} must be a number` }, { status: 400 })
+      }
+      if (def.type === 'url' && typeof value === 'string') {
+        const err = def.validate?.(value)
+        if (err) return NextResponse.json({ error: `${key}: ${err}` }, { status: 400 })
+      }
+
+      const { data: prev } = await supabase.from('app_config').select('value').eq('key', key).maybeSingle()
+      if (prev && JSON.stringify(prev.value) === JSON.stringify(value)) continue // unchanged
+
+      const { error: cfgErr } = await supabase.from('app_config').upsert({
+        key,
+        value: def.type === 'string' ? (value === '' ? def.default : value) : value,
+        category: def.category,
+        description: def.description,
+        updated_by: adminUser.id,
+      }, { onConflict: 'key' })
+      if (cfgErr) return NextResponse.json({ error: cfgErr.message }, { status: 500 })
+
+      try {
+        await supabase.from('app_config_audit').insert({
+          key,
+          action: 'set',
+          old_value: prev?.value ?? null,
+          new_value: value,
+          admin_id: adminUser.id,
+        })
+      } catch { /* audit is best-effort */ }
+      configUpdated++
+    }
+
+    return NextResponse.json({ data: result.data, configUpdated })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unauthorized'
     return NextResponse.json({ error: message }, { status: message === 'Forbidden' ? 403 : 401 })
