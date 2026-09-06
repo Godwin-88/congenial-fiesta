@@ -71,6 +71,11 @@ export default async function DeviceDetail({ device, isPreview = false, origin =
   const dScoreCamera = Number(d.score_camera ?? 0)
   const dScoreBattery = Number(d.score_battery ?? 0)
   const dScoreValue = Number(d.score_value ?? 0)
+  // A radar of all zeros is meaningless — only render it when the admin has
+  // actually filled in at least one sub-score dimension.
+  const hasAnySubScore =
+    dScoreDisplay > 0 || dScorePerformance > 0 || dScoreCamera > 0 ||
+    dScoreBattery > 0 || dScoreValue > 0
   const dBuyLinks = d.buy_links as Array<Record<string, unknown>> | undefined
   const hasBuyLinks = Array.isArray(dBuyLinks) && (dBuyLinks.length ?? 0) > 0
   const dSpecsDesign = d.specs_design as Record<string, unknown> | undefined
@@ -232,19 +237,23 @@ export default async function DeviceDetail({ device, isPreview = false, origin =
               <ScoreBadge score={overallScore} size="lg" />
               <div>
                 <p className="font-heading text-lg font-bold text-foreground">Fweezy Score</p>
-                <p className="text-sm text-muted-foreground">Overall rating</p>
+                <p className="text-sm text-muted-foreground">
+                  {overallScore > 0 ? 'Overall rating' : 'Not rated yet — review coming soon'}
+                </p>
               </div>
             </div>
 
-            <RadarChart
-              scores={{
-                display: dScoreDisplay,
-                performance: dScorePerformance,
-                camera: dScoreCamera,
-                battery: dScoreBattery,
-                value: dScoreValue,
-              }}
-            />
+            {hasAnySubScore && (
+              <RadarChart
+                scores={{
+                  display: dScoreDisplay,
+                  performance: dScorePerformance,
+                  camera: dScoreCamera,
+                  battery: dScoreBattery,
+                  value: dScoreValue,
+                }}
+              />
+            )}
 
             <BuyBox
               buyLinks={dBuyLinks}

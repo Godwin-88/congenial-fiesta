@@ -265,12 +265,12 @@ export default function HeroSection({ topDevices }: Props) {
                       strokeLinecap="round"
                       strokeDasharray={2 * Math.PI * 28}
                       initial={{ strokeDashoffset: 2 * Math.PI * 28 }}
-                      animate={{ strokeDashoffset: 2 * Math.PI * 28 * (1 - (topDevices[0].scores_overall ?? 8) / 10) }}
+                      animate={{ strokeDashoffset: 2 * Math.PI * 28 * (1 - (topDevices[0].scores_overall || 8) / 10) }}
                       transition={{ duration: 1.5, delay: 1.2, ease: 'easeOut' }}
                     />
                   </svg>
                   <span className="absolute inset-0 flex items-center justify-center text-lg font-bold text-foreground">
-                    {topDevices[0].scores_overall?.toFixed(1)}
+                    {topDevices[0].scores_overall ? topDevices[0].scores_overall.toFixed(1) : '—'}
                   </span>
                 </div>
                 <span className="text-xs text-muted-foreground">Fweezy Score™</span>

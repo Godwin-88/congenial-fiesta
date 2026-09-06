@@ -47,7 +47,7 @@ export async function GET(request: Request) {
             const primary = images?.find((img) => img.isPrimary)
             const slug = String(dev.slug ?? '')
             const name = String(dev.name ?? '')
-            const scoreValue = Number(dev.scores_overall ?? 0)
+            const scoreValue = dev.scores_overall ? Number(dev.scores_overall) : null
             return (
               <div key={slug} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
                 <div
@@ -88,7 +88,7 @@ export async function GET(request: Request) {
                     fontWeight: 'bold',
                   }}
                 >
-                  {scoreValue}/100
+                  {scoreValue != null ? `${scoreValue}/100` : '—'}
                 </div>
               </div>
             )
@@ -114,7 +114,7 @@ export async function GET(request: Request) {
                 const images = device.images as Array<Record<string, unknown>> | undefined
                 const primary = images?.find((img) => img.isPrimary)
                 const name = String(device.name ?? '')
-                const scoreValue = Number(device.scores_overall ?? 0)
+                const scoreValue = device.scores_overall ? Number(device.scores_overall) : null
                 return (
                   <>
                     <div
@@ -155,7 +155,7 @@ export async function GET(request: Request) {
                         fontWeight: 'bold',
                       }}
                     >
-                      {scoreValue}/100
+                      {scoreValue != null ? `${scoreValue}/100` : '—'}
                     </div>
                   </>
                 )

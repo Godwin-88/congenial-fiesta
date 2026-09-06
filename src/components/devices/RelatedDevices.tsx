@@ -44,7 +44,7 @@ export default function RelatedDevices({ devices, currentSlug }: RelatedDevicesP
               <h3 className="text-sm font-semibold text-foreground">
                 {(device.brand as any)?.name ? `${(device.brand as any).name} ` : ''}{device.name}
               </h3>
-              {device.scores_overall != null && (
+              {device.scores_overall != null && device.scores_overall > 0 && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   Fweezy Score: <span className="font-medium text-foreground">{device.scores_overall}</span>
                 </p>

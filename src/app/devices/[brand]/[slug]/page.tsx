@@ -33,11 +33,12 @@ export async function generateMetadata({
   const brandData = d.brand as Record<string, unknown>
   const dName = String(d.name ?? '')
   const dScore = Number(d.scores_overall ?? 0)
+  const hasScore = dScore > 0
   const metaTitle = d.seo_title ? String(d.seo_title) : `${dName} Review & Full Specs | FweezyTech`
   const metaDescription =
     d.seo_description
       ? String(d.seo_description)
-      : `In-depth ${dName} review by Millan Wafulla. Score: ${dScore}/100. Full specs, benchmarks, pros & cons, and best prices in Kenya.`
+      : `In-depth ${dName} review by Millan Wafulla.${hasScore ? ` Score: ${dScore}/100.` : ''} Full specs, pros & cons, and best prices in Kenya.`
 
   const ogImages: Array<{ url: string }> = []
   if (d.seo_og_image) {
