@@ -115,3 +115,79 @@ export async function sendAuthEmail(opts: {
   if (smtp.sent) return { sent: true }
   return { sent: false, error: smtp.error ?? 'Email delivery is not configured.' }
 }
+
+/**
+ * Send an email OTP sign-in code. PREFERS the Resend HTTP API (verified
+ * sender domain — reliable, no SMTP auth quirks) and falls back to SMTP only
+ * when Resend is unavailable. Previously this path went STRAIGHT to SMTP,
+ * which for smtp.gmail.com rejected any non-@gmail.com sender with
+ * `534-5.7.9 Please log in with your web browser and then try again`.
+ */
+export async function sendOtpEmail(opts: {
+  to: string
+  otp: string
+}): Promise<AuthEmailResult> {
+  const { to, otp } = opts
+  const html = `<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:0;background:#f6f6f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f6f6">
+      <tr>
+        <td align="center" style="padding:40px 0">
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;border-radius:12px;border:1px solid #e2e8f0;background:#ffffff;overflow:hidden">
+            <tr>
+              <td style="padding:28px 32px;background:#0f172a;color:#ffffff;font-size:20px;font-weight:bold">${BRAND_NAME}</td>
+            </tr>
+            <tr>
+              <td style="padding:32px 32px">
+                <h1 style="margin:0 0 12px;font-size:22px;color:#0f172a">Your sign-in code</h1>
+                <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#334155">Use the code below to sign in to ${BRAND_NAME}. It expires in 10 minutes.</p>
+                <p style="margin:24px auto;font-size:32px;font-weight:bold;letter-spacing:6px;color:#0f172a;text-align:center;background:#f1f5f9;border-radius:8px;padding:16px 0">${otp}</p>
+                <p style="margin:0 0 8px;font-size:12px;color:#64748b">If you did not request this code, you can safely ignore this email.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 32px;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0">
+                You received this email because someone used your address on ${BRAND_NAME} (${BRAND_URL}).
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`
+  const text = `Your FweezyTech sign-in code is: ${otp}\nEnter this code to sign in. It expires in 10 minutes.`
+
+  const resendKey = process.env.RESEND_API_KEY
+  if (resendKey) {
+    try {
+      const resend = new Resend(resendKey)
+      const { data, error } = await resend.emails.send({
+        from: AUTH_FROM,
+        to: [to],
+        subject: 'Your FweezyTech sign-in code',
+        html,
+      })
+      if (error) {
+        console.error('[auth-email] Resend failed (OTP):', error.message)
+        // fall through to SMTP below
+      } else {
+        return { sent: true }
+      }
+    } catch (err) {
+      console.error('[auth-email] Resend threw (OTP):', err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const smtp = await sendEmail({
+    to,
+    subject: 'Your FweezyTech sign-in code',
+    html,
+    text,
+    from: AUTH_FROM,
+  })
+
+  if (smtp.sent) return { sent: true }
+  return { sent: false, error: smtp.error ?? 'Email delivery is not configured.' }
+}

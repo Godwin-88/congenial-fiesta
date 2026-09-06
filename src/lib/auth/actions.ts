@@ -3,13 +3,8 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createServerClient } from '@supabase/ssr'
-import { sendAuthEmail } from '@/lib/auth/emails'
-import { sendEmail } from '@/lib/email'
-
-const AUTH_FROM =
-  process.env.RESEND_FROM_EMAIL ??
-  process.env.MAIL_FROM ??
-  'FweezyTech <no-reply@fweezytech.com>'
+import { sendAuthEmail, sendOtpEmail } from '@/lib/auth/emails'
+import { redis } from '@/lib/upstash/redis'
 
 export async function signInWithMagicLink(email: string, redirectTo?: string): Promise<{ error?: string }> {
   const supabase = await createClient()
@@ -318,15 +313,56 @@ export async function getUser() {
   return user
 }
 
-/**
- * Send a magic-link OTP code to the user's email for sign-in.
- *
- * Uses the GoTrue Admin API (`generateLink` with `type: 'magiclink'`), which
- * returns BOTH an action link AND a short-lived `email_otp` code. We deliver
- * the code through our own email stack (Resend → SMTP) so Supabase's
- * rate-limited built-in emailer is never required. Falls back to
- * `signInWithOtp` (Supabase's emailer) when no service-role key is configured.
- */
+// GoTrue keeps only the LAST OTP token per email — every new generateLink call
+// silently invalidates the previously emailed code. So we persist the most recent
+// code in Redis and REUSE it for the code's lifespan instead of regenerating on
+// every request. That makes the code in the user's inbox always the valid one.
+const OTP_REDIS_PREFIX = 'auth:otp:'
+const OTP_TTL_SECONDS = 600 // 10 min — match/undercut GoTrue OTP expiry
+
+interface OtpCacheEntry {
+  code: string
+  email: string
+  createdAt: number
+}
+
+function otpCacheKey(email: string): string {
+  return `${OTP_REDIS_PREFIX}${email}`
+}
+
+async function getCachedOtp(email: string): Promise<OtpCacheEntry | null> {
+  try {
+    const raw = await redis.get<string | object>(otpCacheKey(email))
+    if (!raw) return null
+    const entry =
+      typeof raw === 'object'
+        ? (raw as OtpCacheEntry)
+        : (JSON.parse(raw as string) as OtpCacheEntry)
+    if (!entry?.code) return null
+    if (Date.now() - entry.createdAt > OTP_TTL_SECONDS * 1000) return null
+    return entry
+  } catch (err) {
+    console.error('[auth] Failed to read OTP cache:', err instanceof Error ? err.message : String(err))
+    return null
+  }
+}
+
+async function storeCachedOtp(email: string, code: string): Promise<void> {
+  try {
+    const entry: OtpCacheEntry = { code, email, createdAt: Date.now() }
+    await redis.setex(otpCacheKey(email), OTP_TTL_SECONDS, JSON.stringify(entry))
+  } catch (err) {
+    console.error('[auth] Failed to cache OTP:', err instanceof Error ? err.message : String(err))
+  }
+}
+
+async function clearCachedOtp(email: string): Promise<void> {
+  try {
+    await redis.del(otpCacheKey(email))
+  } catch (err) {
+    console.error('[auth] Failed to clear OTP cache:', err instanceof Error ? err.message : String(err))
+  }
+}
 export async function sendOtpCode(
   email: string,
   redirectTo?: string
@@ -335,6 +371,18 @@ export async function sendOtpCode(
   if (!cleanEmail) return { error: 'Please enter your email.' }
 
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    // REUSE a still-valid cached code instead of regenerating (regeneration
+    // silently invalidates the previous one — the #1 cause of "Token has
+    // expired or is invalid" when the user enters the code they just received).
+    const cached = await getCachedOtp(cleanEmail)
+    if (cached?.code) {
+      const reSent = await sendOtpEmail({ to: cleanEmail, otp: cached.code })
+      if (!reSent.sent) {
+        return { error: reSent.error ?? 'Could not deliver the OTP email. Please try again.' }
+      }
+      return { sent: true }
+    }
+
     const adminClient = makeAdminClient()
     const { data, error: genError } = await adminClient.auth.admin.generateLink({
       type: 'magiclink',
@@ -354,12 +402,11 @@ export async function sendOtpCode(
       return { error: 'Could not generate an OTP code. Please try again.' }
     }
 
-    const sent = await sendEmail({
+    await storeCachedOtp(cleanEmail, otpCode)
+
+    const sent = await sendOtpEmail({
       to: cleanEmail,
-      subject: 'Your FweezyTech sign-in code',
-      from: AUTH_FROM,
-      html: `<p style="font-size:16px;line-height:1.6;">Your FweezyTech sign-in code is:</p><p style="font-size:32px;font-weight:bold;letter-spacing:4px;">${otpCode}</p><p style="font-size:14px;color:#666;">Enter this code to sign in. It expires in 10 minutes.</p>`,
-      text: `Your FweezyTech sign-in code is: ${otpCode}\nEnter this code to sign in. It expires in 10 minutes.`,
+      otp: otpCode,
     })
 
     if (!sent.sent) {
@@ -381,9 +428,10 @@ export async function sendOtpCode(
 }
 
 /**
- * Verify a 6-digit OTP code and sign the user in.
+ * Verify an email OTP code and sign the user in.
  * Uses the server-side supabase client (with cookies) so the session cookie
- * is set automatically on success.
+ * is set automatically on success. On the "expired or invalid" error we guide
+ * the user to the *latest* code (only the last-issued token is valid in GoTrue).
  */
 export async function verifyOtpCode(
   email: string,
@@ -399,6 +447,17 @@ export async function verifyOtpCode(
     type: 'email',
   })
 
-  if (error) return { error: error.message }
+  if (error) {
+    if (/expired|invalid/i.test(error.message)) {
+      await clearCachedOtp(cleanEmail)
+      return {
+        error: 'That code is no longer valid. Please use the code from the most recent email, or request a new one.',
+      }
+    }
+    return { error: error.message }
+  }
+
+  // Sign-in succeeded — the code is single-use, drop any cached copy.
+  await clearCachedOtp(cleanEmail)
   return { success: true }
 }
