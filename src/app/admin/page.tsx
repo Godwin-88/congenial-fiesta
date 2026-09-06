@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { FileText, Smartphone, Video, Clock, Eye, MousePointerClick, ArrowRight } from 'lucide-react'
+import { FileText, Smartphone, Video, Clock, Eye, MousePointerClick, ArrowRight, Wand2 } from 'lucide-react'
+import YouTubeImportModal from '@/components/admin/YouTubeImportModal'
 
 type AdminUser = {
   id: string
@@ -38,6 +39,7 @@ export default function AdminDashboardPage() {
     href: string
   }>>([])
   const [loading, setLoading] = useState(true)
+  const [importOpen, setImportOpen] = useState(false)
 
   const today = new Date()
   const hour = today.getHours()
@@ -135,7 +137,7 @@ export default function AdminDashboardPage() {
         <p className="text-muted-foreground mt-1">Here's what's happening at FweezyTech.</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Link
           href="/admin/articles/create"
           className="bg-card rounded-lg p-4 border border-border hover:border-brand-primary transition-colors group"
@@ -168,6 +170,15 @@ export default function AdminDashboardPage() {
           <p className="text-sm text-foreground font-medium">Add Teaser</p>
           <p className="text-xs text-muted-foreground mt-1">Upcoming content</p>
         </Link>
+        <button
+          type="button"
+          onClick={() => setImportOpen(true)}
+          className="bg-card rounded-lg p-4 border border-border hover:border-amber-400 transition-colors group text-left"
+        >
+          <Wand2 className="text-amber-400 mb-2" size={24} />
+          <p className="text-sm text-foreground font-medium">Import Devices</p>
+          <p className="text-xs text-muted-foreground mt-1">From YouTube channel</p>
+        </button>
       </div>
 
       {stats && (
@@ -261,6 +272,15 @@ export default function AdminDashboardPage() {
         <p className="text-xs text-brand-primary uppercase tracking-wider mb-1">Daily Tip</p>
         <p className="text-sm text-foreground/80">{DAILY_TIPS[tipIndex]}</p>
       </div>
+
+      <YouTubeImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onQueued={() => {
+          setImportOpen(false)
+          window.location.reload()
+        }}
+      />
     </div>
   )
 }

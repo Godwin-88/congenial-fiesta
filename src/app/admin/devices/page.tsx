@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Plus, Edit2, Trash2, Search, Tag } from 'lucide-react'
+import { Plus, Edit2, Trash2, Search, Tag, Wand2 } from 'lucide-react'
 import Image from 'next/image'
+import YouTubeImportModal from '@/components/admin/YouTubeImportModal'
 
 type Device = {
   id: number
@@ -42,6 +43,24 @@ export default function DevicesPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [deleteName, setDeleteName] = useState('')
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importing, setImporting] = useState(false)
+
+  const handleImportQueued = (scope: 'latest-50' | 'all') => {
+    setToast({
+      message:
+        scope === 'all'
+          ? 'Full channel import queued — drafts will appear in a few minutes'
+          : 'Import queued — drafts will appear in a few minutes',
+      type: 'success',
+    })
+    setImporting(true)
+    // Poll for new drafts after the background job has had time to run.
+    setTimeout(() => {
+      setImporting(false)
+      fetchDevices()
+    }, 90_000)
+  }
 
   const fetchDevices = useCallback(async () => {
     setLoading(true)
@@ -145,6 +164,16 @@ export default function DevicesPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-white font-heading">Devices</h1>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            disabled={importing}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-amber-950 rounded-lg
+                       hover:bg-amber-400 transition-colors text-sm font-semibold disabled:opacity-60"
+          >
+            <Wand2 size={16} />
+            {importing ? 'Importing…' : 'Import from YouTube'}
+          </button>
           <a
             href="/admin/device-types"
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg
@@ -364,6 +393,12 @@ export default function DevicesPage() {
           </div>
         </div>
       )}
+
+      <YouTubeImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onQueued={handleImportQueued}
+      />
     </div>
   )
 }

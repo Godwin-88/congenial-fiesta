@@ -229,7 +229,7 @@ async function fetchYouTubeVideosViaInnertube(maxResults: number = 20): Promise<
   let continuation: string | undefined
   let pages = 0
 
-  while (videos.length < maxResults && pages < 10) {
+  while (videos.length < maxResults && pages < 25) {
     const body: Record<string, unknown> = {
       context: {
         client: { clientName: INNERTUBE_CLIENT_NAME, clientVersion: INNERTUBE_CLIENT_VERSION },
@@ -389,7 +389,7 @@ export async function fetchTopYouTubeVideos(limit: number = 5): Promise<YouTubeV
   return [...all].sort((a, b) => b.viewCount - a.viewCount).slice(0, limit)
 }
 
-export async function fetchAllYouTubeVideos(): Promise<YouTubeVideo[]> {
+export async function fetchAllYouTubeVideos(maxResults: number = 600): Promise<YouTubeVideo[]> {
   const hasApiKey = process.env.YOUTUBE_API_KEY && process.env.YOUTUBE_API_KEY.trim()
   if (hasApiKey && process.env.YOUTUBE_CHANNEL_ID) {
     const videos: YouTubeVideo[] = []
@@ -398,11 +398,14 @@ export async function fetchAllYouTubeVideos(): Promise<YouTubeVideo[]> {
       const page = await fetchFromYouTubeApiPaginated(50, pageToken)
       videos.push(...page.items)
       pageToken = page.nextPageToken
-    } while (pageToken && videos.length < 900)
-    return videos.slice(0, 900)
+    } while (pageToken && videos.length < Math.min(maxResults, 900))
+    return videos.slice(0, Math.min(maxResults, 900))
   }
-  const rssVideos = await fetchNoKeyYouTubeVideos(50)
-  if (rssVideos.length < 20 && !hasApiKey) {
+  // No API key: RSS caps at ~15, so the coverage comes from deep Innertube
+  // pagination. fetchYouTubeVideosViaInnertube already walks up to 25 pages,
+  // so ask it for the full requested amount and merge with RSS.
+  const rssVideos = await fetchNoKeyYouTubeVideos(maxResults)
+  if (rssVideos.length < 20) {
     console.warn(
       '⚠ Only fetched %d YouTube videos via RSS/Innertube (YouTube caps RSS at 15 entries). ' +
       'To index more, set YOUTUBE_API_KEY in .env.local (free via Google Cloud Console → YouTube Data API v3).',
