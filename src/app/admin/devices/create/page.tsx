@@ -10,6 +10,8 @@ import { CameraSpecSection } from '@/components/admin/CameraSpecSection'
 import { CameraSpec, emptyCamera, cameraHasContent } from '@/lib/camera-spec'
 import { MAJOR_CATEGORIES, type MajorCategory, type DeviceType } from '@/types/cms'
 import { verdictContent } from '@/lib/verdict-content'
+import { applyDevicePrefill } from '@/lib/chat/prefill-apply'
+import type { DevicePrefill } from '@/lib/chat/prefill-schemas'
 
 const TiptapEditor = dynamic(
   () => import('@/components/admin/TiptapEditor'),
@@ -170,6 +172,66 @@ export default function CreateDevicePage() {
       setSlug(slugify(name))
     }
   }, [name, slugManuallyEdited])
+
+  // Agentic prefill: the AI assistant dispatches `fweezy:prefill-apply` to
+  // populate this create form. Nothing is saved — the admin reviews + saves.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ collection?: string; payload?: Record<string, unknown> }>).detail
+      if (!detail || detail.collection !== 'devices' || !detail.payload) return
+      const fields = detail.payload as DevicePrefill
+
+      applyDevicePrefill(fields, {
+        setName,
+        setSlug,
+        setBrandId,
+        setReleaseYear,
+        setPriceKes,
+        setPriceUsd,
+        setPriceTier,
+        setMajorCategory: (v: string) => setMajorCategory(v as MajorCategory | ''),
+        setTagline,
+        setScoreDisplay,
+        setScorePerformance,
+        setScoreCamera,
+        setScoreBattery,
+        setScoreValue,
+        setVerdictPros,
+        setVerdictCons,
+        setVerdictBottomLine,
+        setVerdictFull,
+        setSpecsDesign,
+        setSpecsDisplay,
+        setSpecsProcessor,
+        setSpecsMemory,
+        setSpecsCamera,
+        setSpecsBattery,
+        setSpecsConnectivity,
+        setSpecsSoftware,
+        setSpecsNetwork,
+        setBuyLinks,
+        setRelatedVideoId,
+        setSeoTitle,
+        setSeoDescription,
+      })
+
+      // Resolve brand name against the loaded brands list
+      if (fields.brandName) {
+        const match = brands.find((b) => b.name.toLowerCase() === fields.brandName!.toLowerCase())
+        if (match) setBrandId(match.id)
+        else setToast({ message: `Brand "${fields.brandName}" not found — please select it manually`, type: 'error' })
+      }
+
+      // Slug follows the name unless the admin overrode it
+      if (fields.name && !slugManuallyEdited) setSlug(slugify(fields.name))
+
+      setDirty(true)
+      setToast({ message: 'AI prefill applied — review before saving', type: 'success' })
+    }
+    window.addEventListener('fweezy:prefill-apply', handler)
+    return () => window.removeEventListener('fweezy:prefill-apply', handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brands, slugManuallyEdited, setDirty, setToast])
 
   useEffect(() => {
     async function loadBrands() {

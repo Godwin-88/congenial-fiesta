@@ -7,6 +7,8 @@ import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 import ArticleImagesPanel from '@/components/admin/ArticleImagesPanel'
 import { uploadImageFile } from '@/lib/client-upload'
+import { applyArticlePrefill } from '@/lib/chat/prefill-apply'
+import type { ArticlePrefill } from '@/lib/chat/prefill-schemas'
 
 const TiptapEditor = dynamic(
   () => import('@/components/admin/TiptapEditor'),
@@ -92,6 +94,35 @@ export default function CreateArticlePage() {
       setSlug(slugify(title))
     }
   }, [title, slugManuallyEdited])
+
+  // Agentic prefill: the AI assistant dispatches `fweezy:prefill-apply` to
+  // populate this article create form. Nothing is saved — admin reviews + saves.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ collection?: string; payload?: Record<string, unknown> }>).detail
+      if (!detail || detail.collection !== 'articles' || !detail.payload) return
+      const fields = detail.payload as ArticlePrefill
+
+      applyArticlePrefill(fields, {
+        setTitle,
+        setSlug,
+        setExcerpt,
+        setCategory,
+        setTags,
+        setBodyJson,
+        setBodyHtml,
+        setSeoTitle,
+        setSeoDescription,
+      })
+
+      if (fields.title && !slugManuallyEdited) setSlug(slugify(fields.title))
+      setDirty(true)
+      setSaveStatus('idle')
+    }
+    window.addEventListener('fweezy:prefill-apply', handler)
+    return () => window.removeEventListener('fweezy:prefill-apply', handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slugManuallyEdited, setDirty])
 
   // Auto-save every 30 seconds when content changes
   const triggerAutoSave = useCallback(() => {
