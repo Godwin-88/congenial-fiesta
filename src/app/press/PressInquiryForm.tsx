@@ -111,38 +111,38 @@ export default function PressInquiryForm() {
       )}
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">Name *</label>
+        <label className="block text-sm font-medium text-foreground/80 mb-1">Name *</label>
         <Input
           value={formData.name}
           onChange={(e) => updateField('name', e.target.value)}
           placeholder="Your full name"
-          className="bg-gray-800 border-gray-700 text-white"
+          className="bg-background border-border text-foreground"
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">Publication *</label>
+        <label className="block text-sm font-medium text-foreground/80 mb-1">Publication *</label>
         <Input
           value={formData.publication}
           onChange={(e) => updateField('publication', e.target.value)}
           placeholder="Publication or outlet name"
-          className="bg-gray-800 border-gray-700 text-white"
+          className="bg-background border-border text-foreground"
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">Deadline</label>
+        <label className="block text-sm font-medium text-foreground/80 mb-1">Deadline</label>
         <Input
           value={formData.deadline}
           onChange={(e) => updateField('deadline', e.target.value)}
           placeholder="e.g. End of month"
-          className="bg-gray-800 border-gray-700 text-white"
+          className="bg-background border-border text-foreground"
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">
-          Message * <span className="text-gray-500 text-xs">({formData.message.length}/2000)</span>
+        <label className="block text-sm font-medium text-foreground/80 mb-1">
+          Message * <span className="text-muted-foreground/70 text-xs">({formData.message.length}/2000)</span>
         </label>
         <textarea
           value={formData.message}
@@ -150,18 +150,18 @@ export default function PressInquiryForm() {
           placeholder="Tell us about your story or request..."
           rows={5}
           maxLength={2000}
-          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#0066FF] resize-none"
+          className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#0066FF] resize-none"
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">Email *</label>
+        <label className="block text-sm font-medium text-foreground/80 mb-1">Email *</label>
         <Input
           value={formData.email}
           onChange={(e) => updateField('email', e.target.value)}
           placeholder="your@email.com"
           type="email"
-          className="bg-gray-800 border-gray-700 text-white"
+          className="bg-background border-border text-foreground"
         />
       </div>
 

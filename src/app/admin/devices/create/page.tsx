@@ -16,7 +16,7 @@ import type { DevicePrefill } from '@/lib/chat/prefill-schemas'
 const TiptapEditor = dynamic(
   () => import('@/components/admin/TiptapEditor'),
   { ssr: false, loading: () => (
-    <div className="h-[300px] bg-card rounded-lg animate-pulse" />
+    <div className="h-[300px] bg-foreground/10 rounded-lg animate-pulse" />
   )}
 )
 

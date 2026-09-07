@@ -12,7 +12,7 @@ export async function signInWithMagicLink(email: string, redirectTo?: string): P
   const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${serverUrl}/auth/callback?next=${encodeURIComponent(redirectTo ?? '/')}`,
+        emailRedirectTo: `${serverUrl}/auth/callback?next=${encodeURIComponent(redirectTo ?? '/dashboard')}`,
       },
   })
 
@@ -132,7 +132,7 @@ export async function signUpWithEmail(email: string, password: string, redirectT
       email: cleanEmail,
       password,
       options: {
-        emailRedirectTo: `${getServerUrl()}/auth/callback?next=${encodeURIComponent(redirectTo ?? '/')}`,
+        emailRedirectTo: `${getServerUrl()}/auth/callback?next=${encodeURIComponent(redirectTo ?? '/dashboard')}`,
       },
     })
     if (error) {
@@ -178,7 +178,7 @@ export async function signUpWithEmail(email: string, password: string, redirectT
       email: cleanEmail,
       password,
       options: {
-        emailRedirectTo: `${getServerUrl()}/auth/callback?next=${encodeURIComponent(redirectTo ?? '/')}`,
+        emailRedirectTo: `${getServerUrl()}/auth/callback?next=${encodeURIComponent(redirectTo ?? '/dashboard')}`,
       },
     })
     if (fbError) return { error: fbError.message }

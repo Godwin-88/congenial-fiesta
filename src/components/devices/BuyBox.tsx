@@ -16,7 +16,7 @@ const RETAILER_META: Record<
   amazon: { label: 'Amazon', short: 'A', className: 'bg-yellow-500/20 text-yellow-400' },
   kilimall: { label: 'Kilimall', short: 'K', className: 'bg-blue-500/20 text-blue-400' },
   carrier: { label: 'Carrier', short: 'C', className: 'bg-emerald-500/20 text-emerald-400' },
-  other: { label: 'Other', short: 'O', className: 'bg-gray-500/20 text-gray-400' },
+  other: { label: 'Other', short: 'O', className: 'bg-foreground/10 text-foreground/70' },
 }
 
 function formatPrice(raw?: string | number): string {

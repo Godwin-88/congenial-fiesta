@@ -68,12 +68,18 @@ export default function SavedPage() {
 
   if (isLoading || fetching) {
     return (
-      <div className="animate-pulse space-y-6">
-        <div className="h-8 bg-muted rounded w-48" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-64 bg-muted rounded-xl" />
-          ))}
+      <div className="max-w-5xl mx-auto">
+        <h1 className="font-heading text-3xl font-bold text-foreground sm:text-4xl">
+          My Saved
+        </h1>
+        <p className="mt-1 text-muted-foreground">Articles, devices, and comparisons you've saved.</p>
+        <div className="mt-8 animate-pulse space-y-6">
+          <div className="h-8 bg-foreground/10 rounded w-48" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-64 bg-foreground/10 rounded-xl" />
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -165,7 +171,7 @@ export default function SavedPage() {
               <button
                 onClick={() => handleRemove(item)}
                 className="absolute top-2 right-2 p-1.5 rounded-lg bg-background/80 backdrop-blur-sm
-                           border border-border opacity-0 group-hover:opacity-100 transition-opacity
+                           border border-border opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity
                            text-muted-foreground hover:text-destructive"
                 aria-label="Remove from saved"
               >

@@ -37,7 +37,7 @@ export default function MyCommentsPage() {
       <div className="max-w-5xl mx-auto">
         <h1 className="font-heading text-3xl font-bold text-foreground sm:text-4xl">My Comments</h1>
         <div className="mt-6 animate-pulse space-y-4">
-          {[1, 2, 3].map(i => <div key={i} className="h-20 bg-muted rounded-lg" />)}
+          {[1, 2, 3].map(i => <div key={i} className="h-20 bg-foreground/10 rounded-lg" />)}
         </div>
       </div>
     )
@@ -78,19 +78,47 @@ export default function MyCommentsPage() {
           {comments.map((comment) => (
             <div
               key={comment.id}
-              className="rounded-lg border border-border bg-card p-4"
+              className="group relative rounded-lg border border-border bg-card p-4"
             >
               <p className="text-sm text-foreground">{comment.body}</p>
-              <div className="mt-2 flex items-center justify-between">
+              <div className="mt-2 flex items-center justify-between gap-3">
                 <p className="text-xs text-muted-foreground">
                   {new Date(comment.created_at).toLocaleDateString()}
+                  {' '}·{' '}
+                  {comment.content_type === 'article' ? 'Article' : comment.content_type === 'video' ? 'Video' : 'Device'}
                 </p>
-                <Link
-                  href={`/${comment.content_type === 'article' ? 'articles' : 'devices'}/${comment.content_slug}`}
-                  className="text-xs text-brand-primary hover:underline"
-                >
-                  View context
-                </Link>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Link
+                    href={`/${
+                      comment.content_type === 'article'
+                        ? 'articles'
+                        : comment.content_type === 'video'
+                          ? 'videos'
+                          : 'devices'
+                    }/${comment.content_slug}`}
+                    className="text-xs text-brand-primary hover:underline"
+                  >
+                    View context
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await fetch(`/api/community/comments?id=${comment.id}`, { method: 'DELETE' })
+                        setComments((prev) => prev.filter((c) => c.id !== comment.id))
+                      } catch {
+                        // keep the row — user can retry
+                      }
+                    }}
+                    className="rounded-lg p-1.5 text-muted-foreground opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:text-destructive hover:bg-red-500/10"
+                    aria-label="Delete comment"
+                    title="Delete comment"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           ))}

@@ -117,10 +117,10 @@ export default function AdminDashboardPage() {
   if (loading) {
     return (
       <div className="space-y-6 animate-pulse">
-        <div className="h-8 bg-muted rounded w-64" />
+        <div className="h-8 bg-foreground/10 rounded w-64" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-24 bg-muted rounded-lg" />
+            <div key={i} className="h-24 bg-foreground/10 rounded-lg" />
           ))}
         </div>
         <div className="h-48 bg-muted rounded-lg" />

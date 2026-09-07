@@ -250,7 +250,7 @@ export default function DevicesPage() {
                 <tr>
                   <td colSpan={8} className="px-4 py-8">
                     <div className="space-y-3 animate-pulse">
-                      {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-6 bg-muted rounded" />)}
+                      {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-6 bg-foreground/10 rounded" />)}
                     </div>
                   </td>
                 </tr>

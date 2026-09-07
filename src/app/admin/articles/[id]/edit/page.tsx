@@ -14,7 +14,7 @@ import type { ArticlePrefill } from '@/lib/chat/prefill-schemas'
 const TiptapEditor = dynamic(
   () => import('@/components/admin/TiptapEditor'),
   { ssr: false, loading: () => (
-    <div className="h-[500px] bg-muted rounded-lg animate-pulse" />
+    <div className="h-[500px] bg-foreground/10 rounded-lg animate-pulse" />
   )}
 )
 
@@ -285,8 +285,8 @@ export default function EditArticlePage() {
   if (loading) {
     return (
       <div className="animate-pulse space-y-4">
-        <div className="h-8 bg-muted rounded w-64" />
-        <div className="h-[500px] bg-muted rounded-lg" />
+        <div className="h-8 bg-foreground/10 rounded w-64" />
+        <div className="h-[500px] bg-foreground/10 rounded-lg" />
       </div>
     )
   }

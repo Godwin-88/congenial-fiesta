@@ -25,6 +25,12 @@ export async function updateSession(request: NextRequest) {
   })
 
   if (!hasSessionCookies(request)) {
+    // Anonymous traffic has no session to refresh. The homepage redirect is
+    // handled here too (config redirects cannot see the auth state), so keep
+    // the public `/` → `/videos` behavior.
+    if (request.nextUrl.pathname === '/') {
+      return NextResponse.redirect(new URL('/videos', request.url))
+    }
     return response
   }
 
@@ -45,6 +51,16 @@ export async function updateSession(request: NextRequest) {
     } catch {
       // silently ignore refresh errors
     }
+  }
+
+  // Signal to the root layout (via proxy.ts) that the visitor is signed in so
+  // it can render the signed-in "app" shell (left sidebar) instead of the
+  // public header/footer.
+  response.headers.set('x-user-authenticated', '1')
+
+  // Signed-in users land on their dashboard, not the public homepage.
+  if (request.nextUrl.pathname === '/') {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
   return response

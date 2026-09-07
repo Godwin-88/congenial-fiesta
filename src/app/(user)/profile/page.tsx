@@ -10,8 +10,8 @@ export default function ProfilePage() {
     return (
       <div className="max-w-5xl mx-auto">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-muted rounded w-48" />
-          <div className="h-32 bg-muted rounded-lg" />
+          <div className="h-8 bg-foreground/10 rounded w-48" />
+          <div className="h-32 bg-foreground/10 rounded-lg" />
         </div>
       </div>
     )

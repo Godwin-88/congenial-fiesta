@@ -62,15 +62,9 @@ const withPWAConfig = withPWA({
 })
 
 const nextConfig: NextConfig = {
-  async redirects() {
-    return [
-      {
-        source: '/',
-        destination: '/videos',
-        permanent: false,
-      },
-    ]
-  },
+  // NOTE: the `/` → `/videos` (signed out) and `/` → `/dashboard` (signed in)
+  // redirects are handled in src/lib/supabase/middleware.ts because they depend
+  // on the visitor's auth state, which config-level redirects cannot see.
   turbopack: {
     root: process.cwd(),
   },

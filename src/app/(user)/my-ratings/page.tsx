@@ -37,7 +37,7 @@ export default function MyRatingsPage() {
       <div className="max-w-5xl mx-auto">
         <h1 className="font-heading text-3xl font-bold text-foreground sm:text-4xl">My Ratings</h1>
         <div className="mt-6 animate-pulse space-y-4">
-          {[1, 2, 3].map(i => <div key={i} className="h-16 bg-muted rounded-lg" />)}
+          {[1, 2, 3].map(i => <div key={i} className="h-16 bg-foreground/10 rounded-lg" />)}
         </div>
       </div>
     )
@@ -76,22 +76,44 @@ export default function MyRatingsPage() {
       ) : (
         <div className="mt-6 space-y-3">
           {ratings.map((rating) => (
-            <Link
+            <div
               key={rating.id}
-              href={`/devices/${rating.device_slug}`}
-              className="flex items-center justify-between rounded-lg border border-border bg-card p-4 hover:shadow-md transition-shadow"
+              className="group relative rounded-lg border border-border bg-card p-4 hover:shadow-md transition-shadow"
             >
-              <div>
-                <p className="font-medium text-foreground">{rating.device_name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {new Date(rating.created_at).toLocaleDateString()}
-                </p>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="text-lg font-bold text-brand-primary">{rating.score}</span>
-                <span className="text-xs text-muted-foreground">/10</span>
-              </div>
-            </Link>
+              <Link
+                href={`/devices/${rating.device_slug}`}
+                className="flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-foreground">{rating.device_name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(rating.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <span className="text-lg font-bold text-brand-primary">{rating.score}</span>
+                  <span className="text-xs text-muted-foreground">/10</span>
+                </div>
+              </Link>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await fetch(`/api/community/ratings?deviceSlug=${encodeURIComponent(rating.device_slug)}`, { method: 'DELETE' })
+                    setRatings((prev) => prev.filter((r) => r.id !== rating.id))
+                  } catch {
+                    // keep the row — user can retry
+                  }
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-muted-foreground opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:text-destructive hover:bg-red-500/10"
+                aria-label={`Remove rating for ${rating.device_name}`}
+                title="Remove rating"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+              </button>
+            </div>
           ))}
         </div>
       )}

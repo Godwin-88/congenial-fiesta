@@ -4,30 +4,16 @@ import { useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/context/AuthContext'
 import { useComparisonTray } from '@/context/ComparisonTrayContext'
-import type { SavedComparison } from '@/context/ComparisonTrayContext'
 
 export default function MyComparisonsPage() {
   const { user } = useAuth()
-  const { savedComparisons, fetchSavedComparisons, deleteSavedComparison, addDevice, clearTray } = useComparisonTray()
+  const { savedComparisons, fetchSavedComparisons, deleteSavedComparison } = useComparisonTray()
 
   useEffect(() => {
     if (user) {
       fetchSavedComparisons()
     }
   }, [user, fetchSavedComparisons])
-
-  const handleRestore = (comparison: SavedComparison) => {
-    clearTray()
-    comparison.devices.forEach((d) => {
-      addDevice({
-        slug: d.slug,
-        brandSlug: '',
-        name: d.name,
-        imageUrl: d.imageUrl ?? '',
-        score: d.score ?? 0,
-      })
-    })
-  }
 
   if (savedComparisons.length === 0) {
     return (
@@ -127,13 +113,6 @@ export default function MyComparisonsPage() {
               >
                 Compare Now
               </Link>
-              <button
-                onClick={() => handleRestore(comparison)}
-                className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                title="Load into comparison tray"
-              >
-                Load
-              </button>
               <button
                 onClick={() => deleteSavedComparison(comparison.id)}
                 className="rounded-lg p-1.5 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"

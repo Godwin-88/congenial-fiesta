@@ -18,6 +18,38 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
     }
 
+    const supabase = await createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    const isMine = request.nextUrl.searchParams.get('mine') === 'true'
+
+    if (isMine) {
+      // "My Comments" —the signed-in user's own comments, newest first.
+      if (!session?.user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
+      const { data: myComments, error: mineErr } = await supabase
+        .from('comments')
+        .select('id, content_type, content_slug, body, created_at')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false })
+
+      if (mineErr) {
+        return NextResponse.json({ error: 'Failed to fetch comments' }, { status: 500 })
+      }
+
+      return NextResponse.json({
+        comments: (myComments ?? []).map((c) => ({
+          id: c.id,
+          content_type: c.content_type as 'article' | 'video' | 'device',
+          content_slug: c.content_slug,
+          body: c.body,
+          created_at: c.created_at,
+        })),
+      })
+    }
+
     const contentType = request.nextUrl.searchParams.get('contentType') as
       | 'article'
       | 'video'
@@ -29,9 +61,6 @@ export async function GET(request: NextRequest) {
     if (!contentType || !['article', 'video', 'device'].includes(contentType) || !contentSlug) {
       return NextResponse.json({ error: 'Missing required params' }, { status: 400 })
     }
-
-    const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
 
     const comments = await getComments({
       contentType,
@@ -113,5 +142,45 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Comments POST error:', error)
     return NextResponse.json({ error: 'Failed to post comment' }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const ip = request.headers.get('x-forwarded-for') ?? 'anonymous'
+    const { success } = await ratelimit.limit(`comments:delete:${ip}`)
+    if (!success) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+    }
+
+    const supabase = await createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Sign in to manage comments' }, { status: 401 })
+    }
+
+    const idParam = request.nextUrl.searchParams.get('id')
+    const id = idParam ? Number.parseInt(idParam, 10) : NaN
+    if (!Number.isInteger(id) || id <= 0) {
+      return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    }
+
+    // Remove any replies first (a comment tree dies together), then the comment
+    // itself — only if it belongs to the signed-in user.
+    await supabase.from('comments').delete().eq('parent_id', id)
+    const { error } = await supabase
+      .from('comments')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', session.user.id)
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to delete comment' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Comments DELETE error:', error)
+    return NextResponse.json({ error: 'Failed to delete comment' }, { status: 500 })
   }
 }

@@ -1,31 +1,54 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
-import UserSidebar from '@/components/user/UserSidebar'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
 export const metadata = {
   title: 'My Dashboard | FweezyTech',
 }
 
+/**
+ * Auth guard for the signed-in user app. The actual shell (left sidebar +
+ * scrollable content column) is rendered once by the root layout via
+ * <UserAppShell> when the visitor is authenticated — so it wraps not just
+ * these six routes but every public route (devices, articles, videos, …)
+ * too, giving signed-in users one consistent app around all site content.
+ *
+ * This layout only guards auth;the shell above already hides the public
+ * header/footer for signed-in users.
+ *
+ * NOTE:the content column padding/width lives in UserAppShell — keep that
+ * in sync when changing page margins.
+ *
+ * This guard mirrors the admin pattern (getAdminUser):`setAll` is a no-op
+ * because Next.js forbids cookie writes from Server Components (layouts);the
+ * middleware (src/proxy.ts → src/lib/supabase/middleware.ts) already handles
+ * session refresh for every request, so no writes are needed here.
+ */
 export default async function UserLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createClient()
+  const cookieStore = await cookies()
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll() {},
+      },
+    }
+  )
+
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
     redirect('/auth/login?next=/dashboard')
   }
 
-  return (
-    <div className="flex min-h-screen">
-      <UserSidebar />
-      <main className="flex-1 overflow-y-auto bg-background pt-16 lg:pt-8">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-          {children}
-        </div>
-      </main>
-    </div>
-  )
+  return <>{children}</>
 }

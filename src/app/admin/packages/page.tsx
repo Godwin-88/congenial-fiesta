@@ -22,7 +22,7 @@ type Package = {
 }
 
 const TIERS = [
-  { value: 'starter', label: 'Starter', color: 'bg-gray-500/20 text-gray-400' },
+  { value: 'starter', label: 'Starter', color: 'bg-foreground/10 text-foreground/70' },
   { value: 'pro', label: 'Pro', color: 'bg-blue-500/20 text-blue-400' },
   { value: 'premium', label: 'Premium', color: 'bg-amber-500/20 text-amber-400' },
 ]
@@ -170,7 +170,7 @@ export default function PackagesPage() {
     }
   }
 
-  const tierColor = (tier: string) => TIERS.find(t => t.value === tier)?.color ?? 'bg-gray-500/20 text-gray-400'
+  const tierColor = (tier: string) => TIERS.find(t => t.value === tier)?.color ?? 'bg-foreground/10 text-foreground/70'
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -211,7 +211,7 @@ export default function PackagesPage() {
                 <tr>
                   <td colSpan={5} className="px-4 py-8">
                     <div className="space-y-3 animate-pulse">
-                      {[1, 2, 3].map(i => <div key={i} className="h-6 bg-muted rounded" />)}
+                      {[1, 2, 3].map(i => <div key={i} className="h-6 bg-foreground/10 rounded" />)}
                     </div>
                   </td>
                 </tr>
@@ -245,7 +245,7 @@ export default function PackagesPage() {
                       className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
                         pkg.highlighted
                           ? 'bg-green-500/20 text-green-400'
-                          : 'bg-gray-800 text-gray-500 hover:text-gray-300'
+                          : 'bg-foreground/10 text-muted-foreground hover:text-foreground'
                       }`}
                     >
                       {pkg.highlighted ? 'Yes' : 'No'}

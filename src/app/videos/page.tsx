@@ -1,6 +1,7 @@
 import { fetchYouTubeVideos, fetchTopYouTubeVideos } from '@/lib/youtube/client'
 import { getCmsVideos, getFeaturedCmsVideos } from '@/lib/videos/queries'
 import { VideoCard } from '@/components/videos/VideoCard'
+import SearchBar from '@/components/search/SearchBar'
 import VideoFeed from './video-feed'
 
 export const metadata = {
@@ -119,8 +120,14 @@ export default async function VideosPage() {
     <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
       <h1 className="font-heading text-3xl font-bold text-foreground sm:text-4xl">Videos</h1>
       <p className="mt-2 text-foreground/60">
-        Watch all of Fweezytech's tech reviews across YouTube, TikTok, Instagram and Facebook
+        Watch all of Fweezytech's tech reviews
       </p>
+
+      {/* Search */}
+      <div className="mt-6 max-w-xl">
+        <SearchBar placeholder="Search videos..." />
+      </div>
+
       <VideoFeed videos={unifiedVideos} />
     </div>
   )

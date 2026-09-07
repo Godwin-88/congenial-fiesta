@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { signUpWithEmail, signInWithEmail, resetPassword, sendOtpCode, verifyOtpCode } from '@/lib/auth/actions'
 import {
   Dialog,
@@ -33,6 +34,7 @@ export default function AuthModal({ isOpen, onClose, redirectTo }: AuthModalProp
   const [otpMode, setOtpMode] = useState(false)
   const [otpCode, setOtpCode] = useState('')
   const [otpSent, setOtpSent] = useState(false)
+  const router = useRouter()
 
   const handleSignUp = async () => {
     setEmailError(null)
@@ -53,6 +55,7 @@ export default function AuthModal({ isOpen, onClose, redirectTo }: AuthModalProp
         setVerificationSent(true)
       } else {
         onClose()
+        router.push(redirectTo ?? '/dashboard')
       }
     } catch {
       setEmailError('Something went wrong. Please try again.')
@@ -74,6 +77,7 @@ export default function AuthModal({ isOpen, onClose, redirectTo }: AuthModalProp
         setEmailError(result.error)
       } else {
         onClose()
+        router.push(redirectTo ?? '/dashboard')
       }
       } catch {
       setEmailError('Something went wrong. Please try again.')
@@ -104,8 +108,8 @@ export default function AuthModal({ isOpen, onClose, redirectTo }: AuthModalProp
   }
 
   const handleVerifyOtp = async () => {
-    if (!otpCode.trim() || otpCode.length < 6) {
-      setEmailError('Please enter the 6-digit code.')
+    if (!otpCode.trim() || otpCode.length < 8) {
+      setEmailError('Please enter the 8-digit code.')
       return
     }
     setEmailError(null)
@@ -116,6 +120,7 @@ export default function AuthModal({ isOpen, onClose, redirectTo }: AuthModalProp
         setEmailError(result.error)
       } else {
         onClose()
+        router.push(redirectTo ?? '/dashboard')
       }
     } catch {
       setEmailError('Something went wrong. Please try again.')
@@ -314,8 +319,8 @@ export default function AuthModal({ isOpen, onClose, redirectTo }: AuthModalProp
                       <div className="text-center">
                         <p className="text-xs text-muted-foreground">
                           {otpSent
-                            ? `Enter the 6-digit code sent to ${email}.`
-                            : 'Enter your email to receive a 6-digit sign-in code.'}
+                            ? `Enter the 8-digit code sent to ${email}.`
+                            : 'Enter your email to receive an 8-digit sign-in code.'}
                         </p>
                       </div>
 
@@ -344,16 +349,16 @@ export default function AuthModal({ isOpen, onClose, redirectTo }: AuthModalProp
                           <Input
                             type="text"
                             inputMode="numeric"
-                            maxLength={6}
+                            maxLength={8}
                             value={otpCode}
-                            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                            placeholder="000000"
+                            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                            placeholder="00000000"
                             required
                             className="w-full text-center text-2xl tracking-[0.2em]"
                           />
                           <Button
                             onClick={handleVerifyOtp}
-                            disabled={isSubmitting || otpCode.length < 6}
+                            disabled={isSubmitting || otpCode.length < 8}
                             className="w-full"
                           >
                             {isSubmitting ? 'Signing in...' : 'Sign In'}

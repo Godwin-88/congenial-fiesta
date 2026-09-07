@@ -15,6 +15,7 @@ import ChatBubbleWrapper from "@/components/chat/ChatBubbleWrapper";
 import ChunkLoadReload from "@/components/dev/ChunkLoadReload";
 import MobileBottomNav from "@/components/layout/MobileBottomNav";
 import BackToTop from "@/components/devices/BackToTop";
+import UserAppShell from "@/components/user/UserAppShell";
 import "@/styles/globals.css";
 
 const ralewaySans = Raleway({
@@ -101,19 +102,39 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Detect if we're on an admin route.
-  // Admin routes have their own layout (src/app/admin/layout.tsx) with sidebar.
-  // Skip the public site wrapper (Header, Footer, Chat, etc.) for admin routes.
+  // Route + auth detection. The middleware (src/proxy.ts →
+  // src/lib/supabase/middleware.ts) stamps `x-pathname` and
+  // `x-user-authenticated`, so we can decide the shell by AUTH STATE, not just
+  // by route:
+  //   • signed-in, non-admin, non-auth routes → the signed-in "app" shell
+  //     (left sidebar) — the public header/footer/bottom-nav are never shown.
+  //   • admin routes → the admin layout owns the chrome.
+  //   • auth/preview routes → rendered bare (the login page redirects signed-in
+  //     users to their dashboard itself).
+  //   • everything else → the public site wrapper (header, footer, …).
   let pathname = "";
+  let isAuthenticated = false;
   try {
     const headerList = await headers();
     pathname = headerList.get("x-pathname") || "";
+    isAuthenticated = headerList.get("x-user-authenticated") === "1";
   } catch {
     // headers() may throw in some edge cases; fall back to empty string
   }
 
   const isAdminRoute =
     pathname === "/admin" || pathname.startsWith("/admin/");
+
+  const isAuthBareRoute =
+    pathname === "/auth" ||
+    pathname.startsWith("/auth/") ||
+    pathname === "/preview" ||
+    pathname.startsWith("/preview/");
+
+  // Signed-in users always get the app shell (sidebar) — never the public
+  // header — except on admin and auth/preview routes.
+  const isAppMode = isAuthenticated && !isAdminRoute && !isAuthBareRoute;
+  const isPublicMode = !isAdminRoute && !isAuthBareRoute && !isAppMode;
 
   return (
     <html
@@ -133,23 +154,29 @@ export default async function RootLayout({
           <AuthProvider>
             <ComparisonTrayProvider>
               <ChatProvider>
-                {!isAdminRoute && <Header />}
+                {isPublicMode && <Header />}
                 <PageViewBeacon />
-                {isAdminRoute ? (
-                  children
-                ) : (
+                {isAppMode ? (
+                  <UserAppShell>{children}</UserAppShell>
+                ) : isPublicMode ? (
                   <>
                     <main id="main-content" className="flex-1">{children}</main>
-                    <ComparisonTray />
                     <InstallPrompt />
                     <ChatBubbleWrapper />
                     <Footer />
                     {/* Clearance so the fixed mobile bottom nav never covers the footer */}
                     <div className="h-16 lg:hidden" aria-hidden="true" />
                   </>
+                ) : (
+                  // Admin routes render their own chrome via src/app/admin/layout.tsx;
+                  // auth + preview routes render bare.
+                  children
                 )}
-                {!isAdminRoute && <BackToTop />}
-                {!isAdminRoute && <MobileBottomNav />}
+                {!isAdminRoute && !isAuthBareRoute && (
+                  <ComparisonTray sidebarOffset={isAppMode} />
+                )}
+                {isPublicMode && <BackToTop />}
+                {isPublicMode && <MobileBottomNav />}
               </ChatProvider>
             </ComparisonTrayProvider>
           </AuthProvider>

@@ -103,7 +103,7 @@ export default function Sidebar({ adminUser }: SidebarProps) {
     owner: 'bg-brand-primary/20 text-brand-primary',
     admin: 'bg-red-500/20 text-red-400',
     editor: 'bg-blue-500/20 text-blue-400',
-    viewer: 'bg-gray-500/20 text-gray-400',
+    viewer: 'bg-foreground/10 text-foreground/70',
   }
 
   const userRoles: Array<'admin' | 'editor' | 'viewer' | 'owner'> = ['owner', 'admin', 'editor', 'viewer']

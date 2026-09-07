@@ -282,7 +282,7 @@ export default function MediaPage() {
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {Array.from({ length: 10 }).map((_, i) => (
-            <div key={i} className="aspect-square bg-card rounded-lg border border-border animate-pulse" />
+            <div key={i} className="aspect-square bg-foreground/10 rounded-lg border border-border animate-pulse" />
           ))}
         </div>
       ) : filteredAssets.length === 0 ? (

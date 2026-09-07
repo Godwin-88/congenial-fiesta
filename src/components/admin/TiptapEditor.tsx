@@ -145,7 +145,7 @@ export default function TiptapEditor({
   if (!editor) return (
     <div
       style={{ minHeight }}
-      className="bg-[#1F2937] rounded-lg animate-pulse"
+      className="bg-foreground/10 rounded-lg animate-pulse"
     />
   )
 

@@ -20,7 +20,7 @@ export default function AuthButton({ redirectTo }: AuthButtonProps) {
 
   if (isLoading) {
     return (
-      <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
+      <div className="h-8 w-8 animate-pulse rounded-full bg-foreground/10" />
     )
   }
 

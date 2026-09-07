@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { Download, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -6,7 +7,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import PressInquiryForm from './PressInquiryForm'
 import CopyButton from './CopyButton'
-import { createClient } from '@/lib/supabase/server'
 
 export const metadata = {
   title: 'Press Room | FweezyTech',
@@ -14,7 +14,24 @@ export const metadata = {
 }
 
 export default async function PressPage() {
-  const supabase = await createClient()
+  const cookieStore = await cookies()
+
+  // Read-only server component query — mirror the admin/user layout pattern and
+  // no-op `setAll` so a Supabase auth token refresh can never throw the
+  // "Cookies can only be modified in a Server Action" error in a layout/page.
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll() {},
+      },
+    }
+  )
 
   const { data: mediaKitData } = await supabase
     .from('media_kit')
@@ -27,10 +44,10 @@ export default async function PressPage() {
 
   if (!mediaKit) {
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-3xl font-bold mb-4">Press Room</h1>
-          <p className="text-gray-400">Press resources coming soon</p>
+          <p className="text-muted-foreground">Press resources coming soon</p>
         </div>
       </div>
     )
@@ -47,11 +64,11 @@ export default async function PressPage() {
   const colours = brandColours.length > 0 ? brandColours : defaultColours
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen bg-background text-foreground">
       {/* ── HERO ─────────────────────────────────────────── */}
       <section className="py-20 px-4 text-center bg-gradient-to-b from-[#0066FF]/10 to-transparent">
         <h1 className="text-4xl md:text-6xl font-bold mb-4">Press Room</h1>
-        <p className="text-xl text-gray-400 max-w-2xl mx-auto mb-8">
+        <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
           Everything you need to feature FweezyTech.
         </p>
         <Link href="/api/media-kit/download">
@@ -66,22 +83,22 @@ export default async function PressPage() {
         <section>
           <h2 className="text-3xl font-bold mb-6">Official Bio</h2>
           <Tabs defaultValue="short" className="w-full">
-            <TabsList className="bg-gray-900 border-gray-800">
+            <TabsList className="bg-background border-border">
               <TabsTrigger value="short" className="data-[state=active]:bg-[#0066FF]">Short Bio</TabsTrigger>
               <TabsTrigger value="long" className="data-[state=active]:bg-[#0066FF]">Long Bio</TabsTrigger>
             </TabsList>
             <TabsContent value="short" className="mt-4">
-              <Card className="bg-gray-900 border-gray-800">
+              <Card className="bg-background border-border">
                 <CardContent className="pt-6">
-                  <p className="text-gray-300 mb-4">{String(mediaKit.shortBio ?? '')}</p>
+                  <p className="text-foreground/80 mb-4">{String(mediaKit.shortBio ?? '')}</p>
                   <CopyButton text={String(mediaKit.shortBio ?? '')} />
                 </CardContent>
               </Card>
             </TabsContent>
             <TabsContent value="long" className="mt-4">
-              <Card className="bg-gray-900 border-gray-800">
+              <Card className="bg-background border-border">
                 <CardContent className="pt-6">
-                  <p className="text-gray-300 mb-4">{String(mediaKit.longBio ?? '')}</p>
+                  <p className="text-foreground/80 mb-4">{String(mediaKit.longBio ?? '')}</p>
                   <CopyButton text={String(mediaKit.longBio ?? '')} />
                 </CardContent>
               </Card>
@@ -94,7 +111,7 @@ export default async function PressPage() {
           <h2 className="text-3xl font-bold mb-6">Logos</h2>
           <div className="grid md:grid-cols-2 gap-4 mb-4">
             {/* Official brand logo (always shown) */}
-            <Card className="bg-gray-900 border-gray-800">
+            <Card className="bg-background border-border">
               <CardContent className="pt-6">
                 <div className="bg-white rounded-lg h-24 flex items-center justify-center mb-3 p-4">
                   <img
@@ -104,7 +121,7 @@ export default async function PressPage() {
                   />
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-400">Official Logo</span>
+                  <span className="text-sm text-muted-foreground">Official Logo</span>
                   <a
                     href="/images/logo.jpeg"
                     download
@@ -121,7 +138,7 @@ export default async function PressPage() {
               { label: 'Light SVG', url: String(mediaKit.logoSvgLight ?? ''), bg: 'bg-white' },
               { label: 'Dark SVG', url: String(mediaKit.logoSvgDark ?? ''), bg: 'bg-gray-800' },
             ].filter((l) => l.url).map((logo, i) => (
-              <Card key={i} className="bg-gray-900 border-gray-800">
+              <Card key={i} className="bg-background border-border">
                 <CardContent className="pt-6">
                   <div className={`${logo.bg} rounded-lg h-24 flex items-center justify-center mb-3 p-4`}>
                     <img
@@ -131,7 +148,7 @@ export default async function PressPage() {
                     />
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-400">{logo.label}</span>
+                    <span className="text-sm text-muted-foreground">{logo.label}</span>
                     <a
                       href={logo.url}
                       download
@@ -157,9 +174,9 @@ export default async function PressPage() {
             <h2 className="text-3xl font-bold mb-6">Approved Headshots</h2>
             <div className="grid md:grid-cols-2 gap-4">
               {headshots.map((hs, i) => (
-                <Card key={i} className="bg-gray-900 border-gray-800">
+                <Card key={i} className="bg-background border-border">
                   <CardContent className="pt-6">
-                    <div className="bg-gray-800 rounded-lg h-48 flex items-center justify-center mb-3 overflow-hidden">
+                    <div className="bg-muted rounded-lg h-48 flex items-center justify-center mb-3 overflow-hidden">
                       <img
                         src={hs.url}
                         alt={hs.label ?? `Headshot ${i + 1}`}
@@ -167,7 +184,7 @@ export default async function PressPage() {
                       />
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-400">{hs.label ?? `Headshot ${i + 1}`}</span>
+                      <span className="text-sm text-muted-foreground">{hs.label ?? `Headshot ${i + 1}`}</span>
                       <a
                         href={hs.url}
                         download
@@ -180,7 +197,7 @@ export default async function PressPage() {
                 </Card>
               ))}
             </div>
-            <p className="text-gray-500 text-sm mt-4">
+            <p className="text-muted-foreground/70 text-sm mt-4">
               For editorial use only — please credit FweezyTech.
             </p>
           </section>
@@ -191,16 +208,16 @@ export default async function PressPage() {
           <h2 className="text-3xl font-bold mb-6">Brand Colours</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {colours.map((colour, i) => (
-              <Card key={i} className="bg-gray-900 border-gray-800">
+              <Card key={i} className="bg-background border-border">
                 <CardContent className="pt-6">
                   <div
                     className="w-full h-16 rounded-lg mb-3"
                     style={{ backgroundColor: colour.hex }}
                   />
-                  <p className="font-semibold text-white text-sm">{colour.name}</p>
-                  <p className="text-gray-400 text-xs">{colour.hex}</p>
-                  {colour.rgb && <p className="text-gray-500 text-xs">RGB({colour.rgb})</p>}
-                  {colour.cmyk && <p className="text-gray-500 text-xs">CMYK({colour.cmyk})</p>}
+                  <p className="font-semibold text-foreground text-sm">{colour.name}</p>
+                  <p className="text-muted-foreground text-xs">{colour.hex}</p>
+                  {colour.rgb && <p className="text-muted-foreground/70 text-xs">RGB({colour.rgb})</p>}
+                  {colour.cmyk && <p className="text-muted-foreground/70 text-xs">CMYK({colour.cmyk})</p>}
                 </CardContent>
               </Card>
             ))}

@@ -214,7 +214,7 @@ export default function BrandsPage() {
                 <tr>
                   <td colSpan={5} className="px-4 py-8">
                     <div className="space-y-3 animate-pulse">
-                      {[1, 2, 3].map(i => <div key={i} className="h-6 bg-muted rounded" />)}
+                      {[1, 2, 3].map(i => <div key={i} className="h-6 bg-foreground/10 rounded" />)}
                     </div>
                   </td>
                 </tr>
@@ -246,7 +246,7 @@ export default function BrandsPage() {
                       className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
                         brand.featured
                           ? 'bg-green-500/20 text-green-400'
-                          : 'bg-gray-800 text-gray-500 hover:text-gray-300'
+                          : 'bg-foreground/10 text-muted-foreground hover:text-foreground'
                       }`}
                     >
                       {brand.featured ? 'Yes' : 'No'}

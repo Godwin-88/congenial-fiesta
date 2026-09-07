@@ -9,7 +9,7 @@ export async function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-pathname", pathname)
 
-  const response = NextResponse.next({
+  let response = NextResponse.next({
     request: {
       headers: requestHeaders,
     },
@@ -23,6 +23,24 @@ export async function proxy(request: NextRequest) {
   // Refresh Supabase session for public routes
   const { updateSession } = await import("@/lib/supabase/middleware")
   const supabaseResponse = await updateSession(request)
+
+  // updateSession may return a redirect (e.g. signed-in `/` → `/dashboard`).
+  if (supabaseResponse.status >= 300 && supabaseResponse.status < 400) {
+    return supabaseResponse
+  }
+
+  // Forward the signed-in flag so the root layout can render the app shell
+  // (left sidebar) instead of the public header/footer.
+  const authFlag = supabaseResponse.headers.get("x-user-authenticated")
+  if (authFlag) {
+    requestHeaders.set("x-user-authenticated", authFlag)
+  }
+
+  response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  })
 
   // Merge cookies from supabase response
   supabaseResponse.cookies.getAll().forEach((cookie) => {

@@ -177,7 +177,7 @@ export default function MilestonesPage() {
                 <tr>
                   <td colSpan={5} className="px-4 py-8">
                     <div className="space-y-3 animate-pulse">
-                      {[1, 2, 3].map(i => <div key={i} className="h-6 bg-muted rounded" />)}
+                      {[1, 2, 3].map(i => <div key={i} className="h-6 bg-foreground/10 rounded" />)}
                     </div>
                   </td>
                 </tr>

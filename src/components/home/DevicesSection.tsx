@@ -144,11 +144,11 @@ export default function DevicesSection({ devices }: Props) {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
             {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="rounded-xl border border-border bg-card overflow-hidden animate-pulse">
-                <div className="aspect-[4/3] bg-muted" />
+              <div key={i} className="rounded-xl border border-border bg-foreground/10 overflow-hidden animate-pulse">
+                <div className="aspect-[4/3] bg-foreground/10" />
                 <div className="p-3 space-y-2">
-                  <div className="h-3 bg-muted rounded w-1/2" />
-                  <div className="h-4 bg-muted rounded w-3/4" />
+                  <div className="h-3 bg-foreground/10 rounded w-1/2" />
+                  <div className="h-4 bg-foreground/10 rounded w-3/4" />
                 </div>
               </div>
             ))}

@@ -30,7 +30,7 @@ export default function CopyButton({ text }: { text: string }) {
       onClick={handleCopy}
       variant="outline"
       size="sm"
-      className="border-gray-700 text-gray-300 hover:bg-gray-800"
+      className="border-border text-muted-foreground hover:bg-foreground/10"
     >
       {copied ? (
         <><Check className="h-4 w-4 mr-1 text-green-500" /> Copied!</>

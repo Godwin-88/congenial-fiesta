@@ -5,7 +5,13 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { X, Trash2 } from 'lucide-react'
 
-export default function ComparisonTray() {
+interface ComparisonTrayProps {
+  /** When rendered inside the signed-in app shell, the left 256px sidebar rail
+   *  must not be covered — shift the tray right past it on lg+. */
+  sidebarOffset?: boolean
+}
+
+export default function ComparisonTray({ sidebarOffset = false }: ComparisonTrayProps) {
   const { devices, removeDevice, clearTray } = useComparisonTray()
   const pathname = usePathname()
 
@@ -16,7 +22,12 @@ export default function ComparisonTray() {
   const compareUrl = `/compare?devices=${devices.map((d) => d.slug).sort().join(',')}`
 
   return (
-    <div className="fixed bottom-14 left-0 right-0 z-50 border-t border-brand-primary/30 bg-[#1a1a1a]/95 backdrop-blur-sm transition-transform duration-300 lg:bottom-0">
+    <div
+      className={[
+        'fixed bottom-14 left-0 right-0 z-50 border-t border-brand-primary/30 bg-[#1a1a1a]/95 backdrop-blur-sm transition-transform duration-300 lg:bottom-0',
+        sidebarOffset ? 'lg:left-64' : 'lg:left-0',
+      ].join(' ')}
+    >
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           {devices.map((device) => (

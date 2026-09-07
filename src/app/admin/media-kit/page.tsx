@@ -176,8 +176,8 @@ export default function MediaKitPage() {
   if (loading) {
     return (
       <div className="max-w-3xl mx-auto space-y-6 animate-pulse">
-        <div className="h-8 bg-card rounded w-64" />
-        <div className="h-96 bg-card rounded-lg" />
+        <div className="h-8 bg-foreground/10 rounded w-64" />
+        <div className="h-96 bg-foreground/10 rounded-lg" />
       </div>
     )
   }

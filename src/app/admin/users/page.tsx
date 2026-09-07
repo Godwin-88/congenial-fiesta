@@ -23,7 +23,7 @@ const ROLES = [
   { value: 'owner', label: 'Owner', color: 'bg-amber-500/20 text-amber-400' },
   { value: 'admin', label: 'Admin', color: 'bg-red-500/20 text-red-400' },
   { value: 'editor', label: 'Editor', color: 'bg-blue-500/20 text-blue-400' },
-  { value: 'viewer', label: 'Viewer', color: 'bg-gray-500/20 text-gray-400' },
+  { value: 'viewer', label: 'Viewer', color: 'bg-foreground/10 text-foreground/70' },
 ]
 
 export default function UsersPage() {
@@ -155,7 +155,7 @@ export default function UsersPage() {
     }
   }
 
-  const roleColor = (role: string) => ROLES.find(r => r.value === role)?.color ?? 'bg-gray-500/20 text-gray-400'
+  const roleColor = (role: string) => ROLES.find(r => r.value === role)?.color ?? 'bg-foreground/10 text-foreground/70'
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -196,7 +196,7 @@ export default function UsersPage() {
                 <tr>
                   <td colSpan={5} className="px-4 py-8">
                     <div className="space-y-3 animate-pulse">
-                      {[1, 2, 3].map(i => <div key={i} className="h-6 bg-muted rounded" />)}
+                      {[1, 2, 3].map(i => <div key={i} className="h-6 bg-foreground/10 rounded" />)}
                     </div>
                   </td>
                 </tr>
