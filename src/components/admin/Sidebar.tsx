@@ -9,7 +9,7 @@ import {
   LayoutDashboard, FileText, Smartphone, Tag, Video,
   Clock, Image, Handshake, Package, Trophy, Award,
   FileJson, Users, Settings, LogOut, Menu, X,
-  ChevronDown,
+  ChevronDown, Layers, Briefcase, Shield,
 } from 'lucide-react'
 
 interface NavItem {
@@ -21,18 +21,14 @@ interface NavItem {
 
 interface NavSection {
   label: string
+  icon: React.ReactNode
   items: NavItem[]
 }
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    label: 'Main',
-    items: [
-      { label: 'Dashboard', icon: <LayoutDashboard size={18} />, href: '/admin' },
-    ],
-  },
-  {
     label: 'Content',
+    icon: <Layers size={16} />,
     items: [
       { label: 'Articles', icon: <FileText size={18} />, href: '/admin/articles' },
       { label: 'Devices', icon: <Smartphone size={18} />, href: '/admin/devices' },
@@ -44,6 +40,7 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     label: 'Business',
+    icon: <Briefcase size={16} />,
     items: [
       { label: 'Sponsors', icon: <Handshake size={18} />, href: '/admin/sponsors', roles: ['admin', 'editor'] },
       { label: 'Packages', icon: <Package size={18} />, href: '/admin/packages', roles: ['admin', 'editor'] },
@@ -54,6 +51,7 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     label: 'Admin',
+    icon: <Shield size={16} />,
     items: [
       { label: 'Users', icon: <Users size={18} />, href: '/admin/users', roles: ['admin'] },
       { label: 'Settings', icon: <Settings size={18} />, href: '/admin/settings', roles: ['admin'] },
@@ -61,6 +59,25 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
 ]
+
+/**
+ * Returns the label of the nav section that contains the item matching the current
+ * route — used to auto-open the accordion section the admin is currently in.
+ */
+function activeSectionFor(
+  sections: NavSection[],
+  pathname: string,
+  canShow: (item: NavItem) => boolean,
+  isActive: (href: string) => boolean,
+): string | null {
+  for (const section of sections) {
+    const found = section.items.some(
+      (item) => canShow(item) && isActive(item.href),
+    )
+    if (found) return section.label
+  }
+  return null
+}
 
 type SidebarProps = {
   adminUser: AdminUser
@@ -70,7 +87,6 @@ export default function Sidebar({ adminUser }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({})
 
   // Close mobile sidebar on route change
   useEffect(() => {
@@ -88,6 +104,18 @@ export default function Sidebar({ adminUser }: SidebarProps) {
     if (adminUser.role === 'owner') return item.roles.includes('admin')
     return item.roles.includes(adminUser.role)
   }
+
+  // Only one major menu is expanded at a time — clicking another menu hides
+  // the previous one. Starts open on the section containing the current page..
+  const [openSection, setOpenSection] = useState<string | null>(
+    () => activeSectionFor(NAV_SECTIONS, pathname, canShow, isActive),
+  )
+
+  // Follow the current page: when the route moves into another section, open it
+  // (and — since only one section may be open — close the previous one).
+  useEffect(() => {
+    setOpenSection((prev) => activeSectionFor(NAV_SECTIONS, pathname, canShow, isActive) ?? prev)
+  }, [pathname, adminUser.role])
 
   const handleSignOut = async () => {
     const supabase = createClient()
@@ -117,55 +145,87 @@ export default function Sidebar({ adminUser }: SidebarProps) {
         </Link>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto p-3 space-y-4">
+      {/* Navigation — a standalone first-class Dashboard link for all signed-in
+          admins, followed by the major menus (always visible); their items unfold
+          on click, one section open at a time. */}
+      <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+        {/* Dashboard — never part of a group; first menu an admin sees */}
+        <div className="pb-1">
+          <Link
+            href="/admin"
+            onClick={() => setMobileOpen(false)}
+            aria-current={pathname === '/admin' ? 'page' : undefined}
+            className={[
+              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors',
+              pathname === '/admin'
+                ? 'bg-brand-primary/10 text-brand-primary font-medium'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+            ].join(' ')}
+          >
+            <span className={pathname === '/admin' ? 'text-brand-primary' : 'text-muted-foreground'}>
+              <LayoutDashboard size={18} />
+            </span>
+            Dashboard
+          </Link>
+        </div>
+
         {NAV_SECTIONS.map((section) => {
           const visibleItems = section.items.filter(canShow)
           if (visibleItems.length === 0) return null
-
+          const isOpen = openSection === section.label
+          const hasActive = visibleItems.some((item) => isActive(item.href))
           return (
             <div key={section.label}>
               <button
                 type="button"
-                onClick={() => setExpandedSections(prev => ({
-                  ...prev,
-                  [section.label]: !prev[section.label],
-                }))}
-                className="flex items-center justify-between w-full px-2 py-1 text-xs
-                           text-muted-foreground uppercase tracking-wider hover:text-foreground"
+                onClick={() => setOpenSection(isOpen ? null : section.label)}
+                aria-expanded={isOpen}
+                className={[
+                  'flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors',
+                  hasActive ? 'text-brand-primary' : 'text-muted-foreground',
+                  'hover:text-foreground hover:bg-accent',
+                ].join(' ')}
               >
-                {section.label}
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className={hasActive ? 'text-brand-primary' : ''}>{section.icon}</span>
+                  {section.label}
+                </span>
                 <ChevronDown
-                  size={12}
-                  className={`transition-transform ${expandedSections[section.label] ? 'rotate-180' : ''}`}
+                  size={14}
+                  className={`shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
                 />
               </button>
-              <div className="mt-1 space-y-0.5">
-                {visibleItems.map((item) => {
-                  const active = isActive(item.href)
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={[
-                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
-                        active
-                          ? 'bg-brand-primary/10 text-brand-primary font-medium'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-accent',
-                      ].join(' ')}
-                    >
-                      <span className={active ? 'text-brand-primary' : 'text-muted-foreground'}>
-                        {item.icon}
-                      </span>
-                      {item.label}
-                    </Link>
-                  )
-                })}
-              </div>
+              {isOpen && (
+                <div className="mt-1 space-y-0.5">
+                  {visibleItems.map((item) => {
+                    const active = isActive(item.href)
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setMobileOpen(false)}
+                        aria-current={active ? 'page' : undefined}
+                        className={[
+                          'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                          active
+                            ? 'bg-brand-primary/10 text-brand-primary font-medium'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+                        ].join(' ')}
+                      >
+                        <span className={active ? 'text-brand-primary' : 'text-muted-foreground'}>
+                          {item.icon}
+                        </span>
+                        {item.label}
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )
         })}
       </nav>
+
 
       {/* User section */}
       <div className="p-4 border-t border-border">
