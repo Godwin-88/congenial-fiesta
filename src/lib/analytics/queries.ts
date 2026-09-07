@@ -263,3 +263,220 @@ export async function getTopSearchQueries(
     .sort((a, b) => b.count - a.count)
     .slice(0, limit)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 1 — Funnel / drilldown / zero-report (derived from existing tables only)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function titleCaseSlug(slug: string): string {
+  return slug
+    .split('-')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
+interface DeviceViewCount {
+  slug: string
+  brandSlug: string
+  views: number
+}
+
+// Group /devices/{brand}/{slug} page views by device slug in period
+async function loadDeviceViewCounts(period: string): Promise<DeviceViewCount[]> {
+  const since = sinceISO(period)
+  const { data } = await supabase
+    .from('page_views')
+    .select('path')
+    .gte('created_at', since)
+    .like('path', '/devices/%')
+
+  if (!data) return []
+
+  const grouped: Record<string, DeviceViewCount> = {}
+  for (const row of data) {
+    // Path shape: /devices/{brand}/{slug} — slug may have trailing segments e.g. /compare
+    const parts = row.path.replace('/devices/', '').split('/').filter(Boolean)
+    const brandSlug = parts[0] ?? ''
+    const slug = parts[1] ?? parts[0] ?? ''
+    if (!slug) continue
+    if (!grouped[slug]) grouped[slug] = { slug, brandSlug, views: 0 }
+    grouped[slug].views++
+  }
+
+  return Object.values(grouped).sort((a, b) => b.views - a.views)
+}
+
+// Total affiliate clicks per device slug in period
+async function loadAffiliateClickCounts(period: string): Promise<Map<string, number>> {
+  const since = sinceISO(period)
+  const { data } = await supabase
+    .from('affiliate_clicks')
+    .select('device_slug')
+    .gte('created_at', since)
+
+  const map = new Map<string, number>()
+  if (data) {
+    for (const row of data) {
+      map.set(row.device_slug, (map.get(row.device_slug) ?? 0) + 1)
+    }
+  }
+  return map
+}
+// Views → device views → affiliate clicks conversion funnel for the period
+export async function getFunnelMetrics(
+  period: string
+): Promise<{
+  totalViews: number
+  deviceViews: number
+  clicks: number
+  deviceToClickRate: number
+}> {
+  const [totalViews, deviceViews, clicks] = await Promise.all([
+    getTotalPageViews(period),
+    loadDeviceViewCounts(period).then((rows) => rows.reduce((sum, r) => sum + r.views, 0)),
+    loadAffiliateClickCounts(period).then((m) => Array.from(m.values()).reduce((a, b) => a + b, 0)),
+  ])
+  return {
+    totalViews,
+    deviceViews,
+    clicks,
+    deviceToClickRate: deviceViews > 0 ? Math.round((clicks / deviceViews) * 100 * 100) / 100 :  0,
+  }
+}
+
+// Revenue-leakage report: device pages with views but zero affiliate clicks in period
+export async function getZeroReport(
+  period: string,
+  limit: number = 10
+): Promise<Array<{ deviceSlug: string; brandSlug: string; views: number }>> {
+  const [viewRows, clickMap] = await Promise.all([
+    loadDeviceViewCounts(period),
+    loadAffiliateClickCounts(period),
+  ])
+
+  return viewRows
+    .filter((row) => (clickMap.get(row.slug) ?? 0) === 0)
+    .slice(0, limit)
+    .map((row) => ({
+      deviceSlug: row.slug,
+      brandSlug: row.brandSlug,
+      views: row.views,
+    }))
+}
+
+// Top devices by page views with affiliate CTR drilldown
+export async function getTopDevices(
+  period: string,
+  limit: number = 20
+): Promise<Array<{ deviceSlug: string; brandSlug: string; views: number; clicks: number; ctr: number }>> {
+  const [viewRows, clickMap] = await Promise.all([
+    loadDeviceViewCounts(period),
+    loadAffiliateClickCounts(period),
+  ])
+
+  return viewRows
+    .map((row) => {
+      const clicks = clickMap.get(row.slug) ?? 0
+      return {
+        deviceSlug: row.slug,
+        brandSlug: row.brandSlug,
+        views: row.views,
+        clicks,
+        ctr: row.views > 0 ? Math.round((clicks / row.views) * 10000) / 100 :  0,
+      }
+    })
+    .slice(0, limit)
+}
+
+// Top brands by device-page views (+ clicks via a catalog map — affiliate_clicks has no brand column)
+
+export async function getTopBrands(
+  period: string,
+  limit: number = 15
+): Promise<Array<{ brandSlug: string; brandName: string; views: number; clicks: number; ctr: number }>> {
+  // Slug → brand map from the published devices catalog
+  const { data: devices } = await supabase
+    .from('devices')
+    .select('slug, brand:brands(slug, name)')
+    .eq('status', 'published')
+
+  const slugToBrand = new Map<string, { slug: string; name: string | null }>()
+  const brandNames = new Map<string, string>()
+  if (devices) {
+    for (const d of devices) {
+      const brand = Array.isArray(d.brand) ? d.brand[0] : d.brand
+      if (brand) {
+        slugToBrand.set(d.slug, { slug: brand.slug, name: brand.name })
+        if (brand.slug) brandNames.set(brand.slug, brand.name ?? titleCaseSlug(brand.slug))
+      }
+    }
+  }
+
+  const [viewRows, clickMap] = await Promise.all([
+    loadDeviceViewCounts(period),
+    loadAffiliateClickCounts(period),
+  ])
+
+  // Views by brand — brand slug already lives in the path (no map needed)；clicks by brand need the catalog map
+  const viewsByBrand = new Map<string, number>()
+  for (const row of viewRows) {
+    if (!row.brandSlug) continue
+    const currViews = viewsByBrand.get(row.brandSlug) ?? 0
+    viewsByBrand.set(row.brandSlug, currViews + row.views)
+  }
+  const clicksByBrand = new Map<string, number>()
+  for (const [slug, clicks] of Array.from(clickMap.entries())) {
+    const brand = slugToBrand.get(slug)
+    if (!brand?.slug) continue
+    const currClicks = clicksByBrand.get(brand.slug) ?? 0
+    clicksByBrand.set(brand.slug, currClicks + clicks)
+  }
+  const keys = new Set([...viewsByBrand.keys(), ...clicksByBrand.keys()])
+  const rows: Array<{ brandSlug: string; brandName: string; views: number; clicks: number; ctr: number }> = []
+  for (const brandSlug of keys) {
+    const views = viewsByBrand.get(brandSlug) ??  0
+    const clicks = clicksByBrand.get(brandSlug) ??  0
+    rows.push({
+      brandSlug,
+      brandName: brandNames.get(brandSlug) ?? titleCaseSlug(brandSlug),
+      views,
+      clicks,
+      ctr: views > 0 ? Math.round((clicks / views) * 10000) / 100 :  0,
+    })
+  }
+
+  return rows.sort((a, b) => b.views - a.views).slice(0, limit)
+}
+
+export type ContentSection =
+  | 'devices' | 'articles' | 'videos' | 'compare' | 'search' | 'other'
+
+// Top pages tagged with a content section — for the Content & SEO tab
+export async function getTopContentPages(
+  period: string,
+  limit: number = 150
+): Promise<Array<{ path: string; section: ContentSection; views: number }>> {
+  const since = sinceISO(period)
+  const { data } = await supabase
+    .from('page_views')
+    .select('path')
+    .gte('created_at', since)
+
+  if (!data) return []
+
+  const grouped: Record<string, number> = {}
+  for (const row of data) grouped[row.path] = (grouped[row.path] ?? 0) + 1
+
+  return Object.entries(grouped)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([path, views]) => {
+      let section: ContentSection = 'other'
+      if (path.startsWith('/devices/')) section = 'devices'
+      else if (path.startsWith('/articles/')) section = 'articles'
+      else if (path.startsWith('/videos/')) section = 'videos'
+      else if (path.startsWith('/compare')) section = 'compare'
+      else if (path.startsWith('/search')) section = 'search'
+      return { path, section, views }
+    })
+}
