@@ -10,6 +10,7 @@ import {
   getQualifiedLeads, getEarningsReconciliation, getLinkHealthSummary,
   getAlertRules, computeAlertKpiValues, listAlertEvents,
   getRetentionStatus, listRetentionLog,
+  runExploreQuery, listScheduledExports,
 } from '@/lib/analytics/queries'
 import { getAdminUser } from '@/lib/admin/require-admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,6 +33,7 @@ import {
   Target,
   TrendingUp,
   Users,
+  BarChart3,
 } from 'lucide-react'
 import PageViewsChart from './PageViewsChart'
 import TrafficSourcesChart from './TrafficSourcesChart'
@@ -47,6 +49,9 @@ import EarningsReconciliationTable from './EarningsReconciliationTable'
 import LinkHealthTable from './LinkHealthTable'
 import GoalsPanel from './GoalsPanel'
 import RetentionPanel from './RetentionPanel'
+import ExplorePanel from './ExplorePanel'
+import EarningsImportCard from './EarningsImportCard'
+import ScheduledExportsPanel from './ScheduledExportsPanel'
 
 type TabId =
   | 'overview'
@@ -61,6 +66,7 @@ type TabId =
   | 'outreach'
   | 'goals'
   | 'export'
+  | 'explore'
 
 const ALL_TABS: TabId[] = [
   'overview',
@@ -75,6 +81,7 @@ const ALL_TABS: TabId[] = [
   'outreach',
   'goals',
   'export',
+  'explore',
 ]
 
 const TAB_LABELS: Record<TabId, string> = {
@@ -90,6 +97,7 @@ const TAB_LABELS: Record<TabId, string> = {
   outreach: 'Outreach & Leads',
   goals: 'Goals & Alerts',
   export: 'Export & API',
+  explore: 'Explore',
 }
 
 const TAB_ICONS: Record<TabId, ReactNode> = {
@@ -105,6 +113,7 @@ const TAB_ICONS: Record<TabId, ReactNode> = {
   outreach: <Handshake className="h-4 w-4" />,
   goals: <Target className="h-4 w-4" />,
   export: <FileDown className="h-4 w-4" />,
+  explore: <BarChart3 className="h-4 w-4" />,
 }
 
 const ROLE_ALLOWED: Record<string, TabId[]> = {
@@ -203,16 +212,22 @@ const ROADMAP_GOALS: RoadmapItem[] = [
 
 const ROADMAP_EXPORT: RoadmapItem[] = [
   {
-    phase: 'Phase 3',
-    feature: 'API builder',
-    data: 'governed data release over marts',
-    kpi: 'Scheduled exports → Slack/email/CSV',
+    phase: 'Live',
+    feature: 'Explore builder + CSV',
+    data: 'GA4-style exploration over first-party data',
+    kpi: 'Self-serve metric×dimension breakdowns',
   },
   {
-    phase: 'Phase 3',
-    feature: 'Custom dashboard builder',
-    data: 'GA4-style exploration over aggregates',
-    kpi: 'Self-serve cohort & funnel builders',
+    phase: 'Live',
+    feature: 'Scheduled exports (email/Slack)',
+    data: 'daily/weekly/monthly CSVs via scheduled_exports registry',
+    kpi: 'Automatic report delivery without code',
+  },
+  {
+    phase: 'Phase 7',
+    feature: 'Affiliate-network API import',
+    data: 'programmatic earnings pulls (Amazon/Jumia/Kilimall APIs)',
+    kpi: 'Zero-touch finance reconciliation',
   },
 ]
 
@@ -271,10 +286,12 @@ function TopPagesTable({ pages }: { pages: Array<{ path: string; views: number }
 export default async function AnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; tab?: string }>
+  searchParams: Promise<{ period?: string; tab?: string; metric?: string; dimension?: string }>
 }) {
-  const { period: rawPeriod, tab: rawTab } = await searchParams
+  const { period: rawPeriod, tab: rawTab, metric: rawMetric, dimension: rawDimension } = await searchParams
   const period = ['7d', '30d', '90d'].includes(rawPeriod ?? '') ? (rawPeriod as string) : '30d'
+  const exploreMetric = ['views', 'unique_visitors', 'clicks', 'revenue_proxy', 'saves', 'add_to_compare', 'watches', 'related_clicks'].includes(rawMetric ?? '') ? (rawMetric as string) : 'views'
+  const exploreDimension = ['date', 'path', 'device', 'retailer', 'source_medium', 'section', 'action'].includes(rawDimension ?? '') ? (rawDimension as string) : 'path'
 
   // Role-scoped surfaces — enforced here, so the tab bar only ever shows what the role may see
   const adminUser = await getAdminUser()
@@ -327,6 +344,16 @@ export default async function AnalyticsPage({
     alertEvents = await listAlertEvents(25)
     retentionStatus = await getRetentionStatus()
     retentionLog = await listRetentionLog(10)
+  }
+
+  // Explore + scheduled exports are only loaded when their tab is open
+  let exploreResult: Awaited<ReturnType<typeof runExploreQuery>> | null = null
+  if (activeTab === 'explore' && allowedTabs.includes('explore')) {
+    exploreResult = await runExploreQuery({ metric: exploreMetric, dimension: exploreDimension, period, limit: 25 })
+  }
+  let scheduledExports: Awaited<ReturnType<typeof listScheduledExports>> = []
+  if (activeTab === 'export' && allowedTabs.includes('export')) {
+    scheduledExports = await listScheduledExports()
   }
 
   // Content & SEO: group top pages by section( top 5 per section)
@@ -788,6 +815,8 @@ export default async function AnalyticsPage({
               </p>
             </CardContent>
           </Card>
+
+          <EarningsImportCard canManage={role === 'owner' || role === 'admin'} />
         </div>
       )}
 
@@ -1174,6 +1203,35 @@ export default async function AnalyticsPage({
             <RoadmapPanel items={ROADMAP_EXPORT} />
           </CardContent>
         </Card>
+
+        <ScheduledExportsPanel canManage={role === 'owner' || role === 'admin'} />
+        </div>
+      )}
+
+      {activeTab === 'explore' && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-brand-primary" />
+                Explore — Build your own breakdown
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                GA4-style custom exploration over first-party data. Pick a metric and a breakdown —
+                the report adapts automatically. Download any result as CSV.
+              </p>
+              {exploreResult && (
+                <ExplorePanel
+                  result={exploreResult}
+                  metric={exploreMetric}
+                  dimension={exploreDimension}
+                  period={period}
+                />
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>

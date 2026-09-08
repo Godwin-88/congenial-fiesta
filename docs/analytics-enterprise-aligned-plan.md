@@ -124,7 +124,7 @@ These are *our* implementation's contribution — recorded **here** as "proposed
 - **Phase 3 (platform-level) — ✅ LIVE:** Qualification scoring (MQL-equivalent hot/warm/cold + export), affiliate earnings reconciliation (proxy vs imported), buy-link health monitoring (daily HEAD-check cron + panel)。
 - **Phase 4 (goals & automation) — ✅ LIVE:** Alert-rule engine (`analytics_alert_rules` × KPI matrix), daily breach cron + email, Goals tab with progress cards + acknowledge workflow, digest extension (revenue proxy / alerts / search gaps)。
 - **Phase 5 (lifecycle & self-service) — ✅ LIVE:** Per-table retention TTL (`retention_policy`) + monthly purge cron + admin preview/run + append-only audit log (`data_retention_log`); DPA expunge-on-request by `fp_id`; alert-rule CRUD (create / edit / pause / delete) gated owner/admin; role matrix enforced for the Goals tab (owner/admin manage, editor/viewer read-only)。
-- **Phase 6 (future):** custom dashboard builder (GA4-style exploration), scheduled/slack exports, affiliate-network APIs & earnings CSV import UI, weekly digest extension polish。
+- **Phase 6 (explore & scheduled delivery) — ✅ LIVE:** GA4-style Explore builder (8 metrics × 7 dimensions, pure-JS over first-party tables, share %, CSV); earnings CSV import (dedupe by natural key, template download); self-service scheduled exports (daily/weekly/monthly × email/Slack) via `scheduled_exports` registry + hourly due-check cron; shared `export.ts` generator reused by on-demand + scheduled paths。
 
 ### 5.3 KPI dictionary skeleton (every KPI ships with full metadata — ℹ glossary)
 

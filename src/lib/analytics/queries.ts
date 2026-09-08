@@ -1337,3 +1337,388 @@ export async function deleteAlertRule(id: number): Promise<boolean> {
   if (error) console.error('[rules] delete failed:', error.message)
   return !error
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 6 — Explore (GA4-style builder) · earnings CSV import · scheduled exports
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const EXPLORE_METRICS: Array<{ id: string; label: string; table: string }> = [
+  { id: 'views', label: 'Page Views', table: 'page_views' },
+  { id: 'unique_visitors', label: 'Unique Visitors', table: 'page_views' },
+  { id: 'clicks', label: 'Affiliate Clicks', table: 'affiliate_clicks' },
+  { id: 'revenue_proxy', label: 'Revenue Proxy (KES)', table: 'affiliate_clicks' },
+  { id: 'saves', label: 'Saves', table: 'interactions' },
+  { id: 'add_to_compare', label: 'Add to Compare', table: 'interactions' },
+  { id: 'watches', label: 'Video Watches', table: 'interactions' },
+  { id: 'related_clicks', label: 'Related-Device Clicks', table: 'interactions' },
+]
+
+export const EXPLORE_DIMENSIONS: Array<{ id: string; label: string }> = [
+  { id: 'date', label: 'Date (daily)' },
+  { id: 'path', label: 'Page path' },
+  { id: 'device', label: 'Device' },
+  { id: 'retailer', label: 'Retailer' },
+  { id: 'source_medium', label: 'Source / Medium' },
+  { id: 'section', label: 'Content section' },
+  { id: 'action', label: 'Intent action' },
+]
+
+const INTERACTION_ACTIONS = new Set(['saves', 'add_to_compare', 'watches', 'related_clicks'])
+
+export interface ExploreRow {
+  label: string
+  value: number
+  sharePct: number
+}
+
+export interface ExploreResult {
+  metric: string
+  dimension: string
+  total: number
+  rows: ExploreRow[]
+}
+
+// GA4-style explorer: count a metric, broken down by a dimension, for a period.
+// Pure JS aggregation (like getCampaignMetrics) — no new tables or indexes needed.
+export async function runExploreQuery(input: {
+  metric: string
+  dimension: string
+  period: string
+  limit?: number
+}): Promise<ExploreResult> {
+  const metric = input.metric
+  const dimension = input.dimension
+  const period = input.period
+  const limit = input.limit ?? 25
+  const since = sinceISO(period)
+
+  const inInteractions = INTERACTION_ACTIONS.has(metric)
+
+  let rows: Array<Record<string, unknown>> = []
+  let rates = new Map<string, number>()
+
+  if (inInteractions) {
+    const { data } = await supabase
+      .from('interactions')
+      .select('action, content_type, device_slug, created_at, utm_source, utm_medium')
+      .gte('created_at', since)
+    rows = data ?? []
+  } else if (metric === 'clicks' || metric === 'revenue_proxy') {
+    const { data } = await supabase
+      .from('affiliate_clicks')
+      .select('retailer, device_slug, created_at, utm_source, utm_medium')
+      .gte('created_at', since)
+    rows = data ?? []
+    if (metric === 'revenue_proxy') {
+      const { data: rateRows } = await supabase
+        .from('affiliate_commission_rates')
+        .select('retailer, rate')
+      for (const r of rateRows ?? []) rates.set(r.retailer, Number(r.rate))
+    }
+  } else {
+    // views / unique_visitors
+    const { data } = await supabase
+      .from('page_views')
+      .select('path, fp_id, created_at, utm_source, utm_medium')
+      .gte('created_at', since)
+    rows = data ?? []
+  }
+const extract = (row: Record<string, unknown>): string => {
+    const path = String(row.path ?? '')
+    const createdAt = row.created_at ? new Date(String(row.created_at)).toISOString().split('T')[0] : ''
+    const deviceSlug = row.device_slug ? String(row.device_slug) : ''
+    const retailer = row.retailer ? String(row.retailer) : ''
+    const source = row.utm_source ? String(row.utm_source) : null
+    const medium = row.utm_medium ? String(row.utm_medium) : null
+    const contentType = row.content_type ? String(row.content_type) : ''
+    const action = row.action ? String(row.action) : ''
+
+    switch (dimension) {
+      case 'date':
+        return createdAt || '(unknown)'
+      case 'path': {
+        if (inInteractions) return `${contentType}/${deviceSlug || row.content_id || '(unknown)'}`
+        if (retailer) return `/out/${retailer}`
+        return path || '(unknown)'
+      }
+      case 'device': {
+        if (deviceSlug) return deviceSlug
+        if (path.startsWith('/devices/')) {
+          const parts = path.replace('/devices/', '').split('/').filter(Boolean)
+          return parts[1] ?? parts[0] ?? '(unknown)'
+        }
+        return '(non-device)'
+      }
+      case 'retailer':
+        return retailer || '(retailer n/a)'
+      case 'source_medium':
+        return `${source ?? '(direct)'}${medium ? ` / ${medium}` : ''}`
+      case 'section': {
+        if (inInteractions) return contentType || '(other)'
+        if (path.startsWith('/devices/')) return 'devices'
+        if (path.startsWith('/articles/')) return 'articles'
+        if (path.startsWith('/videos/')) return 'videos'
+        if (path.startsWith('/compare')) return 'compare'
+        if (path.startsWith('/search')) return 'search'
+        return '(other)'
+      }
+      case 'action':
+        return action || '(n/a)'
+      default:
+        return '(unknown)'
+    }
+  }
+
+  const buckets = new Map<string, number>()
+  const uniquePerBucket = new Map<string, Set<string>>()
+
+  for (const row of rows) {
+    const label = extract(row)
+    if (metric === 'unique_visitors') {
+      const fp = row.fp_id ? String(row.fp_id) : ''
+      if (!fp) continue
+      if (!uniquePerBucket.has(label)) uniquePerBucket.set(label, new Set())
+      uniquePerBucket.get(label)!.add(fp)
+    } else if (inInteractions) {
+      const action = String(row.action ?? '')
+      if (action !== metric) continue
+      buckets.set(label, (buckets.get(label) ?? 0) + 1)
+    } else if (metric === 'revenue_proxy') {
+      const retailer = String(row.retailer ?? '')
+      buckets.set(label, (buckets.get(label) ?? 0) + (rates.get(retailer) ?? 0))
+    } else {
+      buckets.set(label, (buckets.get(label) ?? 0) + 1)
+    }
+  }
+
+  let entries: Array<[string, number]>
+  if (metric === 'unique_visitors') {
+    entries = Array.from(uniquePerBucket.entries()).map(([label, set]) => [label, set.size])
+  } else {
+    entries = Array.from(buckets.entries())
+  }
+
+  const sorted = entries.sort((a, b) => b[1] - a[1]).slice(0, limit)
+  const total = Math.round(entries.reduce((sum, [, v]) => sum + v, 0) * 100) / 100
+
+  return {
+    metric,
+    dimension,
+    total,
+    rows: sorted.map(([label, value]) => ({
+      label,
+      value: Math.round(value * 100) / 100,
+      sharePct: total > 0 ? Math.round((value / total) * 10000) / 100 : 0,
+    })),
+  }
+}
+
+// ── Earnings CSV import ──────────────────────────────────────────────────────
+
+export interface EarningsImportRow {
+  retailer: string
+  periodStart: string
+  periodEnd: string
+  gross: number
+  commission: number
+  currency?: string
+  status?: string
+  source?: string
+  note?: string
+}
+
+export async function importEarningsRows(
+  rows: EarningsImportRow[]
+): Promise<{ inserted: number; skipped: number; errors: Array<{ row: number; error: string }> }> {
+  let inserted = 0
+  let skipped = 0
+  const errors: Array<{ row: number; error: string }> = []
+
+  for (const [idx, row] of rows.entries()) {
+    try {
+      const retailer = row.retailer?.trim().toLowerCase()
+      if (!retailer) throw new Error('missing retailer')
+      if (!row.periodStart || !row.periodEnd) throw new Error('missing period dates')
+      if (!Number.isFinite(row.gross)) throw new Error('invalid gross')
+      const commission = Number.isFinite(row.commission) ? row.commission : 0
+      const status = ['estimated', 'confirmed', 'paid'].includes(String(row.status))
+        ? String(row.status)
+        : 'estimated'
+
+      // Dedupe against existing rows with the same natural key
+      const { count } = await supabase
+        .from('affiliate_earnings')
+        .select('*', { count: 'exact', head: true })
+        .eq('retailer', retailer)
+        .eq('period_start', row.periodStart)
+        .eq('period_end', row.periodEnd)
+        .eq('gross_amount', row.gross)
+
+      if (count && count > 0) {
+        skipped++
+        continue
+      }
+
+      const { error } = await supabase.from('affiliate_earnings').insert({
+        retailer,
+        period_start: row.periodStart,
+        period_end: row.periodEnd,
+        gross_amount: row.gross,
+        commission_amount: commission,
+        currency: row.currency ?? 'KES',
+        status,
+        source: row.source ?? 'csv-import',
+        note: row.note ?? null,
+      })
+      if (error) throw new Error(error.message)
+      inserted++
+    } catch (e) {
+      errors.push({ row: idx + 1, error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  return { inserted, skipped, errors }
+}
+
+// ── Scheduled exports registry ──────────────────────────────────────────────
+
+export interface ScheduledExport {
+  id: number
+  report: string
+  period: string
+  cadence: string
+  destination: string
+  recipients: string[]
+  config: Record<string, unknown>
+  enabled: boolean
+  lastRunAt: string | null
+  lastError: string | null
+  createdAt: string
+}
+
+function mapScheduledExport(row: Record<string, unknown>): ScheduledExport {
+  return {
+    id: Number(row.id),
+    report: String(row.report),
+    period: String(row.period),
+    cadence: String(row.cadence),
+    destination: String(row.destination),
+    recipients: Array.isArray(row.recipients) ? row.recipients.map(String) : [],
+    config: row.config && typeof row.config === 'object' ? (row.config as Record<string, unknown>) : {},
+    enabled: Boolean(row.enabled),
+    lastRunAt: row.last_run_at ? String(row.last_run_at) : null,
+    lastError: row.last_error ? String(row.last_error) : null,
+    createdAt: String(row.created_at),
+  }
+}
+
+export const SCHEDULED_EXPORT_REPORTS = [
+  'page-views',
+  'top-pages',
+  'affiliate-clicks',
+  'qualified-leads',
+  'earnings-reconciliation',
+  'link-health',
+  'explore',
+]
+
+export async function listScheduledExports(): Promise<ScheduledExport[]> {
+  const { data, error } = await supabase
+    .from('scheduled_exports')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) {
+    console.error('[exports] list failed:', error.message)
+    return []
+  }
+  return (data ?? []).map(mapScheduledExport)
+}
+
+export interface ScheduledExportInput {
+  report: string
+  period?: string
+  cadence: string
+  destination: string
+  recipients?: string[]
+  config?: Record<string, unknown>
+}
+
+export async function createScheduledExport(
+  input: ScheduledExportInput
+): Promise<ScheduledExport | null> {
+  const { data, error } = await supabase
+    .from('scheduled_exports')
+    .insert({
+      report: input.report,
+      period: input.period ?? '30d',
+      cadence: input.cadence,
+      destination: input.destination,
+      recipients: input.recipients ?? [],
+      config: input.config ?? {},
+    })
+    .select()
+    .single()
+  if (error) {
+    console.error('[exports] create failed:', error.message)
+    return null
+  }
+  return mapScheduledExport(data as Record<string, unknown>)
+}
+
+export async function updateScheduledExport(
+  id: number,
+  patch: Partial<ScheduledExportInput> & { enabled?: boolean }
+): Promise<ScheduledExport | null> {
+  const { data, error } = await supabase
+    .from('scheduled_exports')
+    .update(patch)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) {
+    console.error('[exports] update failed:', error.message)
+    return null
+  }
+  return mapScheduledExport(data as Record<string, unknown>)
+}
+
+export async function deleteScheduledExport(id: number): Promise<boolean> {
+  const { error } = await supabase.from('scheduled_exports').delete().eq('id', id)
+  if (error) console.error('[exports] delete failed:', error.message)
+  return !error
+}
+
+export async function dueScheduledExports(now: Date = new Date()): Promise<ScheduledExport[]> {
+  const { data, error } = await supabase
+    .from('scheduled_exports')
+    .select('*')
+    .eq('enabled', true)
+  if (error) {
+    console.error('[exports] due list failed:', error.message)
+    return []
+  }
+
+  const cadenceMs: Record<string, number> = {
+    daily: 24 * 60 * 60 * 1000,
+    weekly: 7 * 24 * 60 * 60 * 1000,
+    monthly: 30 * 24 * 60 * 60 * 1000,
+  }
+
+  return (data ?? [])
+    .map(mapScheduledExport)
+    .filter((job) => {
+      if (!job.lastRunAt) return true // never run → due
+      const age = now.getTime() - new Date(job.lastRunAt).getTime()
+      return age >= (cadenceMs[job.cadence] ?? cadenceMs.weekly)
+    })
+}
+
+export async function markScheduledExportRun(
+  id: number,
+  ok: boolean,
+  errorText: string | null = null
+): Promise<void> {
+  await supabase
+    .from('scheduled_exports')
+    .update({ last_run_at: new Date().toISOString(), last_error: ok ? null : errorText })
+    .eq('id', id)
+}

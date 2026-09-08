@@ -56,6 +56,12 @@ const jobs = [
     cron: '0 6 1 * *',
   },
   {
+    name: 'scheduled-exports',
+    url: `${BASE_URL}/api/cron/scheduled-exports`,
+    // Hourly: check for due scheduled exports (daily/weekly/monthly jobs)
+    cron: '0 * * * *',
+  },
+  {
     name: 'seed-coming-soon',
     url: `${BASE_URL}/api/cron/seed-coming-soon`,
     // Daily at 06:00 UTC (09:00 EAT)
