@@ -112,5 +112,5 @@ DROP POLICY IF EXISTS link_health_public_read ON public.link_health_checks;
 CREATE POLICY link_health_public_read ON public.link_health_checks
   FOR SELECT USING (true);
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.link_health_checks TO service_role;
-GRANT SELECT ON public.link_health_checks TO anon, authenticates;
+GRANT SELECT ON public.link_health_checks TO anon, authenticated;
 GRANT USAGE, SELECT ON SEQUENCE public.link_health_checks_id_seq TO service_role;
