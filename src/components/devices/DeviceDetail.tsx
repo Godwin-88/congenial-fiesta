@@ -317,6 +317,7 @@ export default async function DeviceDetail({ device, isPreview = false, origin =
             </div>
             <VideoReview
               deviceName={dName}
+              deviceSlug={dSlug}
               videoId={dRelatedVideoId}
               tiktokUrl={dRelatedTiktokUrl}
             />

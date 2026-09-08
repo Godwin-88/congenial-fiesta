@@ -11,26 +11,32 @@ function getAdminSupabase() {
   )
 }
 
+function readCookie(header: string | null, name: string): string | null {
+  if (!header) return null
+  const match = header.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+function makeFpCookie(value: string): string {
+  return `fweezy_fp=${encodeURIComponent(value)}; Path=/; Max-Age=34128000; SameSite=Lax: Secure`
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ device: string; retailer: string }> },
 ) {
   const { device: deviceSlug, retailer } = await params
 
-  // Rate limit
   const ip =
     _req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
     _req.headers.get('x-real-ip') ??
     'unknown'
-
   const { success } = await ratelimit.limit(`out:${ip}`)
   if (!success) {
     return NextResponse.redirect(new URL('/', _req.url), 302)
   }
 
-  // Look up the device
   const supabase = getAdminSupabase()
-
   const cacheKey = `devices:slug:${deviceSlug}`
   let deviceId: string = ''
   const cached = await redis.get(cacheKey)
@@ -51,7 +57,6 @@ export async function GET(
     await redis.setex(cacheKey, 600, deviceId)
   }
 
-  // Get the device with buy links
   const { data: device } = await supabase
     .from('devices')
     .select('*')
@@ -66,23 +71,42 @@ export async function GET(
   const buyLink = buyLinks.find((l) => l.retailer === retailer)
 
   if (!buyLink || !buyLink.url) {
+
     return NextResponse.redirect(new URL('/', _req.url), 302)
   }
 
-  // Log click to Supabase
+  const cookieHeader = _req.headers.get('cookie') ?? ''
+  let fpId = readCookie(cookieHeader, 'fweezy_fp')
+  let needsCookie = false
+  if (!fpId || !fpId.startsWith('fp_')) {
+    fpId = `fp_${crypto.randomUUID()}`
+    needsCookie = true
+  }
+
+  const linkUrl = new URL(buyLink.url)
+  const utmSource = linkUrl.searchParams.get('utm_source')
+  const utmMedium = linkUrl.searchParams.get('utm_medium')
+  const utmCampaign = linkUrl.searchParams.get('utm_campaign')
+
   try {
     const supabaseClient = await createSupabaseClient()
-    const { data: insertedClick } = await supabaseClient
+    const { data: insertedClick, error: clickError } = await supabaseClient
       .from('affiliate_clicks')
       .insert({
         device_slug: deviceSlug,
         retailer,
         referrer: _req.headers.get('referer') ?? null,
+        fp_id: fpId,
+        utm_source: utmSource,
+        utm_medium: utmMedium,
+        utm_campaign: utmCampaign,
         created_at: new Date().toISOString(),
       })
       .select('id')
       .single()
-
+    if (clickError) {
+      console.error('Affiliate click insert error:', clickError)
+    }
     const { data: { session } } = await supabaseClient.auth.getSession()
     if (session?.user?.id && insertedClick?.id) {
       await supabaseClient
@@ -91,8 +115,12 @@ export async function GET(
         .eq('id', insertedClick.id)
     }
   } catch {
-    // Log failure silently — don't block the redirect
+    console.error('Affiliate click track failed')
   }
 
-  return NextResponse.redirect(buyLink.url, 302)
+  const res = NextResponse.redirect(buyLink.url, 302)
+  if (needsCookie) {
+    res.headers.set('Set-Cookie', makeFpCookie(fpId))
+  }
+  return res
 }

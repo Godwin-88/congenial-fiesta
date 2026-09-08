@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { useAuth } from './AuthContext'
+import { trackEvent } from '@/lib/analytics/events'
 
 export type TrayDevice = {
   slug: string
@@ -150,7 +151,10 @@ export function ComparisonTrayProvider({ children }: { children: React.ReactNode
       if (prev.some((d) => d.slug === device.slug) || prev.length >= 3) return prev
       return [...prev, device]
     })
-  }, [])
+    if (!devices.some((d) => d.slug === device.slug) && devices.length < 3) {
+      trackEvent('add_to_compare', { contentType: 'device', contentId: device.slug, deviceSlug: device.slug })
+    }
+  }, [devices])
 
   const removeDevice = useCallback((slug: string) => {
     setDevices((prev) => prev.filter((d) => d.slug !== slug))

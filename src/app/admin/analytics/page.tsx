@@ -5,6 +5,8 @@ import {
  getPageViewsOverTime, getTopPages, getTrafficSources, getDeviceTypeBreakdown,
   getTopAffiliatePages, getAffiliateCTR, getClicksByRetailer, getTopSearchQueries, getFunnelMetrics,
   getZeroReport, getTopDevices, getTopBrands, getTopContentPages, type ContentSection,
+  getAudienceMetrics, getConsiderationMetrics, getCampaignMetrics, getTrustMetrics,
+  getRevenueProxy, getSearchQuality,
 } from '@/lib/analytics/queries'
 import { getAdminUser } from '@/lib/admin/require-admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -263,6 +265,7 @@ export default async function AnalyticsPage({
     totalViews,
  viewsOverTime, topPages, trafficSources, deviceTypes, topAffiliate, affiliateCTR, clicksByRetailer,
  searchQueries, funnel, zeroReport, topDevices, topBrands, topContentPages,
+    audience, consideration, campaignRows, trust, revenueProxy, searchQuality,
   ] = await Promise.all([
     getTotalPageViews(period),
     getPageViewsOverTime(period),
@@ -278,6 +281,12 @@ export default async function AnalyticsPage({
     getTopDevices(period, 20),
     getTopBrands(period, 15),
     getTopContentPages(period, 150),
+    getAudienceMetrics(period),
+    getConsiderationMetrics(period),
+    getCampaignMetrics(period),
+    getTrustMetrics(period),
+    getRevenueProxy(period),
+    getSearchQuality(period, 10),
   ])
 
   // Content & SEO: group top pages by section( top 5 per section)
@@ -350,6 +359,47 @@ export default async function AnalyticsPage({
             clicks={funnel.clicks}
             deviceToClickRate={funnel.deviceToClickRate}
           />
+
+          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Unique Visitors</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">{audience.uniqueVisitors.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground mt-1">Distinct first-party visitors (FP-id)</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Return Rate</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">{audience.returnRate}%</p>
+                <p className="text-xs text-muted-foreground mt-1">Repeat page views vs new visitors</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Consideration Events</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">{consideration.total.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {consideration.saves} saved · {consideration.addToCompare} compared · {consideration.watches} watched
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Revenue Proxy</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">{revenueProxy.weightedClicks.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground mt-1">Commission-weighted clicks (clicks × rate)</p>
+              </CardContent>
+            </Card>
+          </div>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -619,6 +669,49 @@ export default async function AnalyticsPage({
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Scale className="h-5 w-5 text-brand-primary" />
+                Revenue Proxy — Commission-Weighted Clicks
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Estimated commission-weighted clicks (<span className="text-foreground font-medium">{revenueProxy.weightedClicks.toLocaleString()}</span> total)
+                = clicks × each retailer's commission rate (seeded in affiliate_commission_rates). Pairs with real
+                commission under Finance reconciliation (Phase 3).
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-muted-foreground border-b border-border">
+                      <th className="text-left py-2 pr-4 font-medium">Retailer</th>
+                      <th className="text-right py-2 pr-4 font-medium">Clicks</th>
+                      <th className="text-right py-2 pr-4 font-medium">Rate</th>
+                      <th className="text-right py-2 font-medium">Weighted</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {revenueProxy.byRetailer.map((r) => (
+                      <tr key={r.retailer} className="border-b border-border last:border-0 hover:bg-foreground/5">
+                        <td className="py-2 pr-4 text-foreground capitalize">{r.retailer}</td>
+                        <td className="py-2 pr-4 text-right">{r.clicks.toLocaleString()}</td>
+                        <td className="py-2 pr-4 text-right">{Math.round(r.rate * 100 * 100) / 100}%</td>
+                        <td className="py-2 text-right font-medium">{r.weighted.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                    {revenueProxy.byRetailer.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="py-4 text-center text-muted-foreground">No clicks in period</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -658,7 +751,48 @@ export default async function AnalyticsPage({
                 </table>
               </div>
               <p className="text-muted-foreground text-xs mt-2">
-                Zero-result search logging ships in Phase 2 — it feeds the content backlog per the analytics plan
+                Average results per query: <span className="text-foreground font-medium">{searchQuality.avgResults}</span>
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Search className="h-5 w-5 text-red-500" />
+                Zero-Result Searches (Content Backlog)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-muted-foreground border-b border-border">
+                      <th className="text-left py-2 pr-4 font-medium">Rank</th>
+                      <th className="text-left py-2 pr-4 font-medium">Query</th>
+                      <th className="text-right py-2 font-medium">Misses</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {searchQuality.zeroResult.map((q, i) => (
+                      <tr key={q.query} className="border-b border-border last:border-0 hover:bg-foreground/5">
+                        <td className="py-2 pr-4 text-muted-foreground">{i + 1}</td>
+                        <td className="py-2 pr-4 text-foreground">&quot;{q.query}&quot;</td>
+                        <td className="py-2 text-right">{q.count.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                    {searchQuality.zeroResult.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="py-4 text-center text-muted-foreground">
+                          No zero-result searches in period — the catalog is matching demand
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-muted-foreground text-xs mt-2">
+                Every zero-result query is a content opportunity — turn these into articles, devices or buying guides.
               </p>
             </CardContent>
           </Card>
@@ -671,7 +805,78 @@ export default async function AnalyticsPage({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Scale className="h-5 w-5 text-brand-primary" />
-                Compare &amp; Consideration
+                Consideration Funnel
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-4 gap-4">
+                <div className="rounded-xl border border-border bg-card p-4">
+                  <p className="text-2xl font-bold text-foreground">{consideration.saves.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">Saved items</p>
+                </div>
+                <div className="rounded-xl border border-border bg-card p-4">
+                  <p className="text-2xl font-bold text-foreground">{consideration.addToCompare.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">Add to compare</p>
+                </div>
+                <div className="rounded-xl border border-border bg-card p-4">
+                  <p className="text-2xl font-bold text-foreground">{consideration.watches.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">Video reviews watched</p>
+                </div>
+                <div className="rounded-xl border border-border bg-card p-4">
+                  <p className="text-2xl font-bold text-foreground">{consideration.relatedClicks.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">Related-device clicks</p>
+                </div>
+              </div>
+              <p className="text-muted-foreground text-xs mt-4">
+                Qualification intent per visitor (save · compare · watch) is the MQL signal. Phase 3 adds a per-visitor
+                qualification score + high-intent audience export feeding a CRM.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Scale className="h-5 w-5 text-amber-400" />
+                Most Considered Devices
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-muted-foreground border-b border-border">
+                      <th className="text-left py-2 pr-4 font-medium">Rank</th>
+                      <th className="text-left py-2 pr-4 font-medium">Device</th>
+                      <th className="text-right py-2 font-medium">Intent events</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {consideration.topDevices.map((d, i) => (
+                      <tr key={d.deviceSlug} className="border-b border-border last:border-0 hover:bg-foreground/5">
+                        <td className="py-2 pr-4 text-muted-foreground">{i + 1}</td>
+                        <td className="py-2 pr-4 text-brand-primary">{d.deviceSlug}</td>
+                        <td className="py-2 text-right">{d.count.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                    {consideration.topDevices.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="py-4 text-center text-muted-foreground">
+                          No intent events yet — the beacon collects them as users save, compare and watch reviews
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Scale className="h-5 w-5 text-brand-primary" />
+                Roadmap
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -687,7 +892,38 @@ export default async function AnalyticsPage({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Heart className="h-5 w-5 text-brand-primary" />
-                Community &amp; Engagement
+                Trust Coverage — Social Proof Across the Catalog
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="rounded-xl border border-border bg-card p-4">
+                  <p className="text-3xl font-bold text-foreground">{trust.coveragePct}%</p>
+                  <p className="text-xs text-muted-foreground">Devices with ≥1 rating or comment</p>
+                </div>
+                <div className="rounded-xl border border-border bg-card p-4">
+                  <p className="text-3xl font-bold text-foreground">{trust.coveredDevices} / {trust.totalDevices}</p>
+                  <p className="text-xs text-muted-foreground">Covered / published devices</p>
+                </div>
+                <div className="rounded-xl border border-border bg-card p-4">
+                  <p className="text-3xl font-bold text-foreground">
+                    {trust.ratedDevices}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Rated · {trust.commentedDevices} commented</p>
+                </div>
+              </div>
+              <p className="text-muted-foreground text-xs mt-4">
+                Trust is a revenue asset: devices with social proof convert better. Coverage below 100% is the
+                editorial review backlog — which devices need a rating or comment next.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Heart className="h-5 w-5 text-brand-primary" />
+                Sentiment Analytics — Roadmap
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -703,7 +939,50 @@ export default async function AnalyticsPage({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Megaphone className="h-5 w-5 text-brand-primary" />
-                Campaigns &amp; Acquisition
+                UTM Campaign Channel Mix
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-muted-foreground border-b border-border">
+                      <th className="text-left py-2 pr-4 font-medium">Source</th>
+                      <th className="text-left py-2 pr-4 font-medium">Medium</th>
+                      <th className="text-left py-2 pr-4 font-medium">Campaign</th>
+                      <th className="text-right py-2 pr-4 font-medium">Views</th>
+                      <th className="text-right py-2 font-medium">Affiliate Clicks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {campaignRows.map((c) => (
+                      <tr key={`${c.source}::${c.medium}::${c.campaign}`} className="border-b border-border last:border-0 hover:bg-foreground/5">
+                        <td className="py-2 pr-4 text-foreground">{c.source}</td>
+                        <td className="py-2 pr-4 text-muted-foreground">{c.medium || '—'}</td>
+                        <td className="py-2 pr-4 text-muted-foreground">{c.campaign || '—'}</td>
+                        <td className="py-2 pr-4 text-right">{c.views.toLocaleString()}</td>
+                        <td className="py-2 text-right">{c.clicks.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                    {campaignRows.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-4 text-center text-muted-foreground">
+                          No UTM-tagged traffic yet — share links with utm_source / utm_medium / utm_campaign
+                          to see channel performance
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Megaphone className="h-5 w-5 text-brand-primary" />
+                Creator & Influencer Attribution — Roadmap
               </CardTitle>
             </CardHeader>
             <CardContent>

@@ -2,10 +2,12 @@
 
 import { useState } from 'react'
 import { Play, ExternalLink } from 'lucide-react'
+import { trackEvent } from '@/lib/analytics/events'
 import Image from 'next/image'
 
 interface VideoReviewProps {
   deviceName: string
+  deviceSlug?: string
   videoId?: string
   tiktokUrl?: string
 }
@@ -16,7 +18,7 @@ interface VideoReviewProps {
  * saves bandwidth and layout shift on mobile (thumbnail described below),
  * and keeps the iframe from hammering YouTube on every page view.
  */
-export default function VideoReview({ deviceName, videoId, tiktokUrl }: VideoReviewProps) {
+export default function VideoReview({ deviceName, deviceSlug, videoId, tiktokUrl }: VideoReviewProps) {
   const [play, setPlay] = useState(false)
 
   return (
@@ -26,7 +28,10 @@ export default function VideoReview({ deviceName, videoId, tiktokUrl }: VideoRev
           {!play ? (
             <button
               type="button"
-              onClick={() => setPlay(true)}
+              onClick={() => {
+                setPlay(true)
+                trackEvent('watch', { contentType: 'video', contentId: videoId, deviceSlug })
+              }}
               aria-label={`Play ${deviceName} review on YouTube`}
               className="group absolute inset-0 flex h-full w-full items-center justify-center"
             >

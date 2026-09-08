@@ -27,10 +27,14 @@ export default function PageViewBeacon() {
     if (lastPathRef.current === pathname) return
     lastPathRef.current = pathname
 
+    const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
     const payload = JSON.stringify({
       path: pathname,
       referrer: document.referrer,
       userAgent: navigator.userAgent,
+      utm_source: params?.get('utm_source'),
+      utm_medium: params?.get('utm_medium'),
+      utm_campaign: params?.get('utm_campaign'),
     })
 
     fetch('/api/track', {

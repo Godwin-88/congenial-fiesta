@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import AuthModal from '@/components/auth/AuthModal'
+import { trackEvent } from '@/lib/analytics/events'
 
 interface SaveButtonProps {
   contentType: 'article' | 'device' | 'comparison'
@@ -47,7 +48,10 @@ export default function SaveButton({ contentType, contentId, metadata = {}, clas
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content_type: contentType, content_id: contentId, metadata }),
         })
-        if (res.ok) setIsSaved(true)
+        if (res.ok) {
+          setIsSaved(true)
+          trackEvent('save', { contentType, contentId })
+        }
       }
     } catch {
       // ignore

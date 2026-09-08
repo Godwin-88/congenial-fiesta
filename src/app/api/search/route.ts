@@ -78,7 +78,11 @@ export async function GET(request: NextRequest) {
         // fire-and-forget (never block search results on logging)
         void (async () => {
           try {
-            await analyticsClient.from('search_queries').insert({ query: query.trim() })
+            await analyticsClient.from('search_queries').insert({
+              query: query.trim(),
+              results_count: results.length,
+              zero_result: results.length === 0,
+            })
           } catch {
             // ignore logging failures
           }

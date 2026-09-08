@@ -480,3 +480,192 @@ export async function getTopContentPages(
       return { path, section, views }
     })
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 2 — FP-id audience, consideration intent, UTM campaigns, trust, revenue
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Unique first-party visitors (distinct fp_id) + return rate in period
+export async function getAudienceMetrics(
+  period: string
+): Promise<{ uniqueVisitors: number; returnRate: number }> {
+  const since = sinceISO(period)
+  const { data } = await supabase
+    .from('page_views')
+    .select('fp_id')
+    .gte('created_at', since)
+
+  const ids = new Set<string>()
+  for (const row of data ?? []) {
+    if (row.fp_id) ids.add(row.fp_id)
+  }
+  const uniqueVisitors = ids.size
+  const totalViews = data?.length ?? 0
+  const returnRate =
+    totalViews > 0 ? Math.round(((totalViews - uniqueVisitors) / totalViews) * 10000) / 100 : 0
+  return { uniqueVisitors, returnRate }
+}
+
+// Consideration intent from the interactions beacon (Phase 2)
+export async function getConsiderationMetrics(
+  period: string
+): Promise<{
+  total: number
+  saves: number
+  addToCompare: number
+  watches: number
+  relatedClicks: number
+  topDevices: Array<{ deviceSlug: string; count: number }>
+}> {
+  const since = sinceISO(period)
+  const { data } = await supabase
+    .from('interactions')
+    .select('action, device_slug')
+    .gte('created_at', since)
+
+  const rows = data ?? []
+  let saves = 0
+  let addToCompare = 0
+  let watches = 0
+  let relatedClicks = 0
+  const perDevice: Record<string, number> = {}
+  for (const row of rows) {
+    if (row.action === 'save') saves++
+    else if (row.action === 'add_to_compare') addToCompare++
+    else if (row.action === 'watch') watches++
+    else if (row.action === 'related_click') relatedClicks++
+    if (row.device_slug) perDevice[row.device_slug] = (perDevice[row.device_slug] ?? 0) + 1
+  }
+  const topDevices = Object.entries(perDevice)
+    .map(([deviceSlug, count]) => ({ deviceSlug, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10)
+  return { total: rows.length, saves, addToCompare, watches, relatedClicks, topDevices }
+}
+// UTM campaign channel mix — page views + affiliate clicks attributed by UTM
+export async function getCampaignMetrics(
+  period: string
+): Promise<Array<{ source: string; medium: string; campaign: string; views: number; clicks: number }>> {
+  const since = sinceISO(period)
+  const [views, clicks] = await Promise.all([
+    supabase.from('page_views').select('utm_source, utm_medium, utm_campaign').gte('created_at', since),
+    supabase.from('affiliate_clicks').select('utm_source, utm_medium, utm_campaign').gte('created_at', since),
+  ])
+
+  const rows = new Map<string, { source: string; medium: string; campaign: string; views: number; clicks: number }>()
+  const keyOf = (s: string | null, m: string | null, c: string | null) => `${s ?? '(direct)'}::${m ?? ''}::${c ?? ''}`
+
+  for (const row of views.data ?? []) {
+    const key = keyOf(row.utm_source, row.utm_medium, row.utm_campaign)
+    const cur = rows.get(key) ?? {
+      source: row.utm_source ?? '(direct)',
+      medium: row.utm_medium ?? '',
+      campaign: row.utm_campaign ?? '',
+      views: 0,
+      clicks: 0,
+    }
+    cur.views++
+    rows.set(key, cur)
+  }
+  for (const row of clicks.data ?? []) {
+    const key = keyOf(row.utm_source, row.utm_medium, row.utm_campaign)
+    const cur = rows.get(key)
+    if (cur) cur.clicks++
+  }
+
+  return Array.from(rows.values()).sort((a, b) => b.views - a.views).slice(0, 15)
+}
+
+// Trust coverage — % of published devices with at least one rating or comment in period
+export async function getTrustMetrics(
+  period: string
+): Promise<{
+  ratedDevices: number
+  commentedDevices: number
+  coveredDevices: number
+  totalDevices: number
+  coveragePct: number
+}> {
+  const since = sinceISO(period)
+  const { count: totalDevices } = await supabase
+    .from('devices')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'published')
+
+  const { data: ratings } = await supabase
+    .from('device_ratings')
+    .select('device_slug')
+    .gte('created_at', since)
+  const { data: comments } = await supabase
+    .from('comments')
+    .select('content_slug')
+    .eq('content_type', 'device')
+    .gte('created_at', since)
+
+  const rated = new Set<string>()
+  for (const r of ratings ?? []) rated.add(r.device_slug)
+  const commented = new Set<string>()
+  for (const c of comments ?? []) commented.add(c.content_slug)
+
+  const covered = new Set([...rated, ...commented])
+  const total = totalDevices ?? 0
+  return {
+    ratedDevices: rated.size,
+    commentedDevices: commented.size,
+    coveredDevices: covered.size,
+    totalDevices: total,
+    coveragePct: total > 0 ? Math.round((covered.size / total) * 10000) / 100 : 0,
+  }
+}
+// Revenue proxy — commission-weighted clicks (clicks × retailer commission rate)
+export async function getRevenueProxy(
+  period: string
+): Promise<{ weightedClicks: number; byRetailer: Array<{ retailer: string; clicks: number; rate: number; weighted: number }> }> {
+  const since = sinceISO(period)
+  const { data: clicks } = await supabase
+    .from('affiliate_clicks')
+    .select('retailer')
+    .gte('created_at', since)
+  const { data: rates } = await supabase
+    .from('affiliate_commission_rates')
+    .select('retailer, rate')
+
+  const clickCounts: Record<string, number> = {}
+  for (const row of clicks ?? []) clickCounts[row.retailer] = (clickCounts[row.retailer] ?? 0) + 1
+  const rateMap = new Map<string, number>()
+  for (const r of rates ?? []) rateMap.set(r.retailer, Number(r.rate))
+
+  const byRetailer = Object.entries(clickCounts)
+    .map(([retailer, count]) => {
+      const rate = rateMap.get(retailer) ?? 0
+      return { retailer, clicks: count, rate, weighted: Math.round(count * rate * 100) / 100 }
+    })
+    .sort((a, b) => b.weighted - a.weighted)
+  const weightedClicks = Math.round(byRetailer.reduce((sum, r) => sum + r.weighted, 0) * 100) / 100
+  return { weightedClicks, byRetailer }
+}
+
+// Zero-result & weak-result queries — feeds the content backlog
+export async function getSearchQuality(
+  period: string,
+  limit: number = 10
+): Promise<{ zeroResult: Array<{ query: string; count: number }>; avgResults: number }> {
+  const since = sinceISO(period)
+  const { data } = await supabase
+    .from('search_queries')
+    .select('query, results_count, zero_result')
+    .gte('created_at', since)
+
+  const rows = data ?? []
+  const zero: Record<string, number> = {}
+  let totalResults = 0
+  for (const row of rows) {
+    if (row.zero_result) zero[row.query] = (zero[row.query] ?? 0) + 1
+    totalResults += row.results_count ?? 0
+  }
+  const zeroResult = Object.entries(zero)
+    .map(([query, count]) => ({ query, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit)
+  const avgResults = rows.length > 0 ? Math.round((totalResults / rows.length) * 100) / 100 : 0
+  return { zeroResult, avgResults }
+}

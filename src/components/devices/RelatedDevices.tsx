@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowRight } from 'lucide-react'
+import { trackEvent } from '@/lib/analytics/events'
 import type { Device } from '@/types/cms'
 
 interface RelatedDevicesProps {
@@ -26,6 +27,7 @@ export default function RelatedDevices({ devices, currentSlug }: RelatedDevicesP
             <Link
               key={device.id}
               href={`/devices/${brandSlug}/${device.slug}`}
+              onClick={() => trackEvent('related_click', { contentType: 'device', contentId: device.slug, deviceSlug: currentSlug })}
               className="group rounded-xl border border-border bg-card p-4 transition-shadow hover:shadow-lg"
             >
               <div className="relative mb-3 aspect-[4/3] overflow-hidden rounded-lg bg-muted">
