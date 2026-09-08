@@ -60,6 +60,7 @@ const migrations = [
   '036_interactions_and_fp_id.sql',
   '037_phase3_earnings_alerts.sql',
   '038_analytics_alerts_and_digest.sql',
+  '039_retention_and_rule_mgmt.sql',
 ]
 
 async function runMigrations() {

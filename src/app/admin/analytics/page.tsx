@@ -9,6 +9,7 @@ import {
   getRevenueProxy, getSearchQuality,
   getQualifiedLeads, getEarningsReconciliation, getLinkHealthSummary,
   getAlertRules, computeAlertKpiValues, listAlertEvents,
+  getRetentionStatus, listRetentionLog,
 } from '@/lib/analytics/queries'
 import { getAdminUser } from '@/lib/admin/require-admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,6 +26,7 @@ import {
   MousePointerClick,
   Scale,
   Search,
+  Shield,
   Smartphone,
   Tag,
   Target,
@@ -44,6 +46,7 @@ import QualifiedLeadsTable from './QualifiedLeadsTable'
 import EarningsReconciliationTable from './EarningsReconciliationTable'
 import LinkHealthTable from './LinkHealthTable'
 import GoalsPanel from './GoalsPanel'
+import RetentionPanel from './RetentionPanel'
 
 type TabId =
   | 'overview'
@@ -180,15 +183,21 @@ const ROADMAP_GOALS: RoadmapItem[] = [
   },
   {
     phase: 'Live',
+    feature: 'Rule lifecycle (CRUD) + role matrix',
+    data: 'owner/admin manage rules; editor/viewer read-only',
+    kpi: 'Self-service KPI targets without code',
+  },
+  {
+    phase: 'Live',
+    feature: 'Retention & purge policy (Kenya DPA)',
+    data: 'per-table TTL in retention_policy; purge cron + admin preview/run; expunge-on-request',
+    kpi: 'Governed data lifecycle + DPA accountability (audit log)',
+  },
+  {
+    phase: 'Phase 6',
     feature: 'Weekly digest extension',
     data: 'revenue proxy + alert fires + zero-result gaps in the Monday digest',
     kpi: 'Stakeholder email with funnel + risk summary',
-  },
-  {
-    phase: 'Phase 5',
-    feature: 'Retention & purge policy',
-    data: 'raw event TTL, PII expunge on request (Kenya DPA)',
-    kpi: 'Governed data lifecycle over analytics stores',
   },
 ]
 
@@ -310,10 +319,14 @@ export default async function AnalyticsPage({
   let alertRules: Awaited<ReturnType<typeof getAlertRules>> = []
   let alertKpiValues: Record<string, number> = {}
   let alertEvents: Awaited<ReturnType<typeof listAlertEvents>> = []
+  let retentionStatus: Awaited<ReturnType<typeof getRetentionStatus>> = []
+  let retentionLog: Awaited<ReturnType<typeof listRetentionLog>> = []
   if (activeTab === 'goals' && allowedTabs.includes('goals')) {
     alertRules = await getAlertRules()
     alertKpiValues = await computeAlertKpiValues(period)
     alertEvents = await listAlertEvents(25)
+    retentionStatus = await getRetentionStatus()
+    retentionLog = await listRetentionLog(10)
   }
 
   // Content & SEO: group top pages by section( top 5 per section)
@@ -1095,7 +1108,27 @@ export default async function AnalyticsPage({
 
       {activeTab === 'goals' && (
         <div className="space-y-6">
-          <GoalsPanel rules={alertRules} values={alertKpiValues} events={alertEvents} />
+          <GoalsPanel
+            rules={alertRules}
+            values={alertKpiValues}
+            events={alertEvents}
+            canManage={role === 'owner' || role === 'admin'}
+          />
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-brand-primary" />
+                Data Retention &amp; Privacy (Kenya DPA)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RetentionPanel
+                status={retentionStatus}
+                log={retentionLog}
+                canManage={role === 'owner' || role === 'admin'}
+              />
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

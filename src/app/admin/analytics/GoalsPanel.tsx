@@ -18,6 +18,7 @@ const KPI_LABELS: Record<string, { label: string; kind: 'count' | 'pct' }> = {
   hot_leads: { label: 'Hot-tier qualified leads', kind: 'count' },
   broken_links: { label: 'Broken buy links', kind: 'count' },
 }
+const KPI_KEYS = Object.keys(KPI_LABELS)
 
 function fmt(value: number, kind: 'count' | 'pct'): string {
   return `${value.toLocaleString()}${kind === 'pct' ? '%' : ''}`
@@ -32,17 +33,28 @@ function statusFor(rule: AlertRule, value: number | undefined): { label: string;
   return { label: 'On track', cls: 'bg-emerald-500/15 text-emerald-400' }
 }
 
+const EMPTY_FORM = { name: '', kpi: 'views', operator: 'gt', threshold: '1000', period: '30d', description: '' }
+
 export default function GoalsPanel({
   rules,
   values,
   events,
+  canManage,
 }: {
   rules: AlertRule[]
   values: Record<string, number>
   events: AlertEvent[]
+  canManage: boolean
 }) {
+  const [alertRules, setAlertRules] = useState(rules)
   const [alertEvents, setAlertEvents] = useState(events)
   const [acking, setAcking] = useState<number | null>(null)
+  const [busyId, setBusyId] = useState<number | null>(null)
+  const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [formError, setFormError] = useState<string | null>(null)
 
   const acknowledge = async (id: number) => {
     setAcking(id)
@@ -62,14 +74,98 @@ export default function GoalsPanel({
     }
   }
 
+  const patchRule = async (rule: AlertRule, patch: Record<string, unknown>): Promise<boolean> => {
+    setBusyId(rule.id)
+    try {
+      const res = await fetch(`/api/admin/analytics/rules/${rule.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      if (res.ok) {
+        const json = await res.json()
+        setAlertRules(alertRules.map((r) => (r.id === rule.id ? json.rule : r)))
+        return true
+      }
+    } catch {
+      // ignore
+    } finally {
+      setBusyId(null)
+    }
+    return false
+  }
+
+  const toggleRule = async (rule: AlertRule) => {
+    await patchRule(rule, { enabled: !rule.enabled })
+  }
+
+  const startEdit = (rule: AlertRule) => {
+    setEditingId(rule.id)
+    setEditValue(String(rule.threshold))
+  }
+
+  const saveEdit = async (rule: AlertRule) => {
+    const threshold = Number(editValue)
+    if (!Number.isFinite(threshold) || threshold < 0) return
+    const ok = await patchRule(rule, { threshold })
+    if (ok) setEditingId(null)
+  }
+
+  const removeRule = async (rule: AlertRule) => {
+    if (!window.confirm(`Delete rule "${rule.name}"? Its alert history is removed too.`)) return
+    setBusyId(rule.id)
+    try {
+      const res = await fetch(`/api/admin/analytics/rules/${rule.id}`, { method: 'DELETE' })
+      if (res.ok) setAlertRules(alertRules.filter((r) => r.id !== rule.id))
+    } catch {
+      // ignore
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const createRule = async () => {
+    const threshold = Number(form.threshold)
+    if (!form.name.trim() || !Number.isFinite(threshold) || threshold < 0) {
+      setFormError('Name and a numeric threshold are required.')
+      return
+    }
+    setFormError(null)
+    try {
+      const res = await fetch('/api/admin/analytics/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.name,
+          kpi: form.kpi,
+          operator: form.operator,
+          threshold,
+          period: form.period,
+          description: form.description,
+        }),
+      })
+      if (res.ok) {
+        const json = await res.json()
+        setAlertRules([...alertRules, json.rule])
+        setShowForm(false)
+        setForm(EMPTY_FORM)
+      } else {
+        setFormError('Failed to create rule - check the payload.')
+      }
+    } catch {
+      setFormError('Request failed.')
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Goal progress cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {rules.map((rule) => {
+        {alertRules.map((rule) => {
           const meta = KPI_LABELS[rule.kpi] ?? { label: rule.kpi, kind: 'count' as const }
           const value = values[rule.kpi]
           const status = statusFor(rule, value)
+          const editing = editingId === rule.id
           const pct = value !== undefined && rule.threshold !== 0
             ? Math.round((value / rule.threshold) * 100)
             : null
@@ -83,24 +179,150 @@ export default function GoalsPanel({
               </div>
               <p className="text-xs text-muted-foreground mt-1">{meta.label} · {rule.period}</p>
               <div className="mt-3 flex items-end gap-2">
-                <span className="text-2xl font-bold text-foreground">
-                  {value !== undefined ? fmt(value, meta.kind) : '—'}
-                </span>
+                {editing ? (
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className="w-28 rounded-lg border border-border bg-card px-2 py-1 text-sm text-foreground"
+                    autoFocus
+                  />
+                ) : (
+                  <span className="text-2xl font-bold text-foreground">
+                    {value !== undefined ? fmt(value, meta.kind) : '—'}
+                  </span>
+                )}
                 <span className="text-xs text-muted-foreground">
                   {rule.operator === 'gt' ? 'target below' : 'target above'} {fmt(rule.threshold, meta.kind)}
                   {pct !== null ? ` · ${pct}% of target` : ''}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-2">{rule.description}</p>
-              <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-foreground/10 text-foreground/70">
-                {rule.enabled ? 'Enabled' : 'Disabled'}
-              </span>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${rule.enabled ? 'bg-emerald-500/15 text-emerald-400' : 'bg-foreground/10 text-muted-foreground'}`}>
+                  {rule.enabled ? 'Enabled' : 'Disabled'}
+                </span>
+                {canManage && (
+                  <>
+                    <button type="button" onClick={() => toggleRule(rule)} disabled={busyId === rule.id}
+                      className="text-xs px-2 py-0.5 rounded-lg border border-border text-muted-foreground hover:text-foreground transition-colors">
+                      {rule.enabled ? 'Pause' : 'Enable'}
+                    </button>
+                    {!editing ? (
+                      <button type="button" onClick={() => startEdit(rule)} disabled={busyId === rule.id}
+                        className="text-xs px-2 py-0.5 rounded-lg border border-border text-muted-foreground hover:text-foreground transition-colors">
+                        Edit
+                      </button>
+                    ) : (
+                      <>
+                        <button type="button" onClick={() => void saveEdit(rule)} disabled={busyId === rule.id}
+                          className="text-xs px-2 py-0.5 rounded-lg border border-brand-primary/40 text-brand-primary hover:bg-brand-primary/10 transition-colors">
+                          Save
+                        </button>
+                        <button type="button" onClick={() => setEditingId(null)}
+                          className="text-xs px-2 py-0.5 rounded-lg border border-border text-muted-foreground hover:text-foreground transition-colors">
+                          Cancel
+                        </button>
+                      </>
+                    )}
+                    <button type="button" onClick={() => void removeRule(rule)} disabled={busyId === rule.id}
+                      className="text-xs px-2 py-0.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors">
+                      Delete
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           )
         })}
       </div>
 
-      {/* Alert activity log */}
+      {canManage && (
+        <button
+          type="button"
+          onClick={() => setShowForm(!showForm)}
+          className="px-3 py-1.5 rounded-lg border border-border text-sm text-muted-foreground hover:bg-accent transition-colors"
+        >
+          {showForm ? 'Cancel new rule' : '+ New alert rule'}
+        </button>
+      )}
+{/* New rule form */}
+      {canManage && showForm && (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-sm font-semibold text-foreground">New alert rule</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 mt-3">
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="Rule name"
+              className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground"
+            />
+            <select
+              value={form.kpi}
+              onChange={(e) => setForm({ ...form, kpi: e.target.value })}
+              className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground"
+            >
+              {KPI_KEYS.map((k) => (
+                <option key={k} value={k}>{KPI_LABELS[k].label}</option>
+              ))}
+            </select>
+            <select
+              value={form.operator}
+              onChange={(e) => setForm({ ...form, operator: e.target.value })}
+              className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground"
+            >
+              <option value="gt">above</option>
+              <option value="lt">below</option>
+            </select>
+            <input
+              type="number"
+              min={0}
+              step="any"
+              value={form.threshold}
+              onChange={(e) => setForm({ ...form, threshold: e.target.value })}
+              placeholder="Threshold"
+              className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground"
+            />
+            <select
+              value={form.period}
+              onChange={(e) => setForm({ ...form, period: e.target.value })}
+              className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground"
+            >
+              <option value="7d">7 days</option>
+              <option value="30d">30 days</option>
+              <option value="90d">90 days</option>
+            </select>
+            <input
+              type="text"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              placeholder="Description (optional)"
+              className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground"
+            />
+          </div>
+          {formError && <p className="text-xs text-red-400 mt-2">{formError}</p>}
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={() => void createRule()}
+              className="px-3 py-1.5 rounded-lg bg-brand-primary text-primary-foreground text-sm hover:bg-brand-primary/90 transition-colors"
+            >
+              Create rule
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowForm(false); setFormError(null) }}
+              className="px-3 py-1.5 rounded-lg border border-border text-sm text-muted-foreground hover:bg-accent transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+{/* Alert activity log */}
       <div className="overflow-x-auto rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead>

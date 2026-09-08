@@ -119,9 +119,12 @@ These are *our* implementation's contribution — recorded **here** as "proposed
 
 ### 5.2 Phasing
 
-- **Phase 1 (pure UI, ~no schema):** Tabbed IA; funnel strip; device/brand/retailer drilldowns; content-segmented top pages; Zero Report (views-without-clicks) — all derivable *today*。
-- **Phase 2 (small instrumentation):** interactions event table (compare/save/watch/related-click), FP-id for uniques/return/attribution,, UTM capture,, earnings import (CSV,, zero-result logging,, link-health cron,, alerts + digest。
-- **Phase 3 (platform-level):** affiliate-network APIs,, GSC import,, scheduled/slack exports,, custom dashboard builder (GA4-style exploration)。
+- **Phase 1 (pure UI, ~no schema) — ✅ LIVE:** Tabbed IA; funnel strip; device/brand/retailer drilldowns; content-segmented top pages; Zero Report (views-without-clicks) — all derivable *today*。
+- **Phase 2 (small instrumentation) — ✅ LIVE:** interactions event table (compare/save/watch/related-click), FP-id for uniques/return/attribution, UTM capture, zero-result logging, link-health cron, earnings-import foundation (commission-rate config), alerts + digest。
+- **Phase 3 (platform-level) — ✅ LIVE:** Qualification scoring (MQL-equivalent hot/warm/cold + export), affiliate earnings reconciliation (proxy vs imported), buy-link health monitoring (daily HEAD-check cron + panel)。
+- **Phase 4 (goals & automation) — ✅ LIVE:** Alert-rule engine (`analytics_alert_rules` × KPI matrix), daily breach cron + email, Goals tab with progress cards + acknowledge workflow, digest extension (revenue proxy / alerts / search gaps)。
+- **Phase 5 (lifecycle & self-service) — ✅ LIVE:** Per-table retention TTL (`retention_policy`) + monthly purge cron + admin preview/run + append-only audit log (`data_retention_log`); DPA expunge-on-request by `fp_id`; alert-rule CRUD (create / edit / pause / delete) gated owner/admin; role matrix enforced for the Goals tab (owner/admin manage, editor/viewer read-only)。
+- **Phase 6 (future):** custom dashboard builder (GA4-style exploration), scheduled/slack exports, affiliate-network APIs & earnings CSV import UI, weekly digest extension polish。
 
 ### 5.3 KPI dictionary skeleton (every KPI ships with full metadata — ℹ glossary)
 
@@ -197,10 +200,10 @@ Each would carry the standard canvas treatment: `Domain → SubDomain → Capabi
 
 ## 8. Open Questions (for architecture review)
 
-1. **FP-id vs cookieless**: first-party cookie id added for uniques/attribution — acceptable under Kenya DP Act as long as PII-scoped and consent-cleared? (Recommended yes, with a bake-in opt-out.)
-2.. **Earnings import mechanism**: CSV-first is recommended (fastest), then network APIs — confirm women's network partners (Amazon Associates API availability,, Jumia/Kilimall affiliate portals) exist for Phase 3.
-3.. **Role matrix**: confirm owner/editor/viewer surfaces per tab (see §3.4) before layout enforcement。
-4.. **GA4-strictness vs Fweezy-owned**: keep `ga4_alias` as *reference only*, with Fweezy-owned metrics (revenue proxy,, qualification score) as first-class — confirm you don't need literal GA4 API parity (you don't, per the vision。
+1. **FP-id vs cookieless**: ✅ **Resolved in Phase 2** — first-party `fweezy_fp` cookie (395 days, SameSite=Lax, PII-scoped per Kenya DP Act, no third-party trackers), with Phase 5 expunge-on-request + retention TTL as the governance layer.
+2. **Earnings import mechanism**: 🔶 **Partial** — `affiliate_commission_rates` + `affiliate_earnings` ledger and the reconciliation UI are live (Phase 3); CSV-upload + network-API importers remain Phase 6 work.
+3. **Role matrix**: ✅ **Resolved in Phase 5** — owner/admin manage alert rules + retention actions; editor/viewer are read-only (enforced in both the API routes and the client panels).
+4. **GA4-strictness vs Fweezy-owned**: keep `ga4_alias` as *reference only*, with Fweezy-owned metrics (revenue proxy, qualification score) as first-class — confirmed: no literal GA4 API parity needed.
 
 ---
 

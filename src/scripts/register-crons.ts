@@ -50,6 +50,12 @@ const jobs = [
     cron: '30 6 * * *',
   },
   {
+    name: 'retention',
+    url: `${BASE_URL}/api/cron/retention`,
+    // Monthly on the 1st at 06:00 UTC (09:00 EAT) - TTL purge of raw analytics
+    cron: '0 6 1 * *',
+  },
+  {
     name: 'seed-coming-soon',
     url: `${BASE_URL}/api/cron/seed-coming-soon`,
     // Daily at 06:00 UTC (09:00 EAT)

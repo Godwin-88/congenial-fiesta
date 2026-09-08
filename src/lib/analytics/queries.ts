@@ -1080,3 +1080,260 @@ export async function acknowledgeAlert(eventId: number): Promise<boolean> {
     .eq('id', eventId)
   return !error
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 5 - Data retention & purge policy + alert-rule lifecycle
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface RetentionPolicyRow {
+  table: string
+  retentionDays: number
+  enabled: boolean
+}
+
+export interface RetentionTableStatus extends RetentionPolicyRow {
+  rows: number
+  purgable: number
+  oldestAt: string | null
+}
+
+export interface PurgeResult {
+  purged: Array<{ table: string; rows: number; retentionDays: number }>
+  total: number
+}
+
+const RETENTION_TABLES: Array<{ table: string; hasFpId: boolean }> = [
+  { table: 'page_views', hasFpId: true },
+  { table: 'affiliate_clicks', hasFpId: true },
+  { table: 'interactions', hasFpId: true },
+  { table: 'search_queries', hasFpId: false },
+]
+
+function mapRetentionPolicy(row: Record<string, unknown>): RetentionPolicyRow {
+  return {
+    table: String(row.table_name ?? ''),
+    retentionDays: Number(row.retention_days ?? 730),
+    enabled: Boolean(row.enabled),
+  }
+}
+
+export async function getRetentionPolicies(): Promise<RetentionPolicyRow[]> {
+  const { data } = await supabase.from('retention_policy').select('*').order('id', { ascending: true })
+  const rows = (data ?? []).map(mapRetentionPolicy)
+  // Always return one entry per known raw table, defaulting missing policies.
+  for (const { table } of RETENTION_TABLES) {
+    if (!rows.some((r) => r.table === table)) rows.push({ table, retentionDays: 730, enabled: false })
+  }
+  return rows
+}
+
+async function cutoffFor(policy: RetentionPolicyRow): Promise<string> {
+  return new Date(Date.now() - policy.retentionDays * 24 * 60 * 60 * 1000).toISOString()
+}
+
+// Per-table row counts + purgable (older than TTL) counts. Read-only.
+export async function getRetentionStatus(): Promise<RetentionTableStatus[]> {
+  const policies = await getRetentionPolicies()
+  const status: RetentionTableStatus[] = []
+  for (const policy of policies) {
+    const { table } = policy
+    const { count: rows } = await supabase
+      .from(table)
+      .select('*', { count: 'exact', head: true })
+    const cutoff = await cutoffFor(policy)
+    const { count: purgable } = await supabase
+      .from(table)
+      .select('*', { count: 'exact', head: true })
+      .lt('created_at', cutoff)
+    const { data: oldestRow } = await supabase
+      .from(table)
+      .select('created_at')
+      .order('created_at', { ascending: true })
+      .limit(1)
+    status.push({
+      ...policy,
+      rows: rows ?? 0,
+      purgable: purgable ?? 0,
+      oldestAt: oldestRow && oldestRow.length > 0 ? new Date(String(oldestRow[0].created_at)).toISOString() : null,
+    })
+  }
+  return status
+}
+
+async function logRetention(action: 'purge' | 'expunge', rows: Array<{ table: string; count: number }>, extra: { triggeredBy: string; fpId?: string; olderThan?: string; note?: string }) {
+  for (const row of rows) {
+    if (row.count === 0) continue
+    await supabase
+      .from('data_retention_log')
+      .insert({
+        action,
+        table_name: row.table,
+        rows_affected: row.count,
+        older_than: extra.olderThan,
+        fp_id: extra.fpId,
+        triggered_by: extra.triggeredBy,
+        note: extra.note,
+      })
+  }
+}
+
+// Hard-delete raw events past their per-table TTL. dryRun computes the counts
+// without deleting or logging - the admin UI defaults to a dry-run preview.
+export async function purgeExpiredRawEvents(dryRun = false, triggeredBy = 'cron'): Promise<PurgeResult> {
+  const policies = await getRetentionPolicies()
+  const purged: Array<{ table: string; rows: number; retentionDays: number }> = []
+
+  for (const policy of policies) {
+    if (!policy.enabled) continue
+    const cutoff = await cutoffFor(policy)
+    const { count: purgable } = await supabase
+      .from(policy.table)
+      .select('*', { count: 'exact', head: true })
+      .lt('created_at', cutoff)
+    const rows = purgable ?? 0
+
+    if (rows > 0 && !dryRun) {
+      const { error } = await supabase.from(policy.table).delete().lt('created_at', cutoff)
+      if (error) {
+        console.error(`[retention] purge failed on ${policy.table}:`, error.message)
+        continue
+      }
+    }
+    if (rows > 0) {
+      purged.push({ table: policy.table, rows, retentionDays: policy.retentionDays })
+      if (!dryRun) {
+        await logRetention('purge', [{ table: policy.table, count: rows }], {
+          triggeredBy,
+          olderThan: cutoff,
+          note: `TTL ${policy.retentionDays}d`,
+        })
+      }
+    }
+  }
+
+  return {
+    purged: purged.sort((a, b) => b.rows - a.rows),
+    total: purged.reduce((sum, row) => sum + row.rows, 0),
+  }
+}
+
+// Expunge-on-request (Kenya DPA): remove every raw event bound to one fp_id
+// across all first-party stores that carry it. Append-only audit written.
+export async function expungeVisitorData(fpId: string, triggeredBy = 'admin'): Promise<PurgeResult> {
+  const trimmed = fpId.trim()
+  if (!trimmed) return { purged: [], total: 0 }
+
+  const purged: Array<{ table: string; rows: number; retentionDays: number }> = []
+  for (const { table, hasFpId } of RETENTION_TABLES) {
+    if (!hasFpId) continue
+    const { count: matching } = await supabase
+      .from(table)
+      .select('*', { count: 'exact', head: true })
+      .eq('fp_id', trimmed)
+    const rows = matching ?? 0
+    if (rows === 0) continue
+
+    const { error } = await supabase.from(table).delete().eq('fp_id', trimmed)
+    if (error) {
+      console.error(`[retention] expunge failed on ${table}:`, error.message)
+      continue
+    }
+    purged.push({ table, rows, retentionDays: 0 })
+    await logRetention('expunge', [{ table, count: rows }], {
+      triggeredBy,
+      fpId: trimmed,
+      note: 'DPA expunge-on-request',
+    })
+  }
+
+  return { purged: purged.sort((a, b) => b.rows - a.rows), total: purged.reduce((sum, row) => sum + row.rows, 0) }
+}
+export interface RetentionLogRow {
+  id: number
+  action: string
+  table: string | null
+  rows: number
+  olderThan: string | null
+  fpId: string | null
+  triggeredBy: string
+  note: string | null
+  createdAt: string
+}
+
+export async function listRetentionLog(limit = 10): Promise<RetentionLogRow[]> {
+  const { data } = await supabase
+    .from('data_retention_log')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  return (data ?? []).map((row: Record<string, unknown>) => ({
+    id: Number(row.id),
+    action: String(row.action ?? ''),
+    table: row.table_name ? String(row.table_name) : null,
+    rows: Number(row.rows_affected ?? 0),
+    olderThan: row.older_than ? new Date(String(row.older_than)).toISOString() : null,
+    fpId: row.fp_id ? String(row.fp_id) : null,
+    triggeredBy: String(row.triggered_by ?? ''),
+    note: row.note ? String(row.note) : null,
+    createdAt: new Date(String(row.created_at)).toISOString(),
+  }))
+}
+
+// ── Alert-rule lifecycle (Goals & Alerts tab) ───────────────────────────────
+
+export interface AlertRuleInput {
+  name: string
+  kpi: string
+  operator: 'gt' | 'lt'
+  threshold: number
+  period: string
+  description?: string | null
+}
+
+export async function createAlertRule(input: AlertRuleInput): Promise<AlertRule | null> {
+  const { data, error } = await supabase
+    .from('analytics_alert_rules')
+    .insert({
+      name: input.name,
+      kpi: input.kpi,
+      operator: input.operator,
+      threshold: input.threshold,
+      period: input.period,
+      description: input.description ?? null,
+    })
+    .select()
+    .single()
+  if (error) {
+    console.error('[rules] create failed:', error.message)
+    return null
+  }
+  return mapAlertRule(data as Record<string, unknown>)
+}
+
+export async function updateAlertRule(id: number, patch: Partial<AlertRuleInput> & { enabled?: boolean }): Promise<AlertRule | null> {
+  const fields: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (patch.name !== undefined) fields.name = patch.name
+  if (patch.kpi !== undefined) fields.kpi = patch.kpi
+  if (patch.operator !== undefined) fields.operator = patch.operator
+  if (patch.threshold !== undefined) fields.threshold = patch.threshold
+  if (patch.period !== undefined) fields.period = patch.period
+  if (patch.description !== undefined) fields.description = patch.description
+  if (patch.enabled !== undefined) fields.enabled = patch.enabled
+
+  const { data, error } = await supabase
+    .from('analytics_alert_rules')
+    .update(fields)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) {
+    console.error('[rules] update failed:', error.message)
+    return null
+  }
+  return mapAlertRule(data as Record<string, unknown>)
+}
+
+export async function deleteAlertRule(id: number): Promise<boolean> {
+  const { error } = await supabase.from('analytics_alert_rules').delete().eq('id', id)
+  if (error) console.error('[rules] delete failed:', error.message)
+  return !error
+}
