@@ -1,8 +1,7 @@
-import type { ReactNode } from 'react'
 import Link from 'next/link'
 import {
   getTotalPageViews,
- getPageViewsOverTime, getTopPages, getTrafficSources, getDeviceTypeBreakdown,
+  getPageViewsOverTime, getTopPages, getTrafficSources, getDeviceTypeBreakdown,
   getTopAffiliatePages, getAffiliateCTR, getClicksByRetailer, getTopSearchQueries, getFunnelMetrics,
   getZeroReport, getTopDevices, getTopBrands, getTopContentPages, type ContentSection,
   getAudienceMetrics, getConsiderationMetrics, getCampaignMetrics, getTrustMetrics,
@@ -12,17 +11,15 @@ import {
   getRetentionStatus, listRetentionLog,
   runExploreQuery, listScheduledExports,
 } from '@/lib/analytics/queries'
+import { ROLE_ALLOWED, type TabId } from '@/lib/analytics/tabs'
 import { getAdminUser } from '@/lib/admin/require-admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
   Download,
-  Eye,
   FileDown,
-  FileText,
   Handshake,
   Heart,
-  LayoutDashboard,
   Megaphone,
   MousePointerClick,
   Plug,
@@ -32,8 +29,6 @@ import {
   Smartphone,
   Tag,
   Target,
-  TrendingUp,
-  Users,
   BarChart3,
 } from 'lucide-react'
 import PageViewsChart from './PageViewsChart'
@@ -54,76 +49,6 @@ import ExplorePanel from './ExplorePanel'
 import EarningsImportCard from './EarningsImportCard'
 import ScheduledExportsPanel from './ScheduledExportsPanel'
 import AffiliateNetworksPanel from './AffiliateNetworksPanel'
-
-type TabId =
-  | 'overview'
-  | 'traffic'
-  | 'content'
-  | 'devices'
-  | 'compare'
-  | 'community'
-  | 'affiliate'
-  | 'search'
-  | 'campaigns'
-  | 'outreach'
-  | 'goals'
-  | 'export'
-  | 'explore'
-
-const ALL_TABS: TabId[] = [
-  'overview',
-  'traffic',
-  'content',
-  'devices',
-  'compare',
-  'community',
-  'affiliate',
-  'search',
-  'campaigns',
-  'outreach',
-  'goals',
-  'export',
-  'explore',
-]
-
-const TAB_LABELS: Record<TabId, string> = {
-  overview: 'Overview',
-  traffic: 'Traffic & Audience',
-  content: 'Content & SEO',
-  devices: 'Devices & Catalog',
-  compare: 'Compare & Consideration',
-  community: 'Community & Engagement',
-  affiliate: 'Affiliate & Revenue',
-  search: 'Search & Discovery',
-  campaigns: 'Campaigns & Acquisition',
-  outreach: 'Outreach & Leads',
-  goals: 'Goals & Alerts',
-  export: 'Export & API',
-  explore: 'Explore',
-}
-
-const TAB_ICONS: Record<TabId, ReactNode> = {
-  overview: <LayoutDashboard className="h-4 w-4" />,
-  traffic: <Users className="h-4 w-4" />,
-  content: <FileText className="h-4 w-4" />,
-  devices: <Smartphone className="h-4 w-4" />,
-  compare: <Scale className="h-4 w-4" />,
-  community: <Heart className="h-4 w-4" />,
-  affiliate: <MousePointerClick className="h-4 w-4" />,
-  search: <Search className="h-4 w-4" />,
-  campaigns: <Megaphone className="h-4 w-4" />,
-  outreach: <Handshake className="h-4 w-4" />,
-  goals: <Target className="h-4 w-4" />,
-  export: <FileDown className="h-4 w-4" />,
-  explore: <BarChart3 className="h-4 w-4" />,
-}
-
-const ROLE_ALLOWED: Record<string, TabId[]> = {
-  owner: [...ALL_TABS],
-  admin: [...ALL_TABS],
-  editor: ['overview', 'traffic', 'content', 'devices', 'compare', 'community'],
-  viewer: ['overview', 'traffic'],
-}
 
 const ROADMAP_COMPARE: RoadmapItem[] = [
   {
@@ -396,30 +321,6 @@ export default async function AnalyticsPage({
             </Link>
           ))}
         </div>
-      </div>
-
-      {/* ── TAB BAR ───────────────────────────────────────── */}
-      <div className="flex gap-2 overflow-x-auto pb-2 mb-8">
-        {allowedTabs.map((id) => {
-          const active = id === activeTab
-          return (
-            <Link key={id} href={`/admin/analytics?tab=${id}&period=${period}`}>
-              <Button
-                variant={active ? 'default' : 'outline'}
-                size="sm"
-                className={[
-                  active ? 'bg-brand-primary' : 'border-border text-muted-foreground',
-                  'whitespace-nowrap',
-                ].join(' ')}
-              >
-                <span className="flex items-center gap-1">
-                  {TAB_ICONS[id]}
-                  {TAB_LABELS[id]}
-                </span>
-              </Button>
-            </Link>
-          )
-        })}
       </div>
 
       {/* ── PANELS ────────────────────────────────────────── */}
