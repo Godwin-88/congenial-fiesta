@@ -44,6 +44,12 @@ const jobs = [
     cron: '0 8 * * *',
   },
   {
+    name: 'alerts',
+    url: `${BASE_URL}/api/cron/alerts`,
+    // Daily at 06:30 UTC (09:30 EAT)
+    cron: '30 6 * * *',
+  },
+  {
     name: 'seed-coming-soon',
     url: `${BASE_URL}/api/cron/seed-coming-soon`,
     // Daily at 06:00 UTC (09:00 EAT)

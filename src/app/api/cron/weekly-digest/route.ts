@@ -86,6 +86,39 @@ const cronHandler = verifySignatureAppRouter(async () => {
     }
   }
 
+  // 5. Revenue proxy for the week (clicks x commission rate)
+  const { data: weekClicks } = await supabase
+    .from('affiliate_clicks')
+    .select('retailer')
+    .gte('created_at', weekStart.toISOString())
+    .lte('created_at', weekEnd.toISOString())
+  const { data: commissionRates } = await supabase
+    .from('affiliate_commission_rates')
+    .select('retailer, rate')
+
+  const rateMap = new Map<string, number>()
+  for (const rateRow of commissionRates ?? []) rateMap.set(rateRow.retailer, Number(rateRow.rate))
+  const clicksByRetailer: Record<string, number> = {}
+  for (const row of weekClicks ?? []) clicksByRetailer[row.retailer] = (clicksByRetailer[row.retailer] ?? 0) + 1
+  const estRevenue = Math.round(
+    Object.entries(clicksByRetailer).reduce((sum, [retailer, count]) => sum + count * (rateMap.get(retailer) ?? 0), 0) * 100
+  ) / 100
+
+  // 6. Zero-result searches in the week
+  const { count: zeroResultCount } = await supabase
+    .from('search_queries')
+    .select('*', { count: 'exact', head: true })
+    .eq('zero_result', true)
+    .gte('created_at', weekStart.toISOString())
+    .lte('created_at', weekEnd.toISOString())
+
+  // 7. Alerts fired in the week
+  const { count: alertsFired } = await supabase
+    .from('alert_events')
+    .select('*', { count: 'exact', head: true })
+    .gte('fired_at', weekStart.toISOString())
+    .lte('fired_at', weekEnd.toISOString())
+
   // Build HTML
   const trafficRows = Object.entries(trafficSources)
     .sort((a, b) => b[1] - a[1])
@@ -118,6 +151,15 @@ const cronHandler = verifySignatureAppRouter(async () => {
 
       <h2 style="color: #F59E0B; font-size: 18px; margin-top: 24px;">💰 Top Affiliate Pages</h2>
       <ol style="padding-left:20px;">${affiliateRows}</ol>
+
+      <h2 style="color: #F59E0B; font-size: 18px; margin-top: 24px;">💰 Estimated Revenue</h2>
+      <p>Est. affiliate revenue (clicks × commission rates): <strong style="color:#F9FAFB;">KES ${estRevenue.toLocaleString()}</strong></p>
+
+      <h2 style="color: #F59E0B; font-size: 18px; margin-top: 24px;">⚠️ Alerts</h2>
+      <p><strong style="color:#F9FAFB;">${alertsFired ?? 0}</strong> alert(s) fired this week — <a href="${serverUrl}/admin/analytics?tab=goals" style="color:#0066FF;">review the Goals &amp; Alerts tab</a></p>
+
+      <h2 style="color: #F59E0B; font-size: 18px; margin-top: 24px;">🔎 Zero-Result Gaps</h2>
+      <p><strong style="color:#F9FAFB;">${zeroResultCount ?? 0}</strong> searches returned no results — content backlog opportunity</p>
 
       <p style="color:#9CA3AF; font-size:12px; margin-top:32px;">
         Sent automatically by FweezyTech — <a href="${serverUrl}/admin/analytics" style="color:#0066FF;">View full dashboard</a>

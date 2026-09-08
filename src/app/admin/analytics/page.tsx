@@ -8,6 +8,7 @@ import {
   getAudienceMetrics, getConsiderationMetrics, getCampaignMetrics, getTrustMetrics,
   getRevenueProxy, getSearchQuality,
   getQualifiedLeads, getEarningsReconciliation, getLinkHealthSummary,
+  getAlertRules, computeAlertKpiValues, listAlertEvents,
 } from '@/lib/analytics/queries'
 import { getAdminUser } from '@/lib/admin/require-admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -42,6 +43,7 @@ import RoadmapPanel, { type RoadmapItem } from './RoadmapPanel'
 import QualifiedLeadsTable from './QualifiedLeadsTable'
 import EarningsReconciliationTable from './EarningsReconciliationTable'
 import LinkHealthTable from './LinkHealthTable'
+import GoalsPanel from './GoalsPanel'
 
 type TabId =
   | 'overview'
@@ -172,15 +174,21 @@ const ROADMAP_OUTREACH: RoadmapItem[] = [
 const ROADMAP_GOALS: RoadmapItem[] = [
   {
     phase: 'Live',
-    feature: 'Link-health alert + Zero Report gate',
-    data: 'link-health cron + views-without-clicks',
-    kpi: 'Buy-link ops tickets · revenue-leak finder',
+    feature: 'Rule engine + alert cron',
+    data: 'analytics_alert_rules thresholds x KPI values; alert_events dedupe',
+    kpi: 'Prescriptive alerts on CTR / traffic / revenue-leak / search gaps',
   },
   {
-    phase: 'Phase 3',
-    feature: 'Prescriptive recommendations & digest',
-    data: 'rule engine over warehouse marts',
-    kpi: 'Auto action tickets (content backlog, buy-link ops)',
+    phase: 'Live',
+    feature: 'Weekly digest extension',
+    data: 'revenue proxy + alert fires + zero-result gaps in the Monday digest',
+    kpi: 'Stakeholder email with funnel + risk summary',
+  },
+  {
+    phase: 'Phase 5',
+    feature: 'Retention & purge policy',
+    data: 'raw event TTL, PII expunge on request (Kenya DPA)',
+    kpi: 'Governed data lifecycle over analytics stores',
   },
 ]
 
@@ -296,6 +304,17 @@ export default async function AnalyticsPage({
     getEarningsReconciliation(period),
     getLinkHealthSummary(10),
   ])
+
+  // Goals & Alerts data is heavier (KPI matrix for the rule engine) - only
+  // evaluated when the tab is open.
+  let alertRules: Awaited<ReturnType<typeof getAlertRules>> = []
+  let alertKpiValues: Record<string, number> = {}
+  let alertEvents: Awaited<ReturnType<typeof listAlertEvents>> = []
+  if (activeTab === 'goals' && allowedTabs.includes('goals')) {
+    alertRules = await getAlertRules()
+    alertKpiValues = await computeAlertKpiValues(period)
+    alertEvents = await listAlertEvents(25)
+  }
 
   // Content & SEO: group top pages by section( top 5 per section)
   const contentBySection = new Map<ContentSection, Array<{ path: string; section: ContentSection; views: number }>>()
@@ -1076,11 +1095,12 @@ export default async function AnalyticsPage({
 
       {activeTab === 'goals' && (
         <div className="space-y-6">
+          <GoalsPanel rules={alertRules} values={alertKpiValues} events={alertEvents} />
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Target className="h-5 w-5 text-brand-primary" />
-                Goals, Alerts &amp; Automation
+                Automation Roadmap
               </CardTitle>
             </CardHeader>
             <CardContent>

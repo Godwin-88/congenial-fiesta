@@ -39,4 +39,5 @@ CREATE POLICY affiliate_earnings_service_write ON public.affiliate_earnings
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.affiliate_earnings TO service_role;
 GRANT SELECT ON public.affiliate_earnings TO authenticated;
 GRANT USAGE, SELECT ON SEQUENCE public.affiliate_earnings_id_seq TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.affiliate_earnings_id_seq TO service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.affiliate_earnings_id_seq TO authenticated;

@@ -886,3 +886,197 @@ export async function getLinkHealthSummary(limit: number = 10): Promise<{
     brokenLinks,
   }
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 4 - Goals, Alerts & Automation engine
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AlertRule {
+  id: number
+  name: string
+  kpi: string
+  operator: 'gt' | 'lt'
+  threshold: number
+  period: string
+  enabled: boolean
+  description: string | null
+}
+
+export interface AlertEvent {
+  id: number
+  ruleId: number
+  ruleName: string
+  kpi: string
+  operator: string
+  value: number
+  threshold: number
+  period: string
+  firedAt: string
+  acknowledgedAt: string | null
+}
+
+export interface AlertBreach {
+  ruleId: number
+  ruleName: string
+  kpi: string
+  operator: 'gt' | 'lt'
+  threshold: number
+  value: number
+  period: string
+}
+
+function mapAlertRule(row: Record<string, unknown>): AlertRule {
+  return {
+    id: Number(row.id),
+    name: String(row.name ?? ''),
+    kpi: String(row.kpi ?? ''),
+    operator: row.operator === 'lt' ? 'lt' : 'gt',
+    threshold: Number(row.threshold ?? 0),
+    period: String(row.period ?? '30d'),
+    enabled: Boolean(row.enabled),
+    description: row.description ? String(row.description) : null,
+  }
+}
+
+function mapAlertEvent(row: Record<string, unknown>): AlertEvent {
+  return {
+    id: Number(row.id),
+    ruleId: Number(row.rule_id),
+    ruleName: String(row.rule_name ?? ''),
+    kpi: String(row.kpi ?? ''),
+    operator: String(row.operator ?? 'gt'),
+    value: Number(row.value ?? 0),
+    threshold: Number(row.threshold ?? 0),
+    period: String(row.period ?? ''),
+    firedAt: row.fired_at ? new Date(String(row.fired_at)).toISOString() : '',
+    acknowledgedAt: row.acknowledged_at ? new Date(String(row.acknowledged_at)).toISOString() : null,
+  }
+}
+
+export async function getAlertRules(): Promise<AlertRule[]> {
+  const { data } = await supabase
+    .from('analytics_alert_rules')
+    .select('*')
+    .order('id', { ascending: true })
+  return (data ?? []).map(mapAlertRule)
+}
+
+export async function listAlertEvents(limit = 20): Promise<AlertEvent[]> {
+  const { data } = await supabase
+    .from('alert_events')
+    .select('*')
+    .order('fired_at', { ascending: false })
+    .limit(limit)
+  return (data ?? []).map(mapAlertEvent)
+}
+
+// Total page views attributable to device pages that produced zero affiliate
+// clicks in the period - the full revenue-leakage number (unlimited).
+export async function getZeroReportCount(period: string): Promise<number> {
+  const [viewRows, clickMap] = await Promise.all([
+    loadDeviceViewCounts(period),
+    loadAffiliateClickCounts(period),
+  ])
+  return viewRows
+    .filter((row) => (clickMap.get(row.slug) ?? 0) === 0)
+    .reduce((sum, row) => sum + row.views, 0)
+}
+
+// All KPI signals the rule engine can threshold. Computed once per period.
+export async function computeAlertKpiValues(period: string): Promise<Record<string, number>> {
+  const [funnel, audience, consideration, trust, revenue, searchQuality, zeroReportCount, qualifiedLeads, linkHealth] =
+    await Promise.all([
+      getFunnelMetrics(period),
+      getAudienceMetrics(period),
+      getConsiderationMetrics(period),
+      getTrustMetrics(period),
+      getRevenueProxy(period),
+      getSearchQuality(period, 10000),
+      getZeroReportCount(period),
+      getQualifiedLeads(period, 10000),
+      getLinkHealthSummary(1000),
+    ])
+
+  return {
+    views: funnel.totalViews,
+    unique_visitors: audience.uniqueVisitors,
+    return_rate: audience.returnRate,
+    device_views: funnel.deviceViews,
+    affiliate_clicks: funnel.clicks,
+    device_to_ctr: funnel.deviceToClickRate,
+    revenue_proxy: revenue.weightedClicks,
+    zero_report: zeroReportCount,
+    search_gap: searchQuality.zeroResult.reduce((sum, row) => sum + row.count, 0),
+    consideration_events:
+      consideration.saves + consideration.addToCompare + consideration.watches + consideration.relatedClicks,
+    trust_coverage: trust.coveragePct,
+    hot_leads: qualifiedLeads.filter((lead) => lead.bucket === 'hot').length,
+    broken_links: linkHealth.summary.broken,
+  }
+}
+
+// Evaluate enabled rules and persist any new breaches (once per rule + period -
+// the alert_events unique index enforces dedupe at the DB level too).
+export async function evaluateAlerts(): Promise<AlertBreach[]> {
+  const rules = (await getAlertRules()).filter((rule) => rule.enabled)
+  if (rules.length === 0) return []
+
+  // Deduplicate: don't re-fire a rule that already has an event for its period.
+  const ruleIds = rules.map((rule) => rule.id)
+  const { data: existing } = await supabase
+    .from('alert_events')
+    .select('rule_id, period')
+    .in('rule_id', ruleIds)
+  const seen = new Set((existing ?? []).map((row) => `${String(row.rule_id)}:${String(row.period)}`))
+
+  const periods = Array.from(new Set(rules.map((rule) => rule.period)))
+  const valueCache = new Map<string, Record<string, number>>()
+  for (const period of periods) {
+    valueCache.set(period, await computeAlertKpiValues(period))
+  }
+
+  const breaches: AlertBreach[] = []
+  for (const rule of rules) {
+    if (seen.has(`${rule.id}:${rule.period}`)) continue
+    const values = valueCache.get(rule.period) ?? {}
+    const value = values[rule.kpi]
+    if (value === undefined) continue
+    const hit = rule.operator === 'gt' ? value > rule.threshold : value < rule.threshold
+    if (!hit) continue
+    breaches.push({
+      ruleId: rule.id,
+      ruleName: rule.name,
+      kpi: rule.kpi,
+      operator: rule.operator,
+      threshold: Number(rule.threshold),
+      value,
+      period: rule.period,
+    })
+  }
+
+  if (breaches.length > 0) {
+    const { error } = await supabase.from('alert_events').insert(
+      breaches.map((breach) => ({
+        rule_id: breach.ruleId,
+        rule_name: breach.ruleName,
+        kpi: breach.kpi,
+        operator: breach.operator,
+        threshold: breach.threshold,
+        value: breach.value,
+        period: breach.period,
+      }))
+    )
+    if (error) {
+      console.error('[alerts] failed to persist breaches:', error.message)
+    }
+  }
+
+  return breaches
+}
+
+export async function acknowledgeAlert(eventId: number): Promise<boolean> {
+  const { error } = await supabase
+    .from('alert_events')
+    .update({ acknowledged_at: new Date().toISOString() })
+    .eq('id', eventId)
+  return !error
+}
