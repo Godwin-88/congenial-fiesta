@@ -5,6 +5,7 @@ import Sidebar from '@/components/admin/Sidebar'
 import MobileTopbar from '@/components/admin/MobileTopbar'
 import AiAssistantWrapper from '@/components/admin/AiAssistantWrapper'
 import { AdminProvider } from '@/context/AdminContext'
+import { AdminNavProvider } from '@/components/admin/AdminNavContext'
 import { ThemeProvider } from '@ecosy/next-themes'
 
 const ralewaySans = Raleway({
@@ -41,15 +42,17 @@ export default async function AdminLayout({
         disableTransitionOnChange
       >
         <AdminProvider adminUser={adminUser}>
-          <div className="flex h-screen">
-            <Sidebar adminUser={adminUser} />
-            <div className="flex flex-1 flex-col overflow-hidden">
-              <MobileTopbar />
-              <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                {children}
-              </main>
+          <AdminNavProvider>
+            <div className="flex h-screen">
+              <Sidebar adminUser={adminUser} />
+              <div className="flex flex-1 flex-col overflow-hidden">
+                <MobileTopbar />
+                <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+                  {children}
+                </main>
+              </div>
             </div>
-          </div>
+          </AdminNavProvider>
           <AiAssistantWrapper />
         </AdminProvider>
       </ThemeProvider>

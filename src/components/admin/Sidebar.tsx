@@ -1,15 +1,18 @@
 'use client'
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Logo from './Logo'
 import type { AdminUser } from '@/types/cms'
+import { useAdminNav } from '@/components/admin/AdminNavContext'
 import {
   LayoutDashboard, FileText, Smartphone, Tag, Video,
-  Clock, Image, Handshake, Package, Trophy, Award,
+  Clock, Image as ImageIcon, Handshake, Package, Trophy, Award,
   FileJson, Users, Settings, LogOut, Menu, X,
   ChevronDown, Layers, Briefcase, Shield,
+  PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 
 interface NavItem {
@@ -35,7 +38,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: 'Brands', icon: <Tag size={18} />, href: '/admin/brands' },
       { label: 'Videos', icon: <Video size={18} />, href: '/admin/videos' },
       { label: 'Coming Soon', icon: <Clock size={18} />, href: '/admin/coming-soon' },
-      { label: 'Media Library', icon: <Image size={18} />, href: '/admin/media' },
+      { label: 'Media Library', icon: <ImageIcon size={18} />, href: '/admin/media' },
     ],
   },
   {
@@ -87,6 +90,7 @@ export default function Sidebar({ adminUser }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { sidebarCollapsed, toggleSidebar } = useAdminNav()
 
   // Close mobile sidebar on route change
   useEffect(() => {
@@ -136,27 +140,37 @@ export default function Sidebar({ adminUser }: SidebarProps) {
 
   const userRoles: Array<'admin' | 'editor' | 'viewer' | 'owner'> = ['owner', 'admin', 'editor', 'viewer']
 
-  const sidebarContent = (
+  const sidebarContent = (collapsed: boolean) => (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="p-4 border-b border-border">
-        <Link href="/admin">
-          <Logo />
-        </Link>
+      <div className={`border-b border-border ${collapsed ? 'p-3 flex justify-center' : 'p-4'}`}>
+        {collapsed ? (
+          <Link href="/admin" aria-label="Dashboard" title="Dashboard">
+            <span className="block w-8 h-8 rounded-lg overflow-hidden">
+              <img src="/images/logo.jpeg" alt="FweezyTech" className="object-cover w-full h-full" />
+            </span>
+          </Link>
+        ) : (
+          <Link href="/admin">
+            <Logo />
+          </Link>
+        )}
       </div>
 
       {/* Navigation — a standalone first-class Dashboard link for all signed-in
           admins, followed by the major menus (always visible); their items unfold
           on click, one section open at a time. */}
-      <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+      <nav className={`flex-1 overflow-y-auto ${collapsed ? 'p-2 space-y-1' : 'p-3 space-y-1'}`}>
         {/* Dashboard — never part of a group; first menu an admin sees */}
         <div className="pb-1">
           <Link
             href="/admin"
             onClick={() => setMobileOpen(false)}
             aria-current={pathname === '/admin' ? 'page' : undefined}
+            title={collapsed ? 'Dashboard' : undefined}
             className={[
-              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors',
+              'flex items-center rounded-lg text-sm transition-colors',
+              collapsed ? 'justify-center py-2 px-1' : 'gap-3 px-3 py-2',
               pathname === '/admin'
                 ? 'bg-brand-primary/10 text-brand-primary font-medium'
                 : 'text-muted-foreground hover:text-foreground hover:bg-accent',
@@ -165,7 +179,7 @@ export default function Sidebar({ adminUser }: SidebarProps) {
             <span className={pathname === '/admin' ? 'text-brand-primary' : 'text-muted-foreground'}>
               <LayoutDashboard size={18} />
             </span>
-            Dashboard
+            {!collapsed && 'Dashboard'}
           </Link>
         </div>
 
@@ -178,24 +192,36 @@ export default function Sidebar({ adminUser }: SidebarProps) {
             <div key={section.label}>
               <button
                 type="button"
-                onClick={() => setOpenSection(isOpen ? null : section.label)}
+                onClick={() => {
+                  if (collapsed) {
+                    // A rail icon click expands the sidebar and opens the section
+                    setOpenSection(section.label)
+                    toggleSidebar()
+                  } else {
+                    setOpenSection(isOpen ? null : section.label)
+                  }
+                }}
                 aria-expanded={isOpen}
+                title={collapsed ? section.label : undefined}
                 className={[
-                  'flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors',
+                  'flex w-full items-center rounded-lg text-[11px] font-semibold uppercase tracking-wider transition-colors',
+                  collapsed ? 'justify-center py-2 px-1' : 'justify-between gap-2 px-2 py-2',
                   hasActive ? 'text-brand-primary' : 'text-muted-foreground',
                   'hover:text-foreground hover:bg-accent',
                 ].join(' ')}
               >
-                <span className="flex min-w-0 items-center gap-2">
-                  <span className={hasActive ? 'text-brand-primary' : ''}>{section.icon}</span>
-                  {section.label}
+                <span className={`flex items-center ${collapsed ? '' : 'gap-2'} ${hasActive ? 'text-brand-primary' : ''}`}>
+                  {section.icon}
+                  {!collapsed && section.label}
                 </span>
-                <ChevronDown
-                  size={14}
-                  className={`shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-                />
+                {!collapsed && (
+                  <ChevronDown
+                    size={14}
+                    className={`shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                  />
+                )}
               </button>
-              {isOpen && (
+              {!collapsed && isOpen && (
                 <div className="mt-1 space-y-0.5">
                   {visibleItems.map((item) => {
                     const active = isActive(item.href)
@@ -228,30 +254,52 @@ export default function Sidebar({ adminUser }: SidebarProps) {
 
 
       {/* User section */}
-      <div className="p-4 border-t border-border">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-9 h-9 rounded-full bg-brand-primary flex items-center justify-center
-                          text-primary-foreground text-sm font-bold shrink-0">
-            {getInitials(adminUser.display_name)}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm text-foreground font-medium truncate">
-              {adminUser.display_name}
-            </p>
-            <span className={`inline-block text-xs px-1.5 py-0.5 rounded ${roleBadgeColor[adminUser.role]}`}>
-              {adminUser.role}
-            </span>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={handleSignOut}
-          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-muted-foreground
-                     hover:text-foreground hover:bg-accent rounded-lg transition-colors"
-        >
-          <LogOut size={16} />
-          Sign Out
-        </button>
+      <div className={`border-t border-border ${collapsed ? 'p-2 space-y-1' : 'p-4'}`}>
+        {collapsed ? (
+          <>
+            <div className="flex justify-center">
+              <span className="w-9 h-9 rounded-full bg-brand-primary flex items-center justify-center
+                              text-primary-foreground text-sm font-bold">
+                {getInitials(adminUser.display_name)}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              title="Sign out"
+              className="flex w-full justify-center py-2 rounded-lg text-muted-foreground
+                         hover:text-foreground hover:bg-accent transition-colors"
+            >
+              <LogOut size={16} />
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-full bg-brand-primary flex items-center justify-center
+                              text-primary-foreground text-sm font-bold shrink-0">
+                {getInitials(adminUser.display_name)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-foreground font-medium truncate">
+                  {adminUser.display_name}
+                </p>
+                <span className={`inline-block text-xs px-1.5 py-0.5 rounded ${roleBadgeColor[adminUser.role]}`}>
+                  {adminUser.role}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-muted-foreground
+                         hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+            >
+              <LogOut size={16} />
+              Sign Out
+            </button>
+          </>
+        )}
       </div>
     </div>
   )
@@ -277,16 +325,40 @@ export default function Sidebar({ adminUser }: SidebarProps) {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Mobile drawer — always expanded content, hamburger-toggled */}
       <aside
         className={[
           'fixed top-0 left-0 z-40 h-full w-64 bg-card border-r border-border',
-          'transition-transform duration-200',
+          'transition-transform duration-200 lg:hidden',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
-          'lg:translate-x-0 lg:static lg:z-auto',
         ].join(' ')}
       >
-        {sidebarContent}
+        {sidebarContent(false)}
+      </aside>
+
+      {/* Desktop sidebar — collapsible rail */}
+      <aside
+        className={[
+          'hidden lg:flex flex-col h-full w-64 bg-card border-r border-border shrink-0',
+          'transition-[width] duration-200 ease-in-out',
+          sidebarCollapsed ? 'lg:w-16' : 'lg:w-64',
+        ].join(' ')}
+      >
+        {sidebarContent(sidebarCollapsed)}
+        {/* Collapse / expand toggle */}
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="hidden lg:flex items-center justify-center gap-2 px-3 py-2 border-t border-border
+                     text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+        >
+          {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          {!sidebarCollapsed && (
+            <span className="text-xs font-medium">Collapse</span>
+          )}
+        </button>
       </aside>
     </>
   )
