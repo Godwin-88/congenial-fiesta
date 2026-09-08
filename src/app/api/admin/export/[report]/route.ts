@@ -5,6 +5,9 @@ import {
   getPageViewsOverTime,
   getTopPages,
   getTopAffiliatePages,
+  getQualifiedLeads,
+  getEarningsReconciliation,
+  getLinkHealthSummary,
 } from '@/lib/analytics/queries'
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? ''
@@ -68,6 +71,48 @@ export async function GET(
         clicks: d.clicks,
       })))
       filename = `affiliate-clicks-${period}-${date}.csv`
+      break
+    }
+    case 'qualified-leads': {
+      const data = await getQualifiedLeads(period, 100)
+      csv = toCSV(data.map((d, i) => ({
+        rank: i + 1,
+        visitor_id: d.fpId,
+        tier: d.bucket,
+        intent_score: d.score,
+        signed_in: d.signedIn ? 'yes' : 'no',
+        compares: d.compares,
+        saves: d.saves,
+        watches: d.watches,
+        related_clicks: d.relatedClicks,
+        affiliate_clicks: d.affiliateClicks,
+        last_active: d.lastSeenAt ?? '',
+      })))
+      filename = `qualified-leads-${period}-${date}.csv`
+      break
+    }
+    case 'earnings-reconciliation': {
+      const data = await getEarningsReconciliation(period)
+      csv = toCSV(data.rows.map((r) => ({
+        retailer: r.retailer,
+        clicks: r.clicks,
+        est_revenue_proxy: r.proxyWeighted,
+        actual_earnings: r.actualEarnings,
+        variance: r.variance,
+      })))
+      filename = `earnings-reconciliation-${period}-${date}.csv`
+      break
+    }
+    case 'link-health': {
+      const { brokenLinks } = await getLinkHealthSummary(100)
+      csv = toCSV(brokenLinks.map((l) => ({
+        device_slug: l.deviceSlug,
+        retailer: l.retailer,
+        url: l.url,
+        status_code: l.statusCode ?? '',
+        ok: l.ok ? 'yes' : 'no',
+      })))
+      filename = `link-health-${date}.csv`
       break
     }
     default:

@@ -38,6 +38,12 @@ const jobs = [
     cron: '0 5 * * 1',
   },
   {
+    name: 'link-health',
+    url: `${BASE_URL}/api/cron/link-health`,
+    // Daily at 08:00 UTC (11:00 EAT)
+    cron: '0 8 * * *',
+  },
+  {
     name: 'seed-coming-soon',
     url: `${BASE_URL}/api/cron/seed-coming-soon`,
     // Daily at 06:00 UTC (09:00 EAT)

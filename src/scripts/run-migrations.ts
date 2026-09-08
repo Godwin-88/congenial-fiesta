@@ -57,6 +57,8 @@ const migrations = [
   '033_app_secrets.sql',
   '034_app_config.sql',
   '035_auth_audit.sql',
+  '036_interactions_and_fp_id.sql',
+  '037_phase3_earnings_alerts.sql',
 ]
 
 async function runMigrations() {

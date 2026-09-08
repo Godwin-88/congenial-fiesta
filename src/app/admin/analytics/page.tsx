@@ -7,6 +7,7 @@ import {
   getZeroReport, getTopDevices, getTopBrands, getTopContentPages, type ContentSection,
   getAudienceMetrics, getConsiderationMetrics, getCampaignMetrics, getTrustMetrics,
   getRevenueProxy, getSearchQuality,
+  getQualifiedLeads, getEarningsReconciliation, getLinkHealthSummary,
 } from '@/lib/analytics/queries'
 import { getAdminUser } from '@/lib/admin/require-admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -38,6 +39,9 @@ import ZeroReportTable from './ZeroReportTable'
 import TopDevicesTable from './TopDevicesTable'
 import TopBrandsTable from './TopBrandsTable'
 import RoadmapPanel, { type RoadmapItem } from './RoadmapPanel'
+import QualifiedLeadsTable from './QualifiedLeadsTable'
+import EarningsReconciliationTable from './EarningsReconciliationTable'
+import LinkHealthTable from './LinkHealthTable'
 
 type TabId =
   | 'overview'
@@ -107,16 +111,16 @@ const ROLE_ALLOWED: Record<string, TabId[]> = {
 
 const ROADMAP_COMPARE: RoadmapItem[] = [
   {
-    phase: 'Phase 2',
+    phase: 'Live',
     feature: 'Compare & consider funnel',
     data: 'interactions events: add_to_compare · save · watch',
     kpi: 'kpi_consideration_depth · kpi_qual_score',
   },
   {
-    phase: 'Phase 2',
-    feature: 'Saved-comparison reuse rate',
-    data: 'auth-aware events joined to saved_comparisons',
-    kpi: 'Qualified-audience export (MQL → CRM)',
+    phase: 'Live',
+    feature: 'Qualified-leads scoreboard + CSV export',
+    data: 'FP-id intent score (compare=3 · save=2 · watch=1 · click=2)',
+    kpi: 'High-intent audience bucket → CRM handoff',
   },
 ]
 
@@ -152,25 +156,25 @@ const ROADMAP_CAMPAIGNS: RoadmapItem[] = [
 
 const ROADMAP_OUTREACH: RoadmapItem[] = [
   {
-    phase: 'Phase 2',
-    feature: 'Press/sponsor/media-kit inquiry funnel',
-    data: 'inquiry submissions with status flow',
-    kpi: 'Lead volume + status win-rate',
+    phase: 'Live',
+    feature: 'High-intent audience export',
+    data: 'FP-id + qualification score (compare/save/signed-in) → CSV',
+    kpi: 'MQL → CRM handoff',
   },
   {
     phase: 'Phase 3',
-    feature: 'High-intent audience export',
-    data: 'FP-id + qualification score (compare/save/signed-in)',
-    kpi: 'MQL → CRM handoff',
+    feature: 'Press/sponsor/media-kit inquiry funnel',
+    data: 'inquiry submissions with status flow',
+    kpi: 'Lead volume + status win-rate',
   },
 ]
 
 const ROADMAP_GOALS: RoadmapItem[] = [
   {
-    phase: 'Phase 2',
-    feature: 'KPI thresholds & alerts',
-    data: 'scheduled jobs over aggregates (cron infra exists)',
-    kpi: 'Zero Report gate · CTR-drop alarm · link-health alert',
+    phase: 'Live',
+    feature: 'Link-health alert + Zero Report gate',
+    data: 'link-health cron + views-without-clicks',
+    kpi: 'Buy-link ops tickets · revenue-leak finder',
   },
   {
     phase: 'Phase 3',
@@ -266,6 +270,7 @@ export default async function AnalyticsPage({
  viewsOverTime, topPages, trafficSources, deviceTypes, topAffiliate, affiliateCTR, clicksByRetailer,
  searchQueries, funnel, zeroReport, topDevices, topBrands, topContentPages,
     audience, consideration, campaignRows, trust, revenueProxy, searchQuality,
+    qualifiedLeads, earningsRecon, linkHealth,
   ] = await Promise.all([
     getTotalPageViews(period),
     getPageViewsOverTime(period),
@@ -287,6 +292,9 @@ export default async function AnalyticsPage({
     getTrustMetrics(period),
     getRevenueProxy(period),
     getSearchQuality(period, 10),
+    getQualifiedLeads(period, 25),
+    getEarningsReconciliation(period),
+    getLinkHealthSummary(10),
   ])
 
   // Content & SEO: group top pages by section( top 5 per section)
@@ -300,6 +308,9 @@ export default async function AnalyticsPage({
   const csvLinks = [
     { href: `/api/admin/export/top-pages?period=${period}`, label: 'Top Pages CSV' },
     { href: `/api/admin/export/affiliate-clicks?period=${period}`, label: 'Affiliate Clicks CSV' },
+    { href: `/api/admin/export/qualified-leads?period=${period}`, label: 'Qualified Leads CSV' },
+    { href: `/api/admin/export/earnings-reconciliation?period=${period}`, label: 'Earnings Recon CSV' },
+    { href: `/api/admin/export/link-health?period=${period}`, label: 'Link Health CSV' },
   ]
 
   return (
@@ -599,6 +610,22 @@ export default async function AnalyticsPage({
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Tag className="h-5 w-5 text-emerald-400" />
+                Buy-Link Health — Distribution Governance
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <LinkHealthTable summary={linkHealth.summary} brokenLinks={linkHealth.brokenLinks} />
+              <p className="text-muted-foreground text-xs mt-3">
+                Fed by the daily link-health cron (HEAD-checks every outbound buy link). Broken links
+                leak revenue — fix them to keep the buy funnel healthy.
+              </p>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -710,6 +737,23 @@ export default async function AnalyticsPage({
                   </tbody>
                 </table>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Scale className="h-5 w-5 text-emerald-400" />
+                Earnings Reconciliation — Proxy vs Actual (Finance)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EarningsReconciliationTable data={earningsRecon} />
+              <p className="text-muted-foreground text-xs mt-3">
+                Estimated commission-weighted clicks vs real earnings imported from affiliate networks
+                (Amazon Associates, Jumia, Kilimall). A positive variance means the proxy over-counts
+                — reconcile monthly before VAT/payout export.
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -828,8 +872,30 @@ export default async function AnalyticsPage({
                 </div>
               </div>
               <p className="text-muted-foreground text-xs mt-4">
-                Qualification intent per visitor (save · compare · watch) is the MQL signal. Phase 3 adds a per-visitor
-                qualification score + high-intent audience export feeding a CRM.
+                Qualification intent per visitor (save · compare · watch) is the MQL signal. Weighted
+                scores (compare=3 · save=2 · watch=1 · related=1 · affiliate click=2) bucket visitors
+                into hot / warm / cold tiers for the high-intent export.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Target className="h-5 w-5 text-amber-400" />
+                High-Intent Audience — Qualification Scoreboard
+              </CardTitle>
+              <Link href={`/api/admin/export/qualified-leads?period=${period}`}>
+                <Button variant="outline" size="sm" className="border-border text-muted-foreground">
+                  <Download className="h-4 w-4 mr-1" /> Qualified Leads CSV
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              <QualifiedLeadsTable data={qualifiedLeads} />
+              <p className="text-muted-foreground text-xs mt-3">
+                Hot tier = strong purchase intent (compare + save + clicks). Export to CSVs for CRM
+                onboarding / retargeting — the first-party audience asset GA can't give you.
               </p>
             </CardContent>
           </Card>

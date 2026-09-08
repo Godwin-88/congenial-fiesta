@@ -669,3 +669,220 @@ export async function getSearchQuality(
   const avgResults = rows.length > 0 ? Math.round((totalResults / rows.length) * 100) / 100 : 0
   return { zeroResult, avgResults }
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 3 — Qualification analytics / finance reconciliation / link health
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Weighted first-party intent score per visitor (MQL-equivalent).
+// Signals: compare(3) · save(2) · watch(1) · related_click(1) · affiliate click(2)
+// A signed-in visitor (user_id present) gets a +2 trust bonus.
+export interface QualifiedLead {
+  fpId: string
+  score: number
+  bucket: 'hot' | 'warm' | 'cold'
+  signedIn: boolean
+  compares: number
+  saves: number
+  watches: number
+  relatedClicks: number
+  affiliateClicks: number
+  lastSeenAt?: string
+}
+
+const INTENT_WEIGHT: Record<string, number> = {
+  add_to_compare: 3,
+  save: 2,
+  watch: 1,
+  related_click: 1,
+}
+
+const bucketScore = (score: number): QualifiedLead['bucket'] =>
+  score >= 8 ? 'hot' : score >= 4 ? 'warm' : 'cold'
+
+// High-intent audience — the qualification scoreboard. Feeds the CRM/high-intent export.
+export async function getQualifiedLeads(
+  period: string,
+  limit: number = 25,
+): Promise<QualifiedLead[]> {
+  const since = sinceISO(period)
+  const { data: interactions } = await supabase
+    .from('interactions')
+    .select('fp_id, action, user_id, created_at')
+    .not('fp_id', 'is', null)
+    .gte('created_at', since)
+  const { data: clicks } = await supabase
+    .from('affiliate_clicks')
+    .select('fp_id')
+    .not('fp_id', 'is', null)
+    .gte('created_at', since)
+
+  const leads = new Map<string, QualifiedLead & { lastSeen: number }>()
+
+  const touch = (fpId: string, createdAt?: string) => {
+    const existing = leads.get(fpId)
+    const seen = createdAt ? new Date(createdAt).getTime() : Date.now()
+    if (existing) {
+      existing.lastSeen = Math.max(existing.lastSeen, seen)
+    } else {
+      leads.set(fpId, {
+        fpId,
+        score: 0,
+        bucket: 'cold',
+        signedIn: false,
+        compares: 0,
+        saves: 0,
+        watches: 0,
+        relatedClicks: 0,
+        affiliateClicks: 0,
+        lastSeen: seen,
+      })
+    }
+  }
+
+  for (const row of interactions ?? []) {
+    if (!row.fp_id) continue
+    touch(row.fp_id, row.created_at)
+    const lead = leads.get(row.fp_id)!
+    const weight = INTENT_WEIGHT[row.action] ?? 0
+    lead.score += weight
+    switch (row.action) {
+      case 'add_to_compare': lead.compares++ ; break
+      case 'save': lead.saves++ ; break
+      case 'watch': lead.watches++ ; break
+      case 'related_click': lead.relatedClicks++ ; break
+    }
+    if (row.user_id) lead.signedIn = true
+  }
+
+  for (const row of clicks ?? []) {
+    if (!row.fp_id) continue
+    touch(row.fp_id)
+    const lead = leads.get(row.fp_id)!
+    lead.affiliateClicks++
+    lead.score += 2
+  }
+
+  for (const lead of leads.values()) {
+    if (lead.signedIn) lead.score += 2
+    lead.bucket = bucketScore(lead.score)
+  }
+
+  return Array.from(leads.values())
+    .sort((a, b) => b.score - a.score || b.lastSeen - a.lastSeen)
+    .slice(0, limit)
+    .map(({ lastSeen, ...l }) => ({
+      ...l,
+      lastSeenAt: new Date(lastSeen).toISOString(),
+    }))
+}
+// Finance reconciliation — estimated revenue proxy vs actual imported affiliate earnings.
+export interface EarningsReconciliationRow {
+  retailer: string
+  clicks: number
+  proxyWeighted: number
+  actualEarnings: number
+  variance: number
+}
+
+export interface EarningsReconciliation {
+  rows: EarningsReconciliationRow[]
+  totalProxy: number
+  totalActual: number
+  totalVariance: number
+}
+
+export async function getEarningsReconciliation(period: string): Promise<EarningsReconciliation> {
+  const since = sinceISO(period)
+  const proxy = await getRevenueProxy(period)
+  const { data: earnings } = await supabase
+    .from('affiliate_earnings')
+    .select('retailer, commission_amount')
+    .gte('imported_at', since)
+
+  const actualByRetailer = new Map<string, number>()
+  for (const row of earnings ?? []) {
+    const retailer = String(row.retailer ?? '')
+    if (!retailer) continue
+    actualByRetailer.set(retailer, (actualByRetailer.get(retailer) ?? 0) + Number(row.commission_amount ?? 0))
+  }
+
+  const rows: EarningsReconciliationRow[] = proxy.byRetailer.map((p) => {
+    const actual = actualByRetailer.get(p.retailer) ?? 0
+    return {
+      retailer: p.retailer,
+      clicks: p.clicks,
+      proxyWeighted: p.weighted,
+      actualEarnings: Math.round(actual * 100) / 100,
+      variance: Math.round((p.weighted - actual) * 100) / 100,
+    }
+  })
+
+  const totalProxy = Math.round(rows.reduce((s, r) => s + r.proxyWeighted, 0) * 100) / 100
+  const totalActual = Math.round(rows.reduce((s, r) => s + r.actualEarnings, 0) * 100) / 100
+  return {
+    rows,
+    totalProxy,
+    totalActual,
+    totalVariance: Math.round((totalProxy - totalActual) * 100) / 100,
+  }
+}
+// Buy-link health from the link-health cron (HEAD checks of outbound URLs).
+export interface LinkHealthItem {
+  deviceSlug: string
+  retailer: string
+  url: string
+  statusCode: number | null
+  ok: boolean
+  checkedAt: string | null
+}
+
+export interface LinkHealthSummary {
+  total: number
+  ok: number
+  broken: number
+  lastCheckedAt: string | null
+}
+
+export async function getLinkHealthSummary(limit: number = 10): Promise<{
+  summary: LinkHealthSummary
+  brokenLinks: LinkHealthItem[]
+}> {
+  const { data } = await supabase
+    .from('link_health_checks')
+    .select('device_slug, retailer, url, status_code, ok, checked_at')
+    .order('checked_at', { ascending: false })
+    .limit(250)
+
+  const rows = data ?? []
+  const ok = rows.filter((r) => Boolean(r.ok)).length
+  const broken = rows.length - ok
+  const latest = rows[0]?.checked_at ? new Date(rows[0].checked_at).toISOString() : null
+
+  const seen = new Set<string>()
+  const brokenLinks: LinkHealthItem[] = []
+  for (const row of rows) {
+    if (row.ok) continue
+    if (brokenLinks.length >= limit) break
+    const key = `${row.device_slug}::${row.retailer}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    brokenLinks.push({
+      deviceSlug: String(row.device_slug ?? ''),
+      retailer: String(row.retailer ?? ''),
+      url: String(row.url ?? ''),
+      statusCode: row.status_code,
+      ok: Boolean(row.ok),
+      checkedAt: row.checked_at ? new Date(row.checked_at).toISOString() : null,
+    })
+  }
+
+  return {
+    summary: {
+      total: rows.length,
+      ok,
+      broken,
+      lastCheckedAt: latest,
+    },
+    brokenLinks,
+  }
+}
