@@ -73,6 +73,12 @@ const jobs = [
     // Daily at 07:00 UTC (10:00 EAT)
     cron: '0 7 * * *',
   },
+  {
+    name: 'affiliate-sync',
+    url: `${BASE_URL}/api/cron/affiliate-sync`,
+    // Daily at 20:00 UTC (23:00 EAT) — pull network earnings from all enabled connectors
+    cron: '0 20 * * *',
+  },
 ]
 
 async function registerCrons() {

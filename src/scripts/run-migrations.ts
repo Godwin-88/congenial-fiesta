@@ -62,6 +62,7 @@ const migrations = [
   '038_analytics_alerts_and_digest.sql',
   '039_retention_and_rule_mgmt.sql',
   '040_scheduled_exports.sql',
+  '041_affiliate_network_connectors.sql',
 ]
 
 async function runMigrations() {

@@ -25,6 +25,7 @@ import {
   LayoutDashboard,
   Megaphone,
   MousePointerClick,
+  Plug,
   Scale,
   Search,
   Shield,
@@ -52,6 +53,7 @@ import RetentionPanel from './RetentionPanel'
 import ExplorePanel from './ExplorePanel'
 import EarningsImportCard from './EarningsImportCard'
 import ScheduledExportsPanel from './ScheduledExportsPanel'
+import AffiliateNetworksPanel from './AffiliateNetworksPanel'
 
 type TabId =
   | 'overview'
@@ -224,7 +226,7 @@ const ROADMAP_EXPORT: RoadmapItem[] = [
     kpi: 'Automatic report delivery without code',
   },
   {
-    phase: 'Phase 7',
+    phase: 'Live',
     feature: 'Affiliate-network API import',
     data: 'programmatic earnings pulls (Amazon/Jumia/Kilimall APIs)',
     kpi: 'Zero-touch finance reconciliation',
@@ -817,6 +819,18 @@ export default async function AnalyticsPage({
           </Card>
 
           <EarningsImportCard canManage={role === 'owner' || role === 'admin'} />
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Plug className="h-5 w-5 text-brand-primary" />
+                Affiliate Network API Connectors
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AffiliateNetworksPanel canManage={role === 'owner' || role === 'admin'} />
+            </CardContent>
+          </Card>
         </div>
       )}
 

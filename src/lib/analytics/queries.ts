@@ -1722,3 +1722,392 @@ export async function markScheduledExportRun(
     .update({ last_run_at: new Date().toISOString(), last_error: ok ? null : errorText })
     .eq('id', id)
 }
+
+// ── Affiliate network connectors (Phase 7) ───────────────────────────────────
+// Zero-touch earnings reconciliation: each network is a config row pointing at a
+// report endpoint; a sync fetches, maps network fields to the affiliate_earnings
+// ledger, and dedupes via importEarningsRows. Secrets live in env vars only.
+
+export interface AffiliateNetwork {
+  id: number
+  name: string
+  label: string
+  baseUrl: string
+  authType: 'none' | 'bearer' | 'query' | 'basic'
+  authEnvKey: string | null
+  authQueryParam: string | null
+  mapping: Record<string, string>
+  note: string | null
+  enabled: boolean
+  lastSyncAt: string | null
+  lastSyncStatus: 'idle' | 'success' | 'error' | null
+  lastSyncError: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AffiliateSyncLog {
+  id: number
+  networkId: number
+  status: 'success' | 'error'
+  rowsInserted: number
+  rowsSkipped: number
+  rowsErrors: number
+  message: string | null
+  durationMs: number | null
+  startedAt: string
+  finishedAt: string
+}
+
+export type AffiliateNetworkInput = {
+  name: string
+  label: string
+  baseUrl: string
+  authType: AffiliateNetwork['authType']
+  authEnvKey?: string | null
+  authQueryParam?: string | null
+  mapping?: Record<string, string>
+  note?: string | null
+  enabled?: boolean
+}
+
+export async function getAffiliateNetworks(): Promise<AffiliateNetwork[]> {
+  const { data } = await supabase
+    .from('affiliate_networks')
+    .select('*')
+    .order('name', { ascending: true })
+  return (data ?? []).map((r) => ({
+    id: Number(r.id),
+    name: String(r.name),
+    label: String(r.label),
+    baseUrl: String(r.base_url),
+    authType: r.auth_type as AffiliateNetwork['authType'],
+    authEnvKey: r.auth_env_key ? String(r.auth_env_key) : null,
+    authQueryParam: r.auth_query_param ? String(r.auth_query_param) : null,
+    mapping: r.mapping && typeof r.mapping === 'object' ? (r.mapping as Record<string, string>) : {},
+    note: r.note ? String(r.note) : null,
+    enabled: Boolean(r.enabled),
+    lastSyncAt: r.last_sync_at ? String(r.last_sync_at) : null,
+    lastSyncStatus: r.last_sync_status as AffiliateNetwork['lastSyncStatus'],
+    lastSyncError: r.last_sync_error ? String(r.last_sync_error) : null,
+    createdAt: String(r.created_at),
+    updatedAt: String(r.updated_at),
+  }))
+}
+
+export async function upsertAffiliateNetwork(input: AffiliateNetworkInput): Promise<AffiliateNetwork> {
+  const { data, error } = await supabase
+    .from('affiliate_networks')
+    .insert({
+      name: input.name.trim().toLowerCase(),
+      label: input.label.trim(),
+      base_url: input.baseUrl.trim(),
+      auth_type: input.authType,
+      auth_env_key: input.authEnvKey?.trim() || null,
+      auth_query_param: input.authQueryParam?.trim() || null,
+      mapping: input.mapping ?? {},
+      note: input.note?.trim() || null,
+      enabled: input.enabled ?? true,
+    })
+    .select()
+    .single()
+  if (error) throw new Error(error.message)
+  return {
+    id: Number(data.id),
+    name: String(data.name),
+    label: String(data.label),
+    baseUrl: String(data.base_url),
+    authType: data.auth_type as AffiliateNetwork['authType'],
+    authEnvKey: data.auth_env_key ? String(data.auth_env_key) : null,
+    authQueryParam: data.auth_query_param ? String(data.auth_query_param) : null,
+    mapping: data.mapping && typeof data.mapping === 'object' ? (data.mapping as Record<string, string>) : {},
+    note: data.note ? String(data.note) : null,
+    enabled: Boolean(data.enabled),
+    lastSyncAt: data.last_sync_at ? String(data.last_sync_at) : null,
+    lastSyncStatus: data.last_sync_status as AffiliateNetwork['lastSyncStatus'],
+    lastSyncError: data.last_sync_error ? String(data.last_sync_error) : null,
+    createdAt: String(data.created_at),
+    updatedAt: String(data.updated_at),
+  }
+}
+
+export async function deleteAffiliateNetwork(id: number): Promise<void> {
+  const { error } = await supabase.from('affiliate_networks').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export type AffiliateNetworkPatch = Partial<Omit<AffiliateNetworkInput, 'name'>>
+
+export async function updateAffiliateNetwork(
+  id: number,
+  patch: AffiliateNetworkPatch
+): Promise<AffiliateNetwork> {
+  const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (patch.label !== undefined) update.label = String(patch.label).trim()
+  if (patch.baseUrl !== undefined) update.base_url = String(patch.baseUrl).trim()
+  if (patch.authType !== undefined) update.auth_type = patch.authType
+  if (patch.authEnvKey !== undefined) update.auth_env_key = patch.authEnvKey?.trim() || null
+  if (patch.authQueryParam !== undefined) update.auth_query_param = patch.authQueryParam?.trim() || null
+  if (patch.mapping !== undefined) update.mapping = patch.mapping
+  if (patch.note !== undefined) update.note = patch.note?.trim() || null
+  if (patch.enabled !== undefined) update.enabled = patch.enabled
+
+  const { data, error } = await supabase
+    .from('affiliate_networks')
+    .update(update)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw new Error(error.message)
+  return {
+    id: Number(data.id),
+    name: String(data.name),
+    label: String(data.label),
+    baseUrl: String(data.base_url),
+    authType: data.auth_type as AffiliateNetwork['authType'],
+    authEnvKey: data.auth_env_key ? String(data.auth_env_key) : null,
+    authQueryParam: data.auth_query_param ? String(data.auth_query_param) : null,
+    mapping: data.mapping && typeof data.mapping === 'object' ? (data.mapping as Record<string, string>) : {},
+    note: data.note ? String(data.note) : null,
+    enabled: Boolean(data.enabled),
+    lastSyncAt: data.last_sync_at ? String(data.last_sync_at) : null,
+    lastSyncStatus: data.last_sync_status as AffiliateNetwork['lastSyncStatus'],
+    lastSyncError: data.last_sync_error ? String(data.last_sync_error) : null,
+    createdAt: String(data.created_at),
+    updatedAt: String(data.updated_at),
+  }
+}
+
+export async function listAffiliateSyncLogs(networkId?: number, limit = 25): Promise<AffiliateSyncLog[]> {
+  let q = supabase
+    .from('affiliate_sync_logs')
+    .select('*')
+    .order('started_at', { ascending: false })
+    .limit(limit)
+  if (networkId) q = q.eq('network_id', networkId)
+  const { data } = await q
+  return (data ?? []).map((r) => ({
+    id: Number(r.id),
+    networkId: Number(r.network_id),
+    status: r.status as 'success' | 'error',
+    rowsInserted: Number(r.rows_inserted ?? 0),
+    rowsSkipped: Number(r.rows_skipped ?? 0),
+    rowsErrors: Number(r.rows_errors ?? 0),
+    message: r.message ? String(r.message) : null,
+    durationMs: r.duration_ms ? Number(r.duration_ms) : null,
+    startedAt: String(r.started_at),
+    finishedAt: String(r.finished_at),
+  }))
+}
+
+// Server-side only. Call the network endpoint, parse JSON/CSV, map into the
+// earnings ledger via importEarningsRows (natural-key dedupe), record a sync log.
+
+export interface AffiliateSyncResult {
+  ok: boolean
+  network: string
+  inserted: number
+  skipped: number
+  errors: number
+  message: string
+}
+
+export async function syncAffiliateNetwork(networkId: number): Promise<AffiliateSyncResult> {
+  const started = Date.now()
+  const { data: netRow } = await supabase
+    .from('affiliate_networks')
+    .select('*')
+    .eq('id', networkId)
+    .maybeSingle()
+
+  if (!netRow) throw new Error('network not found')
+  const network: AffiliateNetwork = {
+    id: Number(netRow.id),
+    name: String(netRow.name),
+    label: String(netRow.label),
+    baseUrl: String(netRow.base_url),
+    authType: netRow.auth_type as AffiliateNetwork['authType'],
+    authEnvKey: netRow.auth_env_key ? String(netRow.auth_env_key) : null,
+    authQueryParam: netRow.auth_query_param ? String(netRow.auth_query_param) : null,
+    mapping: netRow.mapping && typeof netRow.mapping === 'object' ? (netRow.mapping as Record<string, string>) : {},
+    note: netRow.note ? String(netRow.note) : null,
+    enabled: Boolean(netRow.enabled),
+    lastSyncAt: null,
+    lastSyncStatus: null,
+    lastSyncError: null,
+    createdAt: '',
+    updatedAt: '',
+  }
+
+  try {
+    // 1. Build request with the configured auth scheme (secret from env)
+    const url = new URL(network.baseUrl)
+    const headers: Record<string, string> = { Accept: 'application/json,text/csv' }
+    if (network.authType === 'bearer') {
+      const token = network.authEnvKey ? process.env[network.authEnvKey] : undefined
+      if (!token) throw new Error(`ENV var ${network.authEnvKey ?? '(none set)'} missing`)
+      headers.Authorization = `Bearer ${token}`
+    } else if (network.authType === 'basic') {
+      const cred = network.authEnvKey ? process.env[network.authEnvKey] : undefined
+      if (!cred) throw new Error(`ENV var ${network.authEnvKey ?? '(none set)'} missing`)
+      headers.Authorization = `Basic ${Buffer.from(cred).toString('base64')}`
+    } else if (network.authType === 'query') {
+      const token = network.authEnvKey ? process.env[network.authEnvKey] : undefined
+      if (!token) throw new Error(`ENV var ${network.authEnvKey ?? '(none set)'} missing`)
+      url.searchParams.set(network.authQueryParam ?? 'token', token)
+    }
+
+    const res = await fetch(url, { headers, cache: 'no-store' })
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`)
+    }
+    const text = await res.text()
+
+    // 2. Parse response (JSON array/object or CSV)
+    const rows: ParseReportRow[] = []
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      parsed = null
+    }
+    if (parsed && typeof parsed === 'object') {
+      // Shape: array or { data: [...] }
+      const arr = Array.isArray(parsed)
+        ? parsed
+        : (parsed as { data?: unknown }).data ?? (parsed as { earnings?: unknown }).earnings ?? []
+      if (Array.isArray(arr)) rows.push(...arr as ParseReportRow[])
+    } else if (text.trim()) {
+      rows.push(...parseCsvRows(text))
+    }
+
+    if (rows.length === 0) {
+      const msg = 'No rows returned by API'
+      await logSync(network.id, 'error', msg, 0, 0, 0, started)
+      await setNetworkSync(network.id, 'error', msg)
+      return { ok: false, network: network.name, inserted: 0, skipped: 0, errors: 0, message: msg }
+    }
+
+    // 3. Map network fields into ledger rows using the saved mapping
+    const m = network.mapping
+    const ledger: EarningsImportRow[] = rows.map((r) => {
+      const piVal = (k: string): string => {
+        const f = m[k] ?? k
+        const v = r[f]
+        return v === undefined || v === null ? '' : String(v)
+      }
+      return {
+        retailer: piVal('retailer') || network.name,
+        periodStart: piVal('period_start'),
+        periodEnd: piVal('period_end') || piVal('period_start'),
+        gross: Number(piVal('gross') || '0'),
+        commission: Number(piVal('commission') || '0'),
+        currency: piVal('currency') || undefined,
+        status: piVal('status') || undefined,
+        source: `api:${network.name}`,
+        note: piVal('note') || undefined,
+      }
+    })
+
+    const result = await importEarningsRows(ledger)
+    const msg = `${result.inserted} inserted, ${result.skipped} dup, ${result.errors.length} errors`
+    await logSync(network.id, result.errors.length > 0 ? 'error' : 'success', msg, result.inserted, result.skipped, result.errors.length, started)
+    await setNetworkSync(network.id, result.errors.length > 0 ? 'error' : 'success', result.errors.length > 0 ? msg : null)
+    return { ok: result.errors.length === 0, network: network.name, inserted: result.inserted, skipped: result.skipped, errors: result.errors.length, message: msg }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    await logSync(network.id, 'error', msg, 0, 0, 0, started)
+    await setNetworkSync(network.id, 'error', msg)
+    return { ok: false, network: network.name, inserted: 0, skipped: 0, errors: 0, message: msg }
+  }
+}
+
+type ParseReportRow = Record<string, unknown>
+
+function parseCsvRows(text: string): ParseReportRow[] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
+  let inQuotes = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++ } else inQuotes = false
+      } else field += ch
+    } else if (ch === '"') {
+      inQuotes = true
+    } else if (ch === ',') {
+      row.push(field); field = ''
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++
+      row.push(field); field = ''
+      if (row.some((c) => c.trim() !== '')) rows.push(row)
+      row = []
+    } else {
+      field += ch
+    }
+  }
+  row.push(field)
+  if (row.some((c) => c.trim() !== '')) rows.push(row)
+  if (rows.length < 2) return []
+  const headers = rows[0].map((h) => h.trim().toLowerCase())
+  return rows.slice(1, 2000).map((r) => {
+    const obj: ParseReportRow = {}
+    headers.forEach((h, i) => { obj[h] = r[i] ?? '' })
+    return obj
+  })
+}
+
+async function logSync(
+  networkId: number,
+  status: 'success' | 'error',
+  message: string,
+  inserted: number,
+  skipped: number,
+  errors: number,
+  startedMs: number
+): Promise<void> {
+  const duration = Date.now() - startedMs
+  await supabase.from('affiliate_sync_logs').insert({
+    network_id: networkId,
+    status,
+    rows_inserted: inserted,
+    rows_skipped: skipped,
+    rows_errors: errors,
+    message,
+    duration_ms: duration,
+    started_at: new Date(startedMs).toISOString(),
+    finished_at: new Date().toISOString(),
+  })
+}
+
+async function setNetworkSync(
+  id: number,
+  status: 'success' | 'error',
+  errorText: string | null
+): Promise<void> {
+  await supabase
+    .from('affiliate_networks')
+    .update({
+      last_sync_at: new Date().toISOString(),
+      last_sync_status: status,
+      last_sync_error: errorText,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+}
+
+// Run every enabled network (used by the cron) and aggregate results.
+export async function syncAllEnabledNetworks(): Promise<AffiliateSyncResult[]> {
+  const nets = (await getAffiliateNetworks()).filter((n) => n.enabled)
+  const results: AffiliateSyncResult[] = []
+  for (const n of nets) {
+    try {
+      results.push(await syncAffiliateNetwork(n.id))
+    } catch (e) {
+      results.push({ ok: false, network: n.name, inserted: 0, skipped: 0, errors: 0, message: e instanceof Error ? e.message : String(e) })
+    }
+  }
+  return results
+}
