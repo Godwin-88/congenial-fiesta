@@ -40,8 +40,17 @@ export default function DeviceTypeChart({ data }: Props) {
     <ResponsiveContainer width="100%" height={250}>
       <BarChart data={chartData}>
         <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-        <XAxis dataKey="name" stroke={axisColor} fontSize={12} />
-        <YAxis stroke={axisColor} fontSize={12} />
+        <XAxis
+          dataKey="name"
+          stroke={axisColor}
+          fontSize={12}
+          label={{ value: 'Device', position: 'insideBottom', offset: -8, fontSize: 11, fill: axisColor }}
+        />
+        <YAxis
+          stroke={axisColor}
+          fontSize={12}
+          label={{ value: 'Views', angle: -90, position: 'insideLeft', offset: 14, fontSize: 11, fill: axisColor }}
+        />
         <Tooltip
           contentStyle={tooltipStyle}
           labelStyle={tooltipLabelStyle}

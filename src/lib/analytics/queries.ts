@@ -470,15 +470,7 @@ export async function getTopContentPages(
   return Object.entries(grouped)
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
-    .map(([path, views]) => {
-      let section: ContentSection = 'other'
-      if (path.startsWith('/devices/')) section = 'devices'
-      else if (path.startsWith('/articles/')) section = 'articles'
-      else if (path.startsWith('/videos/')) section = 'videos'
-      else if (path.startsWith('/compare')) section = 'compare'
-      else if (path.startsWith('/search')) section = 'search'
-      return { path, section, views }
-    })
+    .map(([path, views]) => ({ path, section: classifySection(path), views }))
 }
 // ─────────────────────────────────────────────────────────────────────────────
 // Phase 2 — FP-id audience, consideration intent, UTM campaigns, trust, revenue
@@ -2110,4 +2102,538 @@ export async function syncAllEnabledNetworks(): Promise<AffiliateSyncResult[]> {
     }
   }
   return results
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// Traffic & Audience deep-dive (Traffic tab)
+// ─────────────────────────────────────────────────────────────────────────────
+// Powered by the `daily_page_view_summary` materialised view (created in
+// migration 007, refreshed by the aggregate-analytics cron) with an automatic
+// fallback to raw `page_views` when the mart has never been built. Audience geo
+// always comes from raw `page_views.country_code` (the mart carries no geo).
+
+const TRAFFIC_SOURCES = ['direct', 'search', 'social', 'referral'] as const
+const TRAFFIC_WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
+const TRAFFIC_SECTIONS: ContentSection[] = ['devices', 'articles', 'videos', 'compare', 'search', 'other']
+
+export function classifySection(path: string): ContentSection {
+  if (path.startsWith('/devices/')) return 'devices'
+  if (path.startsWith('/articles/')) return 'articles'
+  if (path.startsWith('/videos/')) return 'videos'
+  if (path.startsWith('/compare')) return 'compare'
+  if (path.startsWith('/search')) return 'search'
+  return 'other'
+}
+
+export interface TrafficInsights {
+  source: 'daily_page_view_summary' | 'page_views'
+  latestDay: string | null
+  totalViews: number
+  avgPerDay: number
+  trend: Array<{ date: string; views: number; avg: number | null }>
+  mix: Array<{ date: string; direct: number; search: number; social: number; referral: number }>
+  tree: Array<{ name: string; value: number; children: Array<{ name: string; value: number; source: string }> }>
+  flow: {
+    nodes: Array<{ name: string }>
+    links: Array<{ source: number; target: number; value: number }>
+  }
+  weekday: Array<{ day: string; views: number; sharePct: number; isPeak: boolean }>
+  geo: Array<{ code: string; views: number; sharePct: number }>
+  topSource: string | null
+  topSourceShare: number
+  topPlatform: string | null
+  peakDay: string | null
+  lateVsEarlyPct: number | null
+  geoTop: { code: string; views: number } | null
+}
+export async function getTrafficInsights(period: string): Promise<TrafficInsights> {
+  const since = sinceISO(period)
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30
+
+  // Zero-fill every calendar day in the period (UTC), matching getPageViewsOverTime.
+  const nowMs = Date.now()
+  const dayKeys: string[] = []
+  for (let i = days - 1; i >= 0; i--) {
+    dayKeys.push(new Date(nowMs - i * 86400000).toISOString().split('T')[0])
+  }
+  const daySet = new Set(dayKeys)
+
+  // 1) Try the materialised mart first — it is a columnar GROUP BY and the
+  //    cheapest way to answer trend / mix / tree / flow / weekday.
+  const [martRes, geoRes] = await Promise.all([
+    supabase
+      .from('daily_page_view_summary')
+      .select('day, path, source, platform, views')
+      .gte('day', since),
+    // The mart has no country_code — read the raw geo column only.
+    supabase.from('page_views').select('created_at, country_code').gte('created_at', since),
+  ])
+
+  type DetailRow = { dayKey: string; source: string; platform: string | null; path: string; views: number }
+
+  let detail: DetailRow[] = []
+  let usedMart = false
+
+  if (martRes.data && martRes.data.length > 0) {
+    usedMart = true
+    detail = martRes.data
+      .map((r) => ({
+        dayKey: new Date(String(r.day)).toISOString().split('T')[0],
+        source: String(r.source ?? 'direct'),
+        platform: r.platform ? String(r.platform) : null,
+        path: String(r.path ?? ''),
+        views: Number(r.views ?? 0),
+      }))
+      .filter((r) => daySet.has(r.dayKey))
+  } else {
+    // Cron has not run yet — fall back to raw page_views.
+    const { data: raw } = await supabase
+      .from('page_views')
+      .select('created_at, source, platform, path')
+      .gte('created_at', since)
+    detail = (raw ?? [])
+      .map((r) => ({
+        dayKey: new Date(String(r.created_at)).toISOString().split('T')[0],
+        source: String(r.source ?? 'direct'),
+        platform: r.platform ? String(r.platform) : null,
+        path: String(r.path ?? ''),
+        views: 1,
+      }))
+      .filter((r) => daySet.has(r.dayKey))
+  }
+
+  // Aggregations
+  const viewsByDay = new Map<string, number>()
+  const byDaySource = new Map<string, Record<string, number>>()
+  const bySourcePlatform = new Map<string, Map<string, number>>()
+  const bySourceSection = new Map<string, Map<string, number>>()
+  const platformTotals = new Map<string, number>()
+  const weekdayTotals = [0, 0, 0, 0, 0, 0, 0] // Mon..Sun
+
+  for (const r of detail) {
+    viewsByDay.set(r.dayKey, (viewsByDay.get(r.dayKey) ?? 0) + r.views)
+
+    const ds = byDaySource.get(r.dayKey) ?? { direct: 0, search: 0, social: 0, referral: 0 }
+    ds[r.source] = (ds[r.source] ?? 0) + r.views
+    byDaySource.set(r.dayKey, ds)
+
+    const sp = bySourcePlatform.get(r.source) ?? new Map<string, number>()
+    const platform = r.platform ?? 'unknown'
+    sp.set(platform, (sp.get(platform) ?? 0) + r.views)
+    bySourcePlatform.set(r.source, sp)
+    platformTotals.set(platform, (platformTotals.get(platform) ?? 0) + r.views)
+
+    const section = classifySection(r.path)
+    const ss = bySourceSection.get(r.source) ?? new Map<string, number>()
+    ss.set(section, (ss.get(section) ?? 0) + r.views)
+    bySourceSection.set(r.source, ss)
+
+    const dow = new Date(r.dayKey + 'T00:00:00Z').getUTCDay() // 0 = Sun
+    weekdayTotals[(dow + 6) % 7] += r.views // reorder to Mon-first
+  }
+
+  // Trend + rolling average
+  const rollWindow = period === '7d' ? 3 : 7
+  const trend: TrafficInsights['trend'] = dayKeys.map((date, i) => {
+    const views = viewsByDay.get(date) ?? 0
+    let avg: number | null = null
+    if (i >= rollWindow - 1) {
+      let sum = 0
+      for (let j = i - rollWindow + 1; j <= i; j++) sum += viewsByDay.get(dayKeys[j]) ?? 0
+      avg = Math.round((sum / rollWindow) * 10) / 10
+    }
+    return { date, views, avg }
+  })
+
+  // Channel mix over time
+  const mix: TrafficInsights['mix'] = dayKeys.map((date) => {
+    const g = byDaySource.get(date) ?? {}
+    return { date, direct: g.direct ?? 0, search: g.search ?? 0, social: g.social ?? 0, referral: g.referral ?? 0 }
+  })
+
+  // Source → platform tree (drives the treemap)
+  const tree: TrafficInsights['tree'] = TRAFFIC_SOURCES.map((s) => {
+    const platforms = bySourcePlatform.get(s)
+    const children = platforms
+      ? Array.from(platforms.entries())
+          .map(([name, value]) => ({ name, value, source: s }))
+          .sort((a, b) => b.value - a.value)
+      : []
+    const value = children.reduce((sum, c) => sum + c.value, 0)
+    return { name: s, value, children }
+  }).filter((s) => s.value > 0)
+
+  // Source → content section flow (drives the sankey)
+  const flowNodes: Array<{ name: string }> = []
+  const flowLinks: Array<{ source: number; target: number; value: number }> = []
+  const sourceIdx = new Map<string, number>()
+  for (const s of TRAFFIC_SOURCES) {
+    if (bySourceSection.has(s)) {
+      sourceIdx.set(s, flowNodes.length)
+      flowNodes.push({ name: s })
+    }
+  }
+  const sectionIdx = new Map<string, number>()
+  for (const sec of TRAFFIC_SECTIONS) {
+    if (TRAFFIC_SOURCES.some((s) => (bySourceSection.get(s)?.get(sec) ?? 0) > 0)) {
+      sectionIdx.set(sec, flowNodes.length)
+      flowNodes.push({ name: sec })
+    }
+  }
+  for (const s of TRAFFIC_SOURCES) {
+    const i = sourceIdx.get(s)
+    if (i === undefined) continue
+    for (const [sec, value] of bySourceSection.get(s) ?? []) {
+      const j = sectionIdx.get(sec)
+      if (j !== undefined && value > 0) flowLinks.push({ source: i, target: j, value })
+    }
+  }
+// Weekly rhythm
+  const weekdaySum = weekdayTotals.reduce((a, b) => a + b, 0)
+  const peakDow = weekdayTotals.indexOf(Math.max(...weekdayTotals))
+  const weekday: TrafficInsights['weekday'] = TRAFFIC_WEEKDAYS.map((day, i) => ({
+    day,
+    views: weekdayTotals[i],
+    sharePct: weekdaySum > 0 ? Math.round((weekdayTotals[i] / weekdaySum) * 1000) / 10 : 0,
+    isPeak: weekdayTotals[i] > 0 && i === peakDow,
+  }))
+
+  // Audience geography (raw column — always first-party, no PII beyond ISO code)
+  const geoRawMap = new Map<string, number>()
+  for (const row of geoRes.data ?? []) {
+    if (!daySet.has(new Date(String(row.created_at)).toISOString().split('T')[0])) continue
+    const code = row.country_code ? String(row.country_code).toUpperCase() : ''
+    if (/^[A-Z]{2}$/.test(code)) geoRawMap.set(code, (geoRawMap.get(code) ?? 0) + 1)
+  }
+  const geoSum = Array.from(geoRawMap.values()).reduce((a, b) => a + b, 0)
+  const geo: TrafficInsights['geo'] = Array.from(geoRawMap.entries())
+    .map(([code, views]) => ({
+      code,
+      views,
+      sharePct: geoSum > 0 ? Math.round((views / geoSum) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 10)
+
+  // Executive summary
+  const totalViews = trend.reduce((sum, t) => sum + t.views, 0)
+
+  let topSource: string | null = null
+  let topSourceViews = 0
+  for (const s of TRAFFIC_SOURCES) {
+    const views = Array.from(bySourcePlatform.get(s)?.values() ?? []).reduce((a, b) => a + b, 0)
+    if (views > topSourceViews) {
+      topSourceViews = views
+      topSource = s
+    }
+  }
+
+  let topPlatform: string | null = null
+  let topPlatformViews = 0
+  for (const [name, views] of platformTotals) {
+    if (views > topPlatformViews) {
+      topPlatformViews = views
+      topPlatform = name
+    }
+  }
+
+  const peakDay = weekday.find((w) => w.isPeak)?.day ?? null
+
+  const half = Math.floor(trend.length / 2)
+  const early = trend.slice(0, half).reduce((s, t) => s + t.views, 0)
+  const late = trend.slice(half).reduce((s, t) => s + t.views, 0)
+  const lateVsEarlyPct =
+    totalViews === 0 ? 0 : early > 0 ? Math.round(((late - early) / early) * 1000) / 10 : 100
+
+  let latestDay: string | null = null
+  for (const r of detail) if (latestDay === null || r.dayKey > latestDay) latestDay = r.dayKey
+
+  return {
+    source: usedMart ? 'daily_page_view_summary' : 'page_views',
+    latestDay,
+    totalViews,
+    avgPerDay: trend.length > 0 ? Math.round((totalViews / trend.length) * 10) / 10 : 0,
+    trend,
+    mix,
+    tree,
+    flow: { nodes: flowNodes, links: flowLinks },
+    weekday,
+    geo,
+    topSource,
+    topSourceShare: totalViews > 0 ? Math.round((topSourceViews / totalViews) * 1000) / 10 : 0,
+    topPlatform: topPlatformViews > 0 ? topPlatform : null,
+    peakDay,
+    lateVsEarlyPct,
+    geoTop: geo[0] ?? null,
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// Content & SEO deep-dive (Content tab)
+// ─────────────────────────────────────────────────────────────────────────────
+// Content analytics are "catalog-aware" (GA blind spot): section classification,
+// publish-age decay, launch velocity and the zero-result opportunity backlog.
+
+export interface ContentInsights {
+  totalViews: number
+  topSection: string | null
+  topSectionPct: number
+  ctrLeader: { path: string; views: number; clicks: number; ctr: number } | null
+  zeroResultCount: number
+  zeroResult: Array<{ query: string; count: number }>
+  decayQueueCount: number
+  totalPublishedPieces: number
+  // Weekly momentum per content section → heatmap
+  momentum: Array<{ bucket: string; devices: number; articles: number; videos: number; compare: number; search: number; other: number }>
+  // Views by content age → decaying / evergreen
+  ageBuckets: Array<{ label: string; minDays: number | null; maxDays: number | null; views: number; sharePct: number }>
+  // Pieces with views only (catalog-backed or not) that have gone quiet
+  decayQueue: Array<{ path: string; views: number; publishedAt: string | null }>
+  // Newest CMS pieces → cumulative views by days-since-publish
+  launch: Array<{
+    slug: string
+    title: string
+    type: 'article' | 'device' | 'video'
+    publishedAt: string
+    daysSincePublish: number
+    cumulative: number[]
+  }>
+  topBySection: Array<{ section: string; views: number }>
+}
+
+// Cumulative day-count buckets boundary in days (0 = published today)
+const CONTENT_AGE_BUCKETS: Array<{ label: string; maxDays: number }> = [
+  { label: '0–30d', maxDays: 30 },
+  { label: '31–90d', maxDays: 90 },
+  { label: '91–180d', maxDays: 180 },
+  { label: '181–365d', maxDays: 365 },
+]
+export async function getContentInsights(period: string): Promise<ContentInsights> {
+  const since = sinceISO(period)
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30
+  const now = Date.now()
+  const dayMs = 86400000
+  const sinceMs = now - days * dayMs
+
+  // 1) Page views in the period (path + when)
+  const { data: views } = await supabase
+    .from('page_views')
+    .select('created_at, path')
+    .gte('created_at', since)
+
+  const viewRows = (views ?? []).map((r) => ({
+    date: new Date(String(r.created_at)).toISOString().split('T')[0],
+    path: String(r.path ?? ''),
+  }))
+
+  // 2) Catalog seeds — publish dates for decay/launch curves
+  const [deviceRes, articleRes, videoRes] = await Promise.all([
+    supabase.from('devices').select('slug, brand:brands(slug), created_at, status'),
+    supabase.from('articles').select('slug, title, category, published_at, status'),
+    supabase.from('videos').select('embed_id, title, published_at, platform'),
+  ])
+
+  const publishedArticles = (articleRes.data ?? [])
+    .filter((a) => a.status === 'published')
+    .map((a) => ({
+      slug: String(a.slug),
+      title: String(a.title ?? a.slug),
+      path: `/articles/${String(a.slug)}`,
+      type: 'article' as const,
+      publishedAt: String(a.published_at ?? ''),
+    }))
+  const publishedDevices = (deviceRes.data ?? [])
+    .filter((d) => d.status === 'published')
+    .map((d) => {
+      const brand = Array.isArray(d.brand) ? d.brand[0] : d.brand
+      return {
+        slug: String(d.slug),
+        title: String(d.slug),
+        path: `/devices/${brand?.slug ? String(brand.slug) : 'default'}/${String(d.slug)}`,
+        type: 'device' as const,
+        publishedAt: String(d.created_at ?? ''),
+      }
+    })
+  const publishedVideos = (videoRes.data ?? [])
+    .filter((v) => v.published_at)
+    .map((v) => ({
+      slug: String(v.embed_id ?? v.title ?? ''),
+      title: String(v.title ?? v.platform ?? 'video'),
+      path: '', // videos embed on /videos — no per-piece route to attribute
+      type: 'video' as const,
+      publishedAt: String(v.published_at ?? ''),
+    }))
+// 3) Section + per-path view counting
+  const pathViews = new Map<string, number>()
+  const pathDayViews = new Map<string, Map<string, number>>()
+  const sectionBuckets: Record<ContentSection, Record<string, number>> = {
+    devices: {}, articles: {}, videos: {}, compare: {}, search: {}, other: {},
+  }
+  let totalViews = 0
+  for (const row of viewRows) {
+    pathViews.set(row.path, (pathViews.get(row.path) ?? 0) + 1)
+    totalViews++
+    const perDay = pathDayViews.get(row.path) ?? new Map<string, number>()
+    perDay.set(row.date, (perDay.get(row.date) ?? 0) + 1)
+    pathDayViews.set(row.path, perDay)
+    const section = classifySection(row.path)
+    const byBucket = sectionBuckets[section]
+    byBucket[row.date] = (byBucket[row.date] ?? 0) + 1
+  }
+
+  // 4) Affiliate clicks per device slug (device pages) for CTR leader
+  const { data: clicks } = await supabase
+    .from('affiliate_clicks')
+    .select('device_slug')
+    .gte('created_at', since)
+  const clicksByDevice = new Map<string, number>()
+  for (const c of clicks ?? []) clicksByDevice.set(String(c.device_slug), (clicksByDevice.get(String(c.device_slug)) ?? 0) + 1)
+
+  // 5) Top paths by views (full period) + CTR when path maps to a device
+  const topPaths = Array.from(pathViews.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 50)
+  const pathToDeviceSlug = (p: string) => {
+    const m = /^\/devices\/([^/]+)\/([^/]+)$/.exec(p)
+    return m ? m[2] : null
+  }
+  let ctrLeader: ContentInsights['ctrLeader'] = null
+  for (const [path, views] of topPaths) {
+    const slug = pathToDeviceSlug(path)
+    const clicks = slug ? clicksByDevice.get(slug) ?? 0 : 0
+    if (clicks > 0) {
+      const ctr = Math.round((clicks / views) * 10000) / 100
+      if (!ctrLeader || ctr > (ctrLeader.ctr ?? 0)) ctrLeader = { path, views, clicks, ctr }
+    }
+  }
+
+  // 6) Zero-result search — opportunity backlog
+  const { data: search } = await supabase
+    .from('search_queries')
+    .select('query, zero_result')
+    .gte('created_at', since)
+  const zeroMap = new Map<string, number>()
+  for (const s of search ?? []) {
+    if (!s.zero_result) continue
+    const key = String(s.query ?? '').trim().toLowerCase().slice(0, 200)
+    if (key) zeroMap.set(key, (zeroMap.get(key) ?? 0) + 1)
+  }
+  const zeroResult = Array.from(zeroMap.entries())
+    .map(([query, count]) => ({ query, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 12)
+
+  // 7) Weekly momentum (daily when 7d) per section
+  const bucketSize = days === 7 ? 1 : 7
+  const momentum: ContentInsights['momentum'] = []
+  const sections: ContentSection[] = ['devices', 'articles', 'videos', 'compare', 'search', 'other']
+  for (let start = sinceMs; start <= now; start += bucketSize * dayMs) {
+    const bucketStart = new Date(start)
+    const bucketEnd = new Date(start + (bucketSize - 1) * dayMs)
+    const key = `${bucketStart.getMonth() + 1}/${bucketStart.getDate()}`
+    const isoStart = bucketStart.toISOString().split('T')[0]
+    const isoEnd = bucketEnd.toISOString().split('T')[0]
+    const row: ContentInsights['momentum'][number] = {
+      bucket: key,
+      devices: 0, articles: 0, videos: 0, compare: 0, search: 0, other: 0,
+    }
+    for (const sec of sections) {
+      let sum = 0
+      for (const [day, count] of Object.entries(sectionBuckets[sec])) {
+        if (day >= isoStart && day <= isoEnd) sum += Number(count)
+      }
+      row[sec] = sum
+    }
+    momentum.push(row)
+  }
+
+  // 8) Age buckets — published-piece views by content age
+  // Routable pieces (articles + devices) are attributable; videos live on a
+  // single /videos hub so they can't be attributed per-piece.
+  const launched = [...publishedArticles, ...publishedDevices].filter((p) => p.path)
+  const published = [...launched, ...publishedVideos]
+  const ageViews = new Array(CONTENT_AGE_BUCKETS.length).fill(0) as number[]
+  const totalPieceAge = new Array(CONTENT_AGE_BUCKETS.length).fill(0) as number[]
+  for (const { path, publishedAt } of launched) {
+    const pubMs = new Date(publishedAt).getTime()
+    if (!Number.isFinite(pubMs)) continue
+    const ageDays = Math.floor((now - pubMs) / dayMs)
+    const views = pathViews.get(path) ?? 0
+    let idx = CONTENT_AGE_BUCKETS.findIndex((b) => ageDays <= b.maxDays)
+    if (idx === -1) continue // older than 365d → not shown
+    ageViews[idx] += views
+    totalPieceAge[idx] += 1
+  }
+  const ageSum = ageViews.reduce((a, b) => a + b, 0)
+  const ageBuckets: ContentInsights['ageBuckets'] = CONTENT_AGE_BUCKETS.map((b, i) => ({
+    label: b.label,
+    minDays: i === 0 ? 0 : CONTENT_AGE_BUCKETS[i - 1].maxDays + 1,
+    maxDays: b.maxDays,
+    views: ageViews[i],
+    sharePct: ageSum > 0 ? Math.round((ageViews[i] / ageSum) * 1000) / 10 : 0,
+  }))
+// 9) Decay queue — published pieces with zero/low views in period (excluding
+//    pieces younger than 7 days, which simply haven't had time to earn views)
+  const decayQueue: ContentInsights['decayQueue'] = launched
+    .map(({ path, publishedAt }) => ({ path, views: pathViews.get(path) ?? 0, publishedAt }))
+    .filter((p) => {
+      if (p.views > 0) return false
+      if (!p.publishedAt) return true
+      const ageDays = Math.floor((now - new Date(p.publishedAt).getTime()) / dayMs)
+      return ageDays >= 7
+    })
+    .sort((a, b) => {
+      const aPub = a.publishedAt ? new Date(a.publishedAt).getTime() : 0
+      const bPub = b.publishedAt ? new Date(b.publishedAt).getTime() : 0
+      return aPub - bPub
+    })
+    .slice(0, 10)
+
+  // 10) Launch velocity — newest 5 attributable pieces, cumulative views by days-since-publish
+  const launch: ContentInsights['launch'] = [...launched]
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+    .slice(0, 5)
+    .map((p) => {
+      const pubMs = new Date(p.publishedAt).getTime()
+      const daysSincePublish = Math.max(0, Math.floor((now - pubMs) / dayMs))
+      const cumulative: number[] = []
+      let run = 0
+      const perDay = pathDayViews.get(p.path) ?? new Map<string, number>()
+      for (let d = 0; d <= Math.min(daysSincePublish, 30); d++) {
+        const day = new Date(pubMs + d * dayMs).toISOString().split('T')[0]
+        run += perDay.get(day) ?? 0
+        cumulative.push(run)
+      }
+      return {
+        slug: p.slug,
+        title: p.title,
+        type: p.type,
+        publishedAt: p.publishedAt,
+        daysSincePublish,
+        cumulative,
+      }
+    })
+
+  // 11) Section totals + summary
+  const topBySection: ContentInsights['topBySection'] = sections.map((sec) => ({
+    section: sec,
+    views: Object.values(sectionBuckets[sec]).reduce((a, b) => a + b, 0),
+  }))
+  const topSectionRow = [...topBySection].sort((a, b) => b.views - a.views)[0]
+
+  return {
+    totalViews,
+    topSection: topSectionRow && topSectionRow.views > 0 ? topSectionRow.section : null,
+    topSectionPct: totalViews > 0 && topSectionRow
+      ? Math.round((topSectionRow.views / totalViews) * 1000) / 10
+      : 0,
+    ctrLeader,
+    zeroResultCount: zeroResult.reduce((a, b) => a + b.count, 0),
+    zeroResult,
+    decayQueueCount: decayQueue.length,
+    totalPublishedPieces: published.length,
+    momentum,
+    ageBuckets,
+    decayQueue,
+    launch,
+    topBySection,
+  }
 }

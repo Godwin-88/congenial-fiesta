@@ -9,11 +9,11 @@ import {
   getQualifiedLeads, getEarningsReconciliation, getLinkHealthSummary,
   getAlertRules, computeAlertKpiValues, listAlertEvents,
   getRetentionStatus, listRetentionLog,
-  runExploreQuery, listScheduledExports,
+  runExploreQuery, listScheduledExports, getTrafficInsights, getContentInsights,
 } from '@/lib/analytics/queries'
 import { ROLE_ALLOWED, type TabId } from '@/lib/analytics/tabs'
 import { getAdminUser } from '@/lib/admin/require-admin'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
   Download,
@@ -34,6 +34,20 @@ import {
 import PageViewsChart from './PageViewsChart'
 import TrafficSourcesChart from './TrafficSourcesChart'
 import DeviceTypeChart from './DeviceTypeChart'
+import TrafficTrendChart from './TrafficTrendChart'
+import TrafficMixChart from './TrafficMixChart'
+import TrafficSourceTreeChart from './TrafficSourceTreeChart'
+import TrafficFlowChart from './TrafficFlowChart'
+import TrafficWeekdayChart from './TrafficWeekdayChart'
+import TrafficGeoChart from './TrafficGeoChart'
+import MetricInfo from './MetricInfo'
+import ContentMomentumChart from './ContentMomentumChart'
+import ContentAgeChart from './ContentAgeChart'
+import ContentConversionScatter from './ContentConversionScatter'
+import ContentLaunchChart from './ContentLaunchChart'
+import ContentOpportunityList from './ContentOpportunityList'
+import ContentDecayQueue from './ContentDecayQueue'
+import { countryName, flagEmoji, formatHoverDate, titleCase } from './chartFormat'
 import AffiliateTable from './AffiliateTable'
 import FunnelStrip from './FunnelStrip'
 import ZeroReportTable from './ZeroReportTable'
@@ -283,6 +297,70 @@ export default async function AnalyticsPage({
     scheduledExports = await listScheduledExports()
   }
 
+  // Traffic & Audience deep-dive is built from the daily materialised view +
+  // the raw geo column, so it is only loaded when the tab is open.
+  let trafficInsights: Awaited<ReturnType<typeof getTrafficInsights>> | null = null
+  if (activeTab === 'traffic' && allowedTabs.includes('traffic')) {
+    trafficInsights = await getTrafficInsights(period)
+  }
+
+  // Insight chips for the Traffic tab header banner
+  const trafficChips: Array<{ label: string; value: string }> = []
+  if (trafficInsights) {
+    if (trafficInsights.topSource) {
+      trafficChips.push({
+        label: 'Top channel',
+        value: `${titleCase(trafficInsights.topSource)} · ${trafficInsights.topSourceShare}%`,
+      })
+    }
+    if (trafficInsights.topPlatform) {
+      trafficChips.push({ label: 'Top platform', value: titleCase(trafficInsights.topPlatform) })
+    }
+    if (trafficInsights.peakDay) {
+      trafficChips.push({ label: 'Peak day', value: trafficInsights.peakDay })
+    }
+    if (trafficInsights.lateVsEarlyPct !== null) {
+      const delta = trafficInsights.lateVsEarlyPct
+      trafficChips.push({
+        label: '2nd half vs 1st half',
+        value: `${delta > 0 ? '+' : ''}${delta}%`,
+      })
+    }
+    if (trafficInsights.geoTop) {
+      trafficChips.push({
+        label: 'Top region',
+        value: `${flagEmoji(trafficInsights.geoTop.code)} ${countryName(trafficInsights.geoTop.code)}`,
+      })
+    }
+  }
+
+  // Content & SEO analytics are catalog-aware and only needed when the tab is open.
+  let contentInsights: Awaited<ReturnType<typeof getContentInsights>> | null = null
+  if (activeTab === 'content' && allowedTabs.includes('content')) {
+    contentInsights = await getContentInsights(period)
+  }
+
+  // Insight chips for the Content & SEO tab header banner
+  const contentChips: Array<{ label: string; value: string }> = []
+  if (contentInsights) {
+    if (contentInsights.topSection) {
+      const label = SECTION_LABELS[contentInsights.topSection as ContentSection] ?? titleCase(contentInsights.topSection)
+      contentChips.push({ label: 'Top section', value: `${label} · ${contentInsights.topSectionPct}%` })
+    }
+    if (contentInsights.ctrLeader) {
+      contentChips.push({
+        label: 'CTR leader',
+        value: `${contentInsights.ctrLeader.path} · ${contentInsights.ctrLeader.ctr}%`,
+      })
+    }
+    if (contentInsights.zeroResultCount > 0) {
+      contentChips.push({ label: 'Content gaps', value: `${contentInsights.zeroResultCount} missed searches` })
+    }
+    if (contentInsights.decayQueueCount > 0) {
+      contentChips.push({ label: 'Cold content', value: `${contentInsights.decayQueueCount} pieces to refresh` })
+    }
+  }
+
   // Content & SEO: group top pages by section( top 5 per section)
   const contentBySection = new Map<ContentSection, Array<{ path: string; section: ContentSection; views: number }>>()
   for (const section of Object.keys(SECTION_LABELS) as ContentSection[]) {
@@ -427,33 +505,137 @@ export default async function AnalyticsPage({
 
       {activeTab === 'traffic' && (
         <div className="space-y-6">
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle>Traffic Sources</CardTitle>
+                <CardTitle>Total Views</CardTitle>
               </CardHeader>
               <CardContent>
-                <TrafficSourcesChart data={trafficSources} totalViews={totalViews} />
+                <p className="text-3xl font-bold text-foreground">{(trafficInsights?.totalViews ?? totalViews).toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground mt-1">This period</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Device Types</CardTitle>
+                <CardTitle>Unique Visitors</CardTitle>
               </CardHeader>
               <CardContent>
-                <DeviceTypeChart data={deviceTypes} />
+                <p className="text-3xl font-bold text-foreground">{audience.uniqueVisitors.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground mt-1">Distinct first-party visitors (FP-id)</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Return Rate</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">{audience.returnRate}%</p>
+                <p className="text-xs text-muted-foreground mt-1">Repeat page views vs new visitors</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Avg Views / Day</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">{(trafficInsights?.avgPerDay ?? 0).toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground mt-1">Rolling average across the period</p>
               </CardContent>
             </Card>
           </div>
 
+          {/* ── Trend with signal ───────────────────────────────────── */}
           <Card>
             <CardHeader>
-              <CardTitle>Page Views Over Time</CardTitle>
+              <CardTitle>Traffic Trend</CardTitle>
+              <CardDescription>Daily views with a rolling average — hover any point for the full date</CardDescription>
             </CardHeader>
             <CardContent>
-              <PageViewsChart data={viewsOverTime} />
+              <TrafficTrendChart data={trafficInsights?.trend ?? []} />
             </CardContent>
           </Card>
+
+          {/* ── Insight banner ─────────────────────────────────────── */}
+          {trafficInsights && (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {trafficChips.map((chip) => (
+                  <span
+                    key={chip.label}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs"
+                  >
+                    <span className="text-muted-foreground">{chip.label}:</span>
+                    <span className="font-semibold text-foreground">{chip.value}</span>
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Data source:{' '}
+                <span className="font-medium text-foreground">
+                  {trafficInsights.source === 'daily_page_view_summary'
+                    ? 'daily_page_view_summary (aggregated by cron)'
+                    : 'page_views (raw — aggregator not yet run)'}
+                </span>
+                {trafficInsights.latestDay
+                  ? ` · latest data through ${formatHoverDate(trafficInsights.latestDay)}`
+                  : ' · no views recorded in this period yet'}
+              </p>
+            </div>
+          )}
+
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Channel Mix Over Time</CardTitle>
+                <CardDescription>How the source mix shifts day by day — not just the period total</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TrafficMixChart data={trafficInsights?.mix ?? []} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Sources &amp; Platforms</CardTitle>
+                <CardDescription>Space-filling share — coloured by channel, blocks are platforms</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TrafficSourceTreeChart data={trafficInsights?.tree ?? []} />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ── Source → content flow ───────────────────────────────── */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Where Traffic Lands</CardTitle>
+              <CardDescription>Source → content section. Direct &amp; referral traffic mostly shop; social steers to video</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TrafficFlowChart data={trafficInsights?.flow ?? { nodes: [], links: [] }} />
+            </CardContent>
+          </Card>
+
+          {/* ── Weekly rhythm + geography ───────────────────────────── */}
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Weekly Rhythm</CardTitle>
+                <CardDescription>When your audience shows up — peak day highlighted</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TrafficWeekdayChart data={trafficInsights?.weekday ?? []} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Top Countries</CardTitle>
+                <CardDescription>First-party geo from Vercel headers</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TrafficGeoChart data={trafficInsights?.geo ?? []} />
+              </CardContent>
+            </Card>
+          </div>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -473,6 +655,220 @@ export default async function AnalyticsPage({
 
       {activeTab === 'content' && (
         <div className="space-y-6">
+          {/* ── Insight banner ─────────────────────────────────────── */}
+          {contentInsights && (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {contentChips.map((chip) => (
+                  <span
+                    key={chip.label}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs"
+                  >
+                    <span className="text-muted-foreground">{chip.label}:</span>
+                    <span className="font-semibold text-foreground">{chip.value}</span>
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Data sources:{' '}
+                <span className="font-medium text-foreground">
+                  page_views · device/article/video catalog · search_queries
+                </span>
+                <span className="ml-1">
+                  — catalog-aware: audience demand mapped to the sections an editor actually manages.
+                </span>
+              </p>
+            </div>
+          )}
+
+          {/* ── Content KPI strip ───────────────────────────────────── */}
+          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Total Views</CardTitle>
+                <MetricInfo
+                  metric="Total Views (kpi_views)"
+                  definition="All page views captured in the selected period, bucketed by content section so you see where the audience spends its time."
+                  formula="count(page_views)"
+                  ga4Alias="pageviews"
+                  dataSource="page_views"
+                  action="Healthy trending sections are where to double down; a flat one despite publishing is the first decay signal."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">{(contentInsights?.totalViews ?? 0).toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground mt-1">This period</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Published Pieces</CardTitle>
+                <MetricInfo
+                  metric="Published pieces"
+                  definition="Live articles, devices and videos in the catalog — the content portfolio that backs your traffic."
+                  formula="count(published articles + devices + videos)"
+                  dataSource="articles · devices · videos"
+                  action="Compare against Total Views to see output per piece — the real editorial productivity metric."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">{(contentInsights?.totalPublishedPieces ?? 0).toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground mt-1">articles · devices · videos</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">CTR Leader</CardTitle>
+                <MetricInfo
+                  metric="Buy-link CTR leader"
+                  definition="The device page converting views into affiliate clicks at the highest rate this period — your best-performing content at earning."
+                  formula="clicks ÷ views × 100"
+                  ga4Alias="outbound click rate"
+                  dataSource="page_views × affiliate_clicks"
+                  action="Study what this page does right (buy-box placement, offer framing) and replicate it across the catalog."
+                />
+              </CardHeader>
+              <CardContent>
+                {contentInsights?.ctrLeader ? (
+                  <>
+                    <p className="truncate text-lg font-bold text-foreground">{contentInsights.ctrLeader.path}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {contentInsights.ctrLeader.ctr}% CTR · {contentInsights.ctrLeader.views.toLocaleString()} views
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-3xl font-bold text-muted-foreground">—</p>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Content Gaps</CardTitle>
+                <MetricInfo
+                  metric="Zero-result searches"
+                  definition="First-party search queries that returned nothing — search demand nobody who's searching can satisfy. This is the editorial backlog input."
+                  formula="count(zero_result search_queries)"
+                  ga4Alias="search lost (GSC)"
+                  dataSource="search_queries"
+                  action="Prioritise the highest-count queries — writing one guide/device page effectively captures that demand."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">{(contentInsights?.zeroResultCount ?? 0).toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground mt-1">missed searches this period</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ── Momentum heatmap ───────────────────────────────────── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Content Momentum
+                <MetricInfo
+                  metric="Content momentum heatmap"
+                  definition="Views per content section over each weekly bucket. Rows are the editorial sections you manage; hotter cells mean that section is pulling traffic that week."
+                  formula="Σ views per section per period bucket"
+                  dataSource="page_views (classified by path prefix)"
+                  action="Spot where momentum is building or fading week-over-week — and time your publishing/promotion accordingly."
+                />
+              </CardTitle>
+              <CardDescription>
+                How audience attention shifts across sections each week — intensity = view volume
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ContentMomentumChart data={contentInsights?.momentum ?? []} />
+            </CardContent>
+          </Card>
+
+          {/* ── Content age · decay + conversion scatter ────────────── */}
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  Content Age &amp; Decay
+                  <MetricInfo
+                    metric="Age-bucket distribution + decay queue"
+                    definition="Where your traffic sits along the content lifecycle. Fresh content (0–30d) pays off immediately; older buckets show whether you've built evergreen assets. Pieces with zero period views form the decay queue."
+                    formula="content age = today − published_at"
+                    ga4Alias="— (GA has no content-age axis)"
+                    dataSource="page_views × articles/devices/videos published_at"
+                    action="If a bucket older than 180d holds most of your views, that's evergreen proof — invest in refresh of quiet pieces before writing brand new ones."
+                  />
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ContentAgeChart data={contentInsights?.ageBuckets ?? []} />
+                <div className="mt-4 rounded-lg border border-border bg-background/50 p-3">
+                  <p className="mb-2 text-xs font-semibold text-foreground">Decay queue — refresh candidates</p>
+                  <ContentDecayQueue data={contentInsights?.decayQueue ?? []} />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  Conversion Map
+                  <MetricInfo
+                    metric="Device conversion map"
+                    definition="Every device page plotted by view volume (X) and click-through rate to affiliate buy-links (Y). Points in the upper-right are both popular and persuasive — your content heroes."
+                    formula="CTR = affiliate clicks ÷ device views × 100"
+                    ga4Alias="outbound click rate"
+                    dataSource="page_views × affiliate_clicks × devices"
+                    action="Invest in the upper-right; diagnostic the high-views low-CTR cluster (lagging offers or buried buy-boxes)."
+                  />
+                </CardTitle>
+                <CardDescription>Views vs buy-link CTR — size of interest, rate of conversion</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ContentConversionScatter data={topDevices} />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ── Launch velocity ─────────────────────────────────────── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Launch Velocity
+                <MetricInfo
+                  metric="Content→conversion velocity"
+                  definition="Cumulative views of your five newest published pieces, day-by-day, up to their first 30 days. Shows how fast a new review or guide starts earning attention."
+                  formula="Σ views per piece by days-since-publish"
+                  dataSource="page_views × articles/devices published_at"
+                  action="A piece that stays flat after 7 days was either misfit or under-promoted — distinct from the decay of old content."
+                />
+              </CardTitle>
+              <CardDescription>
+                How quickly new pieces ramp — the north-star &quot;content→conversion velocity&quot; from the spec
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ContentLaunchChart data={contentInsights?.launch ?? []} />
+            </CardContent>
+          </Card>
+
+          {/* ── Opportunity backlog + top pages by section ──────────── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Content Opportunity Backlog
+                <MetricInfo
+                  metric="Zero-result content backlog"
+                  definition="First-party searches that found nothing. These are proven editorial gaps feeding the content calendar (per the analytics spec: zero-result backlog feeds the editorial roadmap)."
+                  formula="count(zero_result search_queries)"
+                  ga4Alias="sc lost (GSC)"
+                  dataSource="search_queries"
+                  action="Write for the loudest gaps first — each listed query is a ready-made title."
+                />
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ContentOpportunityList data={contentInsights?.zeroResult ?? []} total={contentInsights?.zeroResultCount ?? 0} />
+            </CardContent>
+          </Card>
+
           <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
             {(Object.keys(SECTION_LABELS) as ContentSection[]).map((section) => {
               const rows = contentBySection.get(section) ?? []
@@ -482,6 +878,15 @@ export default async function AnalyticsPage({
                     <CardTitle className="flex items-center gap-2">
                       <Tag className="h-4 w-4 text-brand-primary" />
                       {SECTION_LABELS[section]}
+                      <MetricInfo
+                        metric={`${SECTION_LABELS[section]} section`}
+                        definition={`Top pages in the ${SECTION_LABELS[section]} section by views in the selected period — the editorial drill-down of where this section's traffic concentrates.`}
+                        formula="Σ views per /(match) path"
+                        ga4Alias="pageviews by path"
+                        dataSource="page_views (path-classified)"
+                        action={`Promote the ${SECTION_LABELS[section]} leaders harder; pair quiet high-views pages with strong buy-links or fresh internal links.`}
+                        componentLabel={`Section · ${section}`}
+                      />
                     </CardTitle>
                   </CardHeader>
                   <CardContent>

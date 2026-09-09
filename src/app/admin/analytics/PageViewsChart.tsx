@@ -3,6 +3,7 @@
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
+import { formatAxisDate, formatHoverDate } from './chartFormat'
 
 type Props = {
   data: Array<{ date: string; views: number }>
@@ -32,16 +33,21 @@ export default function PageViewsChart({ data }: Props) {
           dataKey="date"
           stroke={axisColor}
           fontSize={12}
-          tickFormatter={(val: string) => {
-            const d = new Date(val)
-            return `${d.getMonth() + 1}/${d.getDate()}`
-          }}
+          tickFormatter={(val: string) => formatAxisDate(val)}
+          label={{ value: 'Date', position: 'insideBottom', offset: -8, fontSize: 11, fill: axisColor }}
         />
-        <YAxis stroke={axisColor} fontSize={12} />
+        <YAxis
+          stroke={axisColor}
+          fontSize={12}
+          label={{ value: 'Views', angle: -90, position: 'insideLeft', offset: 14, fontSize: 11, fill: axisColor }}
+        />
         <Tooltip
           contentStyle={tooltipStyle}
           labelStyle={tooltipLabelStyle}
           itemStyle={tooltipItemStyle}
+          // Full "Wed, Sep 9, 2026" on hover — the axis stays compact.
+          labelFormatter={(label) => formatHoverDate(String(label ?? ''))}
+          formatter={(value) => [`${Number(value).toLocaleString()} views`, 'Page Views']}
         />
         <Line
           type="monotone"
