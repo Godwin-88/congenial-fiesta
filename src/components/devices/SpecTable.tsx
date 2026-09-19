@@ -1,6 +1,8 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Device = any
 
+import { readRearCameras, readSelfieCamera } from '@/lib/devices/camera-types'
+
 interface SpecTableProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   device: any
@@ -126,14 +128,14 @@ export function SpecTable({ device }: SpecTableProps) {
             <>
               <Header>Camera</Header>
               <SubHeading>Rear Cameras</SubHeading>
-              {(device.specsCamera?.rear ?? []).map((cam: any, i: number, arr: any[]) => {
-                const ofType = arr.filter((c) => c.type === cam.type).length
-                const order = arr.filter((c, j) => c.type === cam.type && j <= i).length
-                const label = ofType > 1 ? `${cam.type} ${order}` : cam.type
-                return <Row key={i} label={label} value={cam.sensorType} />
-              })}
+              {readRearCameras((device.specsCamera ?? null) as unknown).map((cam, i) => (
+                <Row key={`${cam.slot}-${i}`} label={cam.label} value={cam.value} />
+              ))}
               <SubHeading>Selfie Camera</SubHeading>
-              <Row label="Sensor Type" value={device.specsCamera?.selfie?.sensorType} />
+              <Row
+                label={readSelfieCamera((device.specsCamera ?? null) as unknown)?.label ?? 'Selfie camera'}
+                value={device.specsCamera?.selfie?.sensorType}
+              />
               <SubHeading>Video Recording</SubHeading>
               <Row label="Rear Video" value={device.specsCamera?.video?.rear} />
               <Row label="Front Video" value={device.specsCamera?.video?.front} />

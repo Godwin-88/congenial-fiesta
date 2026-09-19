@@ -43,6 +43,13 @@ export async function POST(request: NextRequest) {
       slug: String(body.slug).trim().toLowerCase(),
       major_category: body.major_category,
       display_order: Number(body.display_order) || 0,
+      // Aliases are taxonomy vocabulary (migration 045) consumed by the
+      // major-category detector — admin-manageable data, never hardcoded.
+      aliases: Array.isArray(body.aliases)
+        ? body.aliases
+            .map((a: unknown) => String(a).trim().toLowerCase())
+            .filter((a: string) => a.length > 1)
+        : [],
     }
 
     const { data, error } = await supabase

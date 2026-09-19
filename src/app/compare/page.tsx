@@ -3,6 +3,7 @@ import Link from 'next/link'
 import Script from 'next/script'
 import type { Metadata } from 'next'
 import { getDeviceBySlug } from '@/lib/devices/queries'
+import { readRearCameras, readSelfieCamera } from '@/lib/devices/camera-types'
 import type { Device } from '@/types/cms'
 import { ScoreBadge } from '@/components/devices/ScoreBadge'
 import { BuyBox } from '@/components/devices/BuyBox'
@@ -197,10 +198,14 @@ export default async function ComparePage({ searchParams }: PageProps) {
               'Rear Cameras': {
                 label: 'Rear Cameras',
                 value:
-                  ((d.specs_camera?.rear ?? []).map((c: any) => `${c.type}: ${c.sensorType}`).join(' · ') as string) ||
-                  undefined,
+                  (readRearCameras(d.specs_camera)
+                    .map((c) => `${c.label}: ${c.value}`)
+                    .join(' · ') as string) || undefined,
               },
-              Selfie: { label: 'Selfie', value: d.specs_camera?.selfie?.sensorType },
+              Selfie: {
+                label: 'Selfie',
+                value: readSelfieCamera(d.specs_camera)?.value ?? d.specs_camera?.selfie?.sensorType,
+              },
               'Rear Video': { label: 'Rear Video', value: d.specs_camera?.video?.rear },
               'Front Video': { label: 'Front Video', value: d.specs_camera?.video?.front },
               'Video Features': { label: 'Video Features', value: d.specs_camera?.video?.features },

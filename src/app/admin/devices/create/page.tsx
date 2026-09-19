@@ -2,15 +2,19 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { ChevronDown, ChevronUp, Eye, Save, Upload } from 'lucide-react'
+import { ChevronDown, ChevronUp, Eye, Loader2, Save, Upload } from 'lucide-react'
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 import BrandSelect from '@/components/admin/BrandSelect'
 import { CameraSpecSection } from '@/components/admin/CameraSpecSection'
-import { CameraSpec, emptyCamera, cameraHasContent } from '@/lib/camera-spec'
+import { CameraSpec, emptyCamera, cameraHasContent, cameraSpecToCanonical } from '@/lib/camera-spec'
 import { MAJOR_CATEGORIES, type MajorCategory, type DeviceType } from '@/types/cms'
 import { verdictContent } from '@/lib/verdict-content'
 import { applyDevicePrefill } from '@/lib/chat/prefill-apply'
+import SpecImportPanel from '@/components/admin/SpecImportPanel'
+import { specsToDevicePrefill } from '@/lib/devices/form-mapping'
+import type { DeviceSpecs } from '@/lib/devices/spec-schema'
+import type { ImportPreview, SpecSnapshot } from '@/lib/devices/import-agent'
 import type { DevicePrefill } from '@/lib/chat/prefill-schemas'
 
 const TiptapEditor = dynamic(
@@ -57,12 +61,29 @@ interface CollapsibleSectionProps {
   title: string
   children: React.ReactNode
   defaultOpen?: boolean
+  /** Optional anchor so callers can scroll straight to this section. */
+  id?: string
+  /** Controlled mode — pass both `open` and `onOpenChange` to drive from outside. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-function CollapsibleSection({ title, children, defaultOpen = false }: CollapsibleSectionProps) {
-  const [open, setOpen] = useState(defaultOpen)
+function CollapsibleSection({
+  title,
+  children,
+  defaultOpen = false,
+  id,
+  open: controlledOpen,
+  onOpenChange,
+}: CollapsibleSectionProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen)
+  const open = controlledOpen ?? uncontrolledOpen
+  const setOpen = (next: boolean) => {
+    if (onOpenChange) onOpenChange(next)
+    if (controlledOpen === undefined) setUncontrolledOpen(next)
+  }
   return (
-    <div className="bg-card rounded-lg border-2 border-border mb-4">
+    <div id={id} className="bg-card rounded-lg border-2 border-border mb-4">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -84,6 +105,17 @@ export default function CreateDevicePage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [brands, setBrands] = useState<Array<{ id: number; name: string; slug: string }>>([])
   const [loadingBrands, setLoadingBrands] = useState(true)
+  // YouTube import handoff (see the `yt` effect below): true while the payload
+  // from the "Import from YouTube" modal is decoded and staged into this form.
+  const [ytLoading, setYtLoading] = useState(false)
+  const ytAppliedRef = useRef(false)
+  // The YouTube candidate rebuilt as a SpecSnapshot so the Import
+  // Specifications panel can merge it with the adapter sources (true
+  // multi-source merger: YouTube supplies the name + what the video stated,
+  // authoritative sources win factual conflicts).
+  const [ytSnapshot, setYtSnapshot] = useState<SpecSnapshot | null>(null)
+  // Import Specifications panel is collapsible; the quick-start chip opens it.
+  const [importPanelOpen, setImportPanelOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -134,6 +166,14 @@ export default function CreateDevicePage() {
   const [specsSoftware, setSpecsSoftware] = useState<Record<string, string>>({})
   const [specsNetwork, setSpecsNetwork] = useState<Record<string, string>>({})
 
+  // Phone Database §13/§20 — variant + provenance identity fields.
+  const [modelNumber, setModelNumber] = useState('')
+  const [variantLabel, setVariantLabel] = useState('')
+  const [region, setRegion] = useState('')
+  const [importStatus, setImportStatus] = useState('')
+  const [parentDeviceId, setParentDeviceId] = useState<number | null>(null)
+  const [verifiedDate, setVerifiedDate] = useState('')
+
   // Buy links
   const [buyLinks, setBuyLinks] = useState<Array<{ retailer: string; url: string; price: string; priceDate: string }>>([])
 
@@ -156,7 +196,8 @@ export default function CreateDevicePage() {
         Object.keys(specsProcessor).length > 0 || Object.keys(specsMemory).length > 0 ||
         cameraHasContent(specsCamera) || Object.keys(specsBattery).length > 0 ||
         Object.keys(specsConnectivity).length > 0 || Object.keys(specsSoftware).length > 0 ||
-        Object.keys(specsNetwork).length > 0) {
+        Object.keys(specsNetwork).length > 0 ||
+        modelNumber || variantLabel || region || importStatus || parentDeviceId != null || verifiedDate) {
       setDirty(true)
     }
   }, [name, slug, tagline, priceKes, priceUsd, releaseYear, priceTier, majorCategory, deviceTypeId, status,
@@ -165,7 +206,8 @@ export default function CreateDevicePage() {
       relatedVideoId, relatedTiktokUrl, seoTitle, seoDescription,
       images, verdictPros, verdictCons, buyLinks,
       specsDesign, specsDisplay, specsProcessor, specsMemory,
-      specsCamera, specsBattery, specsConnectivity, specsSoftware, specsNetwork])
+      specsCamera, specsBattery, specsConnectivity, specsSoftware, specsNetwork,
+      modelNumber, variantLabel, region, importStatus, parentDeviceId, verifiedDate])
 
   useEffect(() => {
     if (!slugManuallyEdited && name) {
@@ -174,10 +216,12 @@ export default function CreateDevicePage() {
   }, [name, slugManuallyEdited])
 
   // Agentic prefill: the AI assistant dispatches `fweezy:prefill-apply` to
-  // populate this create form. Nothing is saved — the admin reviews + saves.
+  // populate this create form. The Phone Database import panel dispatches the
+  // SAME event, so both paths share one code path with zero duplication.
+  // Nothing is saved in either case — the admin reviews + saves.
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ collection?: string; payload?: Record<string, unknown> }>).detail
+      const detail = (e as CustomEvent<{ collection?: string; payload?: Record<string, unknown>; message?: string }>).detail
       if (!detail || detail.collection !== 'devices' || !detail.payload) return
       const fields = detail.payload as DevicePrefill
 
@@ -213,6 +257,13 @@ export default function CreateDevicePage() {
         setRelatedVideoId,
         setSeoTitle,
         setSeoDescription,
+        // Phone Database §13/§20 — variant + provenance identity fields.
+        setModelNumber,
+        setVariantLabel,
+        setRegion,
+        setParentDeviceId,
+        setImportStatus,
+        setVerifiedDate,
       })
 
       // Resolve brand name against the loaded brands list
@@ -226,12 +277,133 @@ export default function CreateDevicePage() {
       if (fields.name && !slugManuallyEdited) setSlug(slugify(fields.name))
 
       setDirty(true)
-      setToast({ message: 'AI prefill applied — review before saving', type: 'success' })
+      setToast({ message: detail.message ?? 'AI prefill applied — review before saving', type: 'success' })
     }
     window.addEventListener('fweezy:prefill-apply', handler)
     return () => window.removeEventListener('fweezy:prefill-apply', handler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brands, slugManuallyEdited, setDirty, setToast])
+
+  // ── YouTube import handoff ──────────────────────────────────────────────────
+  // The "Import from YouTube" modal navigates here with `?yt=<payload>`: the
+  // device name resolved from the video title, the major category resolved
+  // against the live taxonomy, the related video id, and whatever canonical
+  // specs the creator wrote into the description. We decode it and dispatch
+  // the SAME `fweezy:prefill-apply` event the AI assistant and the Import
+  // Specifications panel use, so there is exactly one staging code path.
+  // Nothing is saved here — the admin reviews, supplements the missing specs
+  // with the agent (the snapshot below is merged into that panel's fetch),
+  // then saves.
+  //
+  // Waits for brands to load because brand resolution needs the loaded list.
+  useEffect(() => {
+    if (loadingBrands || ytAppliedRef.current) return
+    const params = new URLSearchParams(window.location.search)
+    const raw = params.get('yt')
+    if (!raw) return
+
+    ytAppliedRef.current = true
+    setYtLoading(true)
+
+    const cleanupUrl = () => {
+      // Drop the param so a refresh does not re-stage the same device.
+      const url = new URL(window.location.href)
+      url.searchParams.delete('yt')
+      window.history.replaceState({}, '', url.pathname + url.search)
+    }
+
+    try {
+      const base64 = raw.replace(/-/g, '+').replace(/_/g, '/')
+      const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
+      const binary = atob(padded)
+      const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
+      const payload = JSON.parse(new TextDecoder().decode(bytes)) as {
+        videoId?: string
+        name?: string
+        brandName?: string | null
+        releaseYear?: number | null
+        tagline?: string | null
+        priceTier?: string | null
+        majorCategory?: string | null
+        specs?: Record<string, unknown>
+      }
+
+      if (!payload.name) throw new Error('missing device name')
+
+      // Canonical specs from the video description → form prefill (shared mapper).
+      const prefill = specsToDevicePrefill({
+        identity: {
+          name: payload.name,
+          brand: payload.brandName ?? null,
+          releaseYear: payload.releaseYear ?? null,
+          tagline: payload.tagline ?? null,
+        },
+        specs: payload.specs ?? {},
+      })
+
+      window.dispatchEvent(
+        new CustomEvent('fweezy:prefill-apply', {
+          detail: {
+            collection: 'devices',
+            payload: prefill,
+            message: `Loaded "${payload.name}" from YouTube — supplement any missing specs with the agent, then save.`,
+          },
+        }),
+      )
+
+      if (payload.videoId) setRelatedVideoId(payload.videoId)
+      if (payload.priceTier) setPriceTier(payload.priceTier)
+      if (payload.majorCategory) setMajorCategory(payload.majorCategory as MajorCategory)
+
+      // Rebuild the YouTube candidate as the SpecSnapshot the import agent
+      // merges. Identity carries the name the video resolved; specs carry
+      // only what the description stated (validated upstream by the schema
+      // gate — unstated fields are simply absent).
+      const identityName = payload.name.trim()
+      const watchUrl = `https://www.youtube.com/watch?v=${payload.videoId ?? ''}`
+      setYtSnapshot({
+        match: {
+          externalId: payload.videoId ?? identityName,
+          name: identityName,
+          brand: payload.brandName ?? null,
+          releaseYear: payload.releaseYear ?? null,
+          modelNumber: null,
+          region: null,
+          variantLabel: null,
+          url: payload.videoId ? watchUrl : null,
+          thumbnail: null,
+          sourceSlug: 'youtube',
+          sourceLabel: 'YouTube review',
+        },
+        identity: {
+          name: identityName,
+          brand: payload.brandName ?? null,
+          modelNumber: null,
+          releaseYear: payload.releaseYear ?? null,
+          variantLabel: null,
+          region: null,
+          tagline: payload.tagline ?? null,
+        },
+        specs: (payload.specs ?? {}) as Partial<DeviceSpecs>,
+        raw: { videoId: payload.videoId ?? null, from: 'youtube-handoff' },
+        sourceUrl: payload.videoId ? watchUrl : null,
+        providedPaths: Object.entries(payload.specs ?? {}).flatMap(([section, values]) =>
+          values && typeof values === 'object'
+            ? Object.keys(values as Record<string, unknown>)
+                .filter((k) => (values as Record<string, unknown>)[k] != null)
+                .map((k) => `${section}.${k}`)
+            : [],
+        ),
+      })
+      setDirty(true)
+    } catch {
+      setToast({ message: 'Could not read the YouTube import payload.', type: 'error' })
+    } finally {
+      setYtLoading(false)
+      cleanupUrl()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingBrands])
 
   useEffect(() => {
     async function loadBrands() {
@@ -355,7 +527,9 @@ export default function CreateDevicePage() {
         specs_display: specsDisplay,
         specs_processor: specsProcessor,
         specs_memory: specsMemory,
-        specs_camera: specsCamera,
+        // Persist the canonical shape the ranking engine and public UI read
+        // (form free-text is parsed into megapixels/aperture/OIS etc.).
+        specs_camera: cameraSpecToCanonical(specsCamera),
         specs_battery: specsBattery,
         specs_connectivity: specsConnectivity,
         specs_software: specsSoftware,
@@ -365,6 +539,13 @@ export default function CreateDevicePage() {
         related_tiktok_url: relatedTiktokUrl.trim() || null,
         seo_title: seoTitle.trim() || null,
         seo_description: seoDescription.trim() || null,
+        // Phone Database §13/§20 — device identity + import provenance.
+        model_number: modelNumber.trim() || null,
+        variant_label: variantLabel.trim() || null,
+        region: region.trim() || null,
+        parent_device_id: parentDeviceId || null,
+        import_status: importStatus || null,
+        verified_at: verifiedDate || null,
       }
 
       const url = deviceId ? `/api/admin/devices/${deviceId}` : '/api/admin/devices'
@@ -397,6 +578,23 @@ export default function CreateDevicePage() {
 
   const previewUrl = deviceId ? `/preview?id=${deviceId}` : null
 
+  // Import agent → this form. Reuses the prefill event so the two paths
+  // (AI assistant and Phone Database agent) never diverge.
+  const handleImportApply = useCallback(
+    (prefill: DevicePrefill, _preview: ImportPreview) => {
+      window.dispatchEvent(
+        new CustomEvent('fweezy:prefill-apply', {
+          detail: {
+            collection: 'devices',
+            payload: prefill,
+            message: 'Imported specifications staged — review, then save as draft.',
+          },
+        }),
+      )
+    },
+    [],
+  )
+
   return (
     <div className="max-w-5xl mx-auto">
       {/* Toast */}
@@ -418,12 +616,85 @@ export default function CreateDevicePage() {
         </div>
       )}
 
+      {/* YouTube import handoff: shown while the `?yt=` payload is staged. */}
+      {ytLoading && (
+        <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-3 bg-black/70 backdrop-blur-sm">
+          <Loader2 size={36} className="animate-spin text-brand-primary" />
+          <p className="text-sm font-medium text-white">Loading device from YouTube…</p>
+          <p className="text-xs text-muted-foreground">
+            Resolving the device name and any specs from the review.
+          </p>
+        </div>
+      )}
+
       <div className="flex gap-8">
         {/* Main Content */}
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold text-white font-heading mb-6">
             {deviceId ? 'Edit Device' : 'Create Device'}
           </h1>
+
+          {/* Progressive-disclosure hints: start with the name, then let the
+              spec agent fill the rest (spec §14 — missing stays null). */}
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-gray-500">Quick start:</span>
+            <button
+              type="button"
+              onClick={() => {
+                document
+                  .querySelector<HTMLInputElement>('input[placeholder="Device name"]')
+                  ?.focus()
+              }}
+              className="rounded-full border border-border px-3 py-1 text-xs text-gray-300 transition-colors hover:border-brand-primary hover:text-white"
+            >
+              1. Type the device name
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setImportPanelOpen(true)
+                requestAnimationFrame(() => {
+                  document.getElementById('import-specs')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                })
+              }}
+              className="rounded-full border border-border px-3 py-1 text-xs text-gray-300 transition-colors hover:border-brand-primary hover:text-white"
+            >
+              2. Import specifications
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSave(false)}
+              disabled={saving}
+              className="rounded-full border border-border px-3 py-1 text-xs text-gray-300 transition-colors hover:border-brand-primary hover:text-white disabled:opacity-40"
+            >
+              3. Save as draft
+            </button>
+          </div>
+
+          {/* Import agent (Phone Database §10–§13): search sources, compare,
+              resolve conflicts, stage into this form or save a draft device. */}
+          <CollapsibleSection
+            id="import-specs"
+            title="Import Specifications (agent)"
+            open={importPanelOpen}
+            onOpenChange={setImportPanelOpen}
+          >
+            {ytLoading ? (
+              <p className="mb-1 text-[11px] text-brand-primary">
+                Loading device from YouTube — the video resolved the name and any specs the creator stated. The spec panel below merges that device with the agent sources.
+              </p>
+            ) : null}
+            <SpecImportPanel
+              existingDeviceId={deviceId}
+              defaultQuery={name}
+              youtubeSnapshot={ytSnapshot}
+              onApplyToForm={handleImportApply}
+              onCreated={(id) => {
+                setDeviceId(id)
+                setToast({ message: `Draft device #${id} created with provenance`, type: 'success' })
+              }}
+            />
+          </CollapsibleSection>
 
           {/* Identity */}
           <CollapsibleSection title="Identity" defaultOpen>
@@ -488,6 +759,39 @@ export default function CreateDevicePage() {
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Price (USD)</label>
                 <input type="number" value={priceUsd} onChange={e => setPriceUsd(e.target.value)} placeholder="1000"
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
+              </div>
+
+              {/* Phone Database §13/§20 — variant + provenance identity fields. */}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Model Number</label>
+                <input type="text" value={modelNumber} onChange={e => setModelNumber(e.target.value)} placeholder="e.g. SM-S938B/DS"
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Variant Label</label>
+                <input type="text" value={variantLabel} onChange={e => setVariantLabel(e.target.value)} placeholder="e.g. Global, India, 12/256"
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Region</label>
+                <input type="text" value={region} onChange={e => setRegion(e.target.value)} placeholder="e.g. KE, IN, EU, Global"
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Import Status</label>
+                <select value={importStatus} onChange={e => setImportStatus(e.target.value)}
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none">
+                  <option value="">Select status…</option>
+                  <option value="manual">Manual</option>
+                  <option value="imported">Imported</option>
+                  <option value="verified">Verified</option>
+                  <option value="conflict">Conflict</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Verified Date</label>
+                <input type="date" value={verifiedDate} onChange={e => setVerifiedDate(e.target.value)}
                   className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
               </div>
             </div>

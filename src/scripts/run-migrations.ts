@@ -63,6 +63,11 @@ const migrations = [
   '039_retention_and_rule_mgmt.sql',
   '040_scheduled_exports.sql',
   '041_affiliate_network_connectors.sql',
+  '042_phone_database_sources.sql',
+  '043_ranking_engine.sql',
+  '044_youtube_import_source.sql',
+  '045_device_type_aliases.sql',
+  '046_camera_slot_taxonomy.sql',
 ]
 
 async function runMigrations() {

@@ -8,11 +8,15 @@ import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 import BrandSelect from '@/components/admin/BrandSelect'
 import { CameraSpecSection } from '@/components/admin/CameraSpecSection'
-import { CameraSpec, emptyCamera, cameraHasContent, normalizeCamera } from '@/lib/camera-spec'
+import { CameraSpec, emptyCamera, cameraHasContent, normalizeCamera, cameraSpecToCanonical } from '@/lib/camera-spec'
 import { MAJOR_CATEGORIES, type MajorCategory, type DeviceType } from '@/types/cms'
 import { verdictContent } from '@/lib/verdict-content'
 import { applyDevicePrefill } from '@/lib/chat/prefill-apply'
 import type { DevicePrefill } from '@/lib/chat/prefill-schemas'
+import SpecImportPanel from '@/components/admin/SpecImportPanel'
+import RankingBreakdownPanel from '@/components/admin/RankingBreakdownPanel'
+import ProvenancePanel from '@/components/admin/ProvenancePanel'
+import type { ImportPreview } from '@/lib/devices/import-agent'
 
 const PRICE_TIERS = [
   { value: '', label: 'Select price tier…' },
@@ -144,6 +148,14 @@ export default function EditDevicePage() {
   const [seoTitle, setSeoTitle] = useState('')
   const [seoDescription, setSeoDescription] = useState('')
 
+  // Phone Database §13/§20 — variant + provenance identity fields.
+  const [modelNumber, setModelNumber] = useState('')
+  const [variantLabel, setVariantLabel] = useState('')
+  const [region, setRegion] = useState('')
+  const [importStatus, setImportStatus] = useState<'manual' | 'imported' | 'verified' | 'conflict' | ''>('')
+  const [parentDeviceId, setParentDeviceId] = useState<number | null>(null)
+  const [verifiedDate, setVerifiedDate] = useState('')
+
   // Delete state
   const [deleteOpen, setDeleteOpen] = useState(false)
   const { isDirty, setDirty, resetDirty, showModal, handleDiscard, handleCancel } = useUnsavedChanges()
@@ -161,7 +173,9 @@ export default function EditDevicePage() {
         Object.keys(specsProcessor).length > 0 || Object.keys(specsMemory).length > 0 ||
         cameraHasContent(specsCamera) || Object.keys(specsBattery).length > 0 ||
         Object.keys(specsConnectivity).length > 0 || Object.keys(specsSoftware).length > 0 ||
-        Object.keys(specsNetwork).length > 0) {
+        Object.keys(specsNetwork).length > 0 ||
+        // Phone Database §13/§20 — variant + provenance identity fields.
+        modelNumber || variantLabel || region || importStatus || parentDeviceId != null || verifiedDate) {
       setDirty(true)
     }
   }, [name, slug, tagline, priceKes, priceUsd, releaseYear, priceTier, majorCategory, deviceTypeId, status,
@@ -170,7 +184,9 @@ export default function EditDevicePage() {
       relatedVideoId, relatedTiktokUrl, seoTitle, seoDescription,
       images, verdictPros, verdictCons, buyLinks,
       specsDesign, specsDisplay, specsProcessor, specsMemory,
-      specsCamera, specsBattery, specsConnectivity, specsSoftware, specsNetwork])
+      specsCamera, specsBattery, specsConnectivity, specsSoftware, specsNetwork,
+      // Phone Database §13/§20 — variant + provenance identity fields.
+      modelNumber, variantLabel, region, importStatus, parentDeviceId, verifiedDate])
 
   useEffect(() => {
     if (!slugManuallyEdited && name) {
@@ -238,6 +254,13 @@ export default function EditDevicePage() {
         setRelatedTiktokUrl(device.related_tiktok_url ?? '')
         setSeoTitle(device.seo_title ?? '')
         setSeoDescription(device.seo_description ?? '')
+        // Phone Database §13/§20 — variant + provenance identity fields.
+        setModelNumber(device.model_number ?? '')
+        setVariantLabel(device.variant_label ?? '')
+        setRegion(device.region ?? '')
+        setImportStatus(device.import_status ?? '')
+        setParentDeviceId(device.parent_device_id ?? null)
+        setVerifiedDate(device.verified_at ? device.verified_at.slice(0, 10) : '')
       } catch {
         setNotFound(true)
       } finally {
@@ -296,6 +319,13 @@ export default function EditDevicePage() {
         setRelatedVideoId,
         setSeoTitle,
         setSeoDescription,
+        // Phone Database §13/§20 — variant + provenance identity fields.
+        setModelNumber,
+        setVariantLabel,
+        setRegion,
+        setParentDeviceId,
+        setImportStatus: (v: string) => setImportStatus(v as 'manual' | 'imported' | 'verified' | 'conflict' | ''),
+        setVerifiedDate,
       })
 
       // Resolve brand name against the loaded brands list
@@ -366,6 +396,24 @@ export default function EditDevicePage() {
     }
   }
 
+  /**
+   * Apply an imported specification set to this form's state.
+   * Staging only — the admin still presses Save (Phone Database §13: imports
+   * are drafts and the administrator has final authority).
+   */
+  const handleImportApply = useCallback((prefill: DevicePrefill, _preview: ImportPreview) => {
+    window.dispatchEvent(
+      new CustomEvent('fweezy:prefill-apply', {
+        detail: {
+          collection: 'devices',
+          payload: prefill,
+          message: 'Imported specifications staged — review each field, then save as draft.',
+        },
+      }),
+    )
+    setToast({ message: 'Imported specifications staged for review', type: 'success' })
+  }, [])
+
   const handleSave = async (publish: boolean) => {
     if (!name.trim() || !slug.trim()) {
       setToast({ message: 'Name and slug are required', type: 'error' })
@@ -401,7 +449,9 @@ export default function EditDevicePage() {
         specs_display: specsDisplay,
         specs_processor: specsProcessor,
         specs_memory: specsMemory,
-        specs_camera: specsCamera,
+        // Persist the canonical shape the ranking engine and public UI read
+        // (form free-text is parsed into megapixels/aperture/OIS etc.).
+        specs_camera: cameraSpecToCanonical(specsCamera),
         specs_battery: specsBattery,
         specs_connectivity: specsConnectivity,
         specs_software: specsSoftware,
@@ -411,6 +461,13 @@ export default function EditDevicePage() {
         related_tiktok_url: relatedTiktokUrl.trim() || null,
         seo_title: seoTitle.trim() || null,
         seo_description: seoDescription.trim() || null,
+        // Phone Database §13/§20 — variant + provenance identity fields.
+        model_number: modelNumber.trim() || null,
+        variant_label: variantLabel.trim() || null,
+        region: region.trim() || null,
+        import_status: importStatus || null,
+        parent_device_id: parentDeviceId || null,
+        verified_at: verifiedDate ? new Date(verifiedDate + 'T00:00:00Z') : null,
       }
 
       const res = await fetch(`/api/admin/devices/${id}`, {
@@ -501,6 +558,28 @@ export default function EditDevicePage() {
           </Link>
           <h1 className="text-2xl font-bold text-white font-heading mb-6">Edit Device</h1>
 
+          {/* Import agent (Phone Database §10–§13, §40): search sources, compare,
+              resolve conflicts, stage into this form. Never auto-publishes. */}
+          <CollapsibleSection title="Import Specifications (agent)">
+            <SpecImportPanel
+              existingDeviceId={parseInt(id)}
+              defaultQuery={name}
+              onApplyToForm={handleImportApply}
+            />
+          </CollapsibleSection>
+
+          {/* Deterministic ranking (§30, §36): the public site shows one number,
+              administrators audit every component here. */}
+          <CollapsibleSection title="FweezyTech Score (ranking breakdown)">
+            <RankingBreakdownPanel deviceId={parseInt(id)} />
+          </CollapsibleSection>
+
+          {/* Provenance (§17, §18, §24, §25): which source supplied each field,
+              manual overrides, verification state and the full change history. */}
+          <CollapsibleSection title="Data Provenance & Change History">
+            <ProvenancePanel deviceId={parseInt(id)} />
+          </CollapsibleSection>
+
           {/* Identity */}
           <CollapsibleSection title="Identity" defaultOpen>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -564,6 +643,48 @@ export default function EditDevicePage() {
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Price (USD)</label>
                 <input type="number" value={priceUsd} onChange={e => setPriceUsd(e.target.value)} placeholder="1000"
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
+              </div>
+            </div>
+
+            {/* Phone Database §13/§20 — variant + provenance identity fields. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-border">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Model Number</label>
+                <input type="text" value={modelNumber} onChange={e => setModelNumber(e.target.value)} placeholder="e.g. SM-S938B/DS"
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Variant Label</label>
+                <input type="text" value={variantLabel} onChange={e => setVariantLabel(e.target.value)} placeholder="e.g. Global, India, 12/256, 512GB Sky Blue"
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Region</label>
+                <input type="text" value={region} onChange={e => setRegion(e.target.value)} placeholder="e.g. KE, IN, EU, Global"
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Import Status</label>
+                <select value={importStatus} onChange={e => setImportStatus(e.target.value as 'manual' | 'imported' | 'verified' | 'conflict' | '')}
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none">
+                  <option value="">Select status…</option>
+                  <option value="manual">Manual</option>
+                  <option value="imported">Imported</option>
+                  <option value="verified">Verified</option>
+                  <option value="conflict">Conflict</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Parent Device ID</label>
+                <input type="number" value={parentDeviceId ?? ''} onChange={e => setParentDeviceId(e.target.value ? parseInt(e.target.value) : null)}
+                  placeholder="ID of base model"
+                  className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
+                <p className="text-xs text-gray-500 mt-1">Link to the base model's device ID for regional variants.</p>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Verified Date</label>
+                <input type="date" value={verifiedDate} onChange={e => setVerifiedDate(e.target.value)}
                   className="w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none" />
               </div>
             </div>

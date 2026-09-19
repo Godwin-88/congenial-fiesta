@@ -108,6 +108,15 @@ export const deviceExtractionSchema = z.object({
     .number()
     .nullable()
     .describe('Price mentioned in the video in USD, if numeric. Null otherwise.'),
+  majorCategoryHint: z
+    .string()
+    .nullable()
+    .describe(
+      'Slug of the product category this device belongs to, expressed in the site taxonomy ' +
+        'vocabulary (e.g. a TV review maps to a television category, headphones or speakers to ' +
+        'an audio category, a laptop to a computer category). The pipeline validates this ' +
+        'against the live taxonomy and ignores unknown values, so return null when unsure.',
+    ),
 })
 
 export type DeviceExtraction = z.infer<typeof deviceExtractionSchema>
@@ -120,6 +129,7 @@ export const EMPTY_EXTRACTION: DeviceExtraction = {
   releaseYear: null,
   tagline: null,
   priceUsd: null,
+  majorCategoryHint: null,
 }
 
 /**

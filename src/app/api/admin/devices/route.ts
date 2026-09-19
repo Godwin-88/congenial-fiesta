@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth, getAdminClient } from '@/lib/admin/require-admin'
+import { flagManualOverrides, maybeRecalculateRanking, maybeRefreshBenchmarksOnPublish } from '@/lib/devices/audit'
 
 async function getScoreWeights(supabase: ReturnType<typeof getAdminClient>) {
   const { data } = await supabase
@@ -170,6 +171,12 @@ export async function POST(request: NextRequest) {
       tagline: body.tagline?.trim() ?? null,
       status: body.status ?? 'draft',
       availability: body.availability ?? null,
+      // Phone Database §13/§20 — variant + verification identity fields.
+      model_number: body.model_number?.trim() ?? null,
+      variant_label: body.variant_label?.trim() ?? null,
+      region: body.region?.trim() ?? null,
+      parent_device_id: body.parent_device_id ?? null,
+      import_status: body.import_status ?? 'manual',
       score_display: body.score_display ?? null,
       score_performance: body.score_performance ?? null,
       score_camera: body.score_camera ?? null,
@@ -207,6 +214,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // ── Provenance + ranking for the new device (§16, §25, §30) ──
+    // Admin-entered spec leaves become manual overrides so a later automated
+    // import must flag conflicts instead of silently replacing them. The
+    // deterministic engine then produces the canonical score.
+    const changedBy = adminUser.display_name ?? adminUser.id
+    let overridesFlagged = 0
+    let rankingTotal: number | null = null
+    try {
+      overridesFlagged = await flagManualOverrides(supabase, {
+        deviceId: data.id,
+        before: {},
+        payload,
+      })
+    } catch (err) {
+      console.warn('[audit] manual override flagging failed:', (err as Error).message)
+    }
+    try {
+      rankingTotal = await maybeRecalculateRanking(supabase, data.id, {}, payload)
+      if (payload.status === 'published') {
+        // A newly published device can immediately define a global best (§31).
+        await maybeRefreshBenchmarksOnPublish(supabase, {}, payload)
+      }
+    } catch (err) {
+      console.warn('[ranking] initial calculation failed:', (err as Error).message)
+    }
+
     // Trigger search reindex if published
     if (body.status === 'published') {
       try {
@@ -217,7 +250,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ data }, { status: 201 })
+    return NextResponse.json(
+      { data, audit: { overridesFlagged, rankingTotal, changedBy } },
+      { status: 201 },
+    )
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unauthorized'
     return NextResponse.json({ error: message }, { status: message === 'Forbidden' ? 403 : 401 })

@@ -9,6 +9,7 @@
 // form-staging payloads; saving/publishing stays on the admin buttons.
 
 import { z } from 'zod'
+import { REAR_CAMERA_TOKENS } from '@/lib/devices/camera-types'
 
 // ---------------------------------------------------------------------------
 // Field constants (labels MUST match the admin form inputs 1:1 — see
@@ -18,7 +19,7 @@ import { z } from 'zod'
 export const PRICE_TIERS = ['flagship', 'mid-range', 'budget', 'ultra-premium'] as const
 export const MAJOR_CAT_SLUGS = ['phones', 'televisions', 'sound', 'macs'] as const
 export const ARTICLE_CATEGORIES = ['review', 'comparison', 'news', 'buying-guide', 'opinion'] as const
-export const CAMERA_TYPES = ['Main', 'Telephoto', 'Ultrawide', 'Macro', 'Depth'] as const
+export const CAMERA_TYPES = REAR_CAMERA_TOKENS as unknown as readonly ['Main', 'Ultrawide', 'Telephoto', 'Periscope', 'Macro', 'Depth', 'Monochrome']
 
 export const SPEC_FIELDS = {
   design: ['Dimensions', 'Weight', 'Front', 'Back', 'Side', 'Ports', 'Speakers', 'Colours', 'IP Rating'],
@@ -131,6 +132,13 @@ export const devicePrefillSchema = z.object({
   relatedVideoId: z.string().nullable().optional(),
   seoTitle: z.string().nullable().optional(),
   seoDescription: z.string().nullable().optional(),
+  // Phone Database §13/§20 — variant + provenance identity fields.
+  modelNumber: z.string().nullable().optional().describe('Exact model number/sku as published by the manufacturer, e.g. "SM-S938B/DS". Null if unknown.'),
+  variantLabel: z.string().nullable().optional().describe('Human-readable variant label, e.g. "Global", "India", "12/256", "512GB Sky Blue". Null if unknown.'),
+  region: z.string().nullable().optional().describe('Target region/code where the variant is sold, e.g. "KE", "IN", "EU", "Global". Null if unknown.'),
+  parentDeviceId: z.number().int().nullable().optional().describe('Database ID of the parent/base model when this row represents a regional variant. Null for base models.'),
+  importStatus: z.enum(['manual', 'imported', 'verified', 'conflict']).nullable().optional().describe('Import provenance status: manual | imported | verified | conflict.'),
+  verifiedDate: z.string().nullable().optional().describe('Verification date in ISO 8601 (YYYY-MM-DD) when the device data was verified. Null if not verified.'),
 }).strict()
 
 export type DevicePrefill = z.infer<typeof devicePrefillSchema>

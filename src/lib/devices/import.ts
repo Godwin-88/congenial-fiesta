@@ -6,6 +6,7 @@ import { extractDeviceFromVideo } from '@/lib/devices/ai-extract'
 import type { DeviceExtraction } from '@/lib/devices/ai-extract'
 import { curateDeviceImages } from '@/lib/devices/image-agent'
 import type { DeviceImageMeta } from '@/lib/devices/image-agent'
+import { resolveMajorCategory } from '@/lib/devices/category-detect'
 
 
 export const BRAND_KEYWORDS = [
@@ -182,7 +183,7 @@ export type ImportOptions = {
 }
 
 /** AI-augmented identity resolution: regex baseline, AI fills the gaps and prefers the fuller name. */
-function resolveDeviceIdentity(
+export function resolveDeviceIdentity(
   extraction: DeviceExtraction | null,
   regexName: string | null,
   regexBrand: { name: string; slug: string } | null,
@@ -373,11 +374,21 @@ export async function importDevicesFromYouTube(
       const status: 'draft' | 'published' = publish ? 'published' : 'draft'
 
       // 7) Draft / enrichment payload.
+      // Major category comes from the live `device_types` taxonomy (never
+      // hardcoded): the same resolver the import agent uses, so a TV review is
+      // filed under televisions, headphones under sound, and so on. Null is a
+      // valid answer when the taxonomy has no match.
+      const majorCategory = await resolveMajorCategory(supabase, {
+        text: `${name} ${brand.name} ${title} ${description}`,
+        aiHint: extraction?.majorCategoryHint ?? null,
+      })
+
       const payload: Record<string, unknown> = {
         name,
         slug,
         brand_id: brandId,
         price_tier: extraction?.category ?? inferCategory(name),
+        major_category: majorCategory,
         release_year: extraction?.releaseYear ?? null,
         tagline: extraction?.tagline ?? title.slice(0, 160),
         status,

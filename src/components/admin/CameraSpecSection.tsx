@@ -1,6 +1,12 @@
 'use client'
 
-import { CameraSpec, REAR_CAMERA_TYPES, RearCameraType, emptyCamera } from '@/lib/camera-spec'
+import { CameraSpec, REAR_CAMERA_TYPES, RearCameraType, emptyCamera, rearCameraLabel, emptySelfie } from '@/lib/camera-spec'
+import { slotToken, tokenToSlot, type CameraSlot } from '@/lib/devices/camera-types'
+
+/** Keep `slot` in sync whenever the admin changes a lens's role dropdown. */
+function slotFromType(type: RearCameraType): CameraSlot {
+  return tokenToSlot(type) ?? 'main'
+}
 
 const inputClass =
   'w-full bg-muted text-white rounded px-3 py-2 text-sm border border-border focus:border-brand-primary focus:outline-none'
@@ -28,7 +34,10 @@ export function CameraSpecSection({
   const updateRear = (id: string, patch: Partial<CameraSpec['rear'][number]>) =>
     setRear(v.rear.map((c) => (c.id === id ? { ...c, ...patch } : c)))
   const addRear = (type: RearCameraType = 'Main') =>
-    setRear([...v.rear, { id: crypto.randomUUID(), type, sensorType: '' }])
+    setRear([
+      ...v.rear,
+      { id: crypto.randomUUID(), slot: slotFromType(type), type, sensorType: '' },
+    ])
   const removeRear = (id: string) => setRear(v.rear.filter((c) => c.id !== id))
 
   return (
@@ -46,12 +55,15 @@ export function CameraSpecSection({
                 <label className={labelClass}>Type</label>
                 <select
                   value={cam.type}
-                  onChange={(e) => updateRear(cam.id, { type: e.target.value as RearCameraType })}
+                  onChange={(e) => {
+                    const type = e.target.value as RearCameraType
+                    updateRear(cam.id, { type, slot: slotFromType(type) })
+                  }}
                   className={inputClass}
                 >
                   {REAR_CAMERA_TYPES.map((t) => (
                     <option key={t} value={t}>
-                      {t}
+                      {rearCameraLabel(t)}
                     </option>
                   ))}
                 </select>
@@ -84,7 +96,7 @@ export function CameraSpecSection({
               onClick={() => addRear(t)}
               className="rounded-full border border-border px-3 py-1 text-xs text-gray-300 hover:border-brand-primary hover:text-brand-primary"
             >
-              + Add {t}
+              + Add {rearCameraLabel(t).replace(/ camera$/i, '')}
             </button>
           ))}
         </div>
@@ -98,7 +110,7 @@ export function CameraSpecSection({
           <input
             type="text"
             value={v.selfie.sensorType}
-            onChange={(e) => set({ selfie: { sensorType: e.target.value } })}
+            onChange={(e) => set({ selfie: { ...emptySelfie(), ...v.selfie, sensorType: e.target.value } })}
             placeholder="e.g. 32 MP, f/2.2"
             className={inputClass}
           />

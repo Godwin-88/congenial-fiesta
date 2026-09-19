@@ -11,7 +11,7 @@ import {
   LayoutDashboard, FileText, Smartphone, Tag, Video,
   Clock, Image as ImageIcon, Handshake, Package, Trophy, Award,
   FileJson, Users, Settings, LogOut, Menu, X,
-  ChevronDown, Layers, Briefcase, Shield,
+  ChevronDown, Layers, Briefcase, Shield, Database,
   PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 
@@ -35,6 +35,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: 'Articles', icon: <FileText size={18} />, href: '/admin/articles' },
       { label: 'Devices', icon: <Smartphone size={18} />, href: '/admin/devices' },
+      { label: 'Data Sources', icon: <Database size={18} />, href: '/admin/sources', roles: ['admin', 'editor'] },
       { label: 'Brands', icon: <Tag size={18} />, href: '/admin/brands' },
       { label: 'Videos', icon: <Video size={18} />, href: '/admin/videos' },
       { label: 'Coming Soon', icon: <Clock size={18} />, href: '/admin/coming-soon' },

@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth, getAdminClient } from '@/lib/admin/require-admin'
 import { isAdminRole } from '@/lib/admin/roles'
+import { recordDeviceChanges, flagManualOverrides, maybeRecalculateRanking, maybeRefreshBenchmarksOnPublish } from '@/lib/devices/audit'
+
+/** Spec sections the deterministic ranking engine reads (§30). */
+const RANKING_SPEC_FIELDS = [
+  'specs_design',
+  'specs_display',
+  'specs_processor',
+  'specs_memory',
+  'specs_camera',
+  'specs_battery',
+]
 
 async function getScoreWeights(supabase: ReturnType<typeof getAdminClient>) {
   const { data } = await supabase
@@ -131,6 +142,19 @@ export async function PATCH(
       value: body.score_value,
     }, weights)
 
+    // Ranking-relevant spec edits are handled by the deterministic engine
+    // (§26a, §30) — it owns the final score. Manual component scores remain a
+    // fallback for devices the engine cannot yet score (missing spec data).
+    const hasSpecChanges = RANKING_SPEC_FIELDS.some((f) => body[f] !== undefined)
+
+    // Existing row is needed for the change history (§25) and to detect
+    // which spec leaves the administrator corrected (§16 overrides).
+    const { data: before } = await supabase
+      .from('devices')
+      .select('*')
+      .eq('id', parseInt(id))
+      .maybeSingle()
+
     const payload: Record<string, unknown> = {}
     if (body.name !== undefined) payload.name = body.name.trim()
     if (body.slug !== undefined) payload.slug = body.slug.trim()
@@ -144,12 +168,21 @@ export async function PATCH(
     if (body.tagline !== undefined) payload.tagline = body.tagline?.trim() ?? null
     if (body.status !== undefined) payload.status = body.status
     if (body.availability !== undefined) payload.availability = body.availability ?? null
+    // Phone Database §13/§20 — variant + verification identity fields.
+    if (body.model_number !== undefined) payload.model_number = body.model_number?.trim() ?? null
+    if (body.variant_label !== undefined) payload.variant_label = body.variant_label?.trim() ?? null
+    if (body.region !== undefined) payload.region = body.region?.trim() ?? null
+    if (body.parent_device_id !== undefined) payload.parent_device_id = body.parent_device_id ?? null
+    if (body.import_status !== undefined) payload.import_status = body.import_status
+    if (body.verified_at !== undefined) payload.verified_at = body.verified_at ?? null
     if (body.score_display !== undefined) payload.score_display = body.score_display ?? null
     if (body.score_performance !== undefined) payload.score_performance = body.score_performance ?? null
     if (body.score_camera !== undefined) payload.score_camera = body.score_camera ?? null
     if (body.score_battery !== undefined) payload.score_battery = body.score_battery ?? null
     if (body.score_value !== undefined) payload.score_value = body.score_value ?? null
-    payload.scores_overall = scoreOverall
+    // Only fall back to the legacy weighted score when the engine will not run
+    // (no ranking-relevant spec change in this request).
+    if (!hasSpecChanges) payload.scores_overall = scoreOverall
     if (body.verdict_pros !== undefined) payload.verdict_pros = body.verdict_pros ?? []
     if (body.verdict_cons !== undefined) payload.verdict_cons = body.verdict_cons ?? []
     if (body.verdict_bottom_line !== undefined) payload.verdict_bottom_line = body.verdict_bottom_line?.trim() ?? null
@@ -185,6 +218,53 @@ export async function PATCH(
       return NextResponse.json({ error: 'Device not found' }, { status: 404 })
     }
 
+    // ── Audit + provenance + ranking (§16, §25, §30) ─────────────
+    // All three are best-effort: a ranking/audit hiccup must not fail the save.
+    const changedBy = adminUser.display_name ?? adminUser.id
+    let changesRecorded = 0
+    let overridesFlagged = 0
+    let rankingTotal: number | null = null
+    let benchmarksMoved: string[] = []
+    let devicesRecalculated = 0
+    if (before) {
+      try {
+        changesRecorded = await recordDeviceChanges(supabase, {
+          deviceId: parseInt(id),
+          before: before as Record<string, unknown>,
+          payload,
+          changedBy,
+          reason: 'Admin edit via device form',
+        })
+        overridesFlagged = await flagManualOverrides(supabase, {
+          deviceId: parseInt(id),
+          before: before as Record<string, unknown>,
+          payload,
+        })
+      } catch (err) {
+        console.warn('[audit] device change recording failed:', (err as Error).message)
+      }
+      try {
+        rankingTotal = await maybeRecalculateRanking(
+          supabase,
+          parseInt(id),
+          before as Record<string, unknown>,
+          payload,
+        )
+        // Publishing can raise a global best → refresh + recalc everyone (§31).
+        const bench = await maybeRefreshBenchmarksOnPublish(
+          supabase,
+          before as Record<string, unknown>,
+          payload,
+        )
+        if (bench) {
+          benchmarksMoved = bench.benchmarksMoved
+          devicesRecalculated = bench.devicesRecalculated
+        }
+      } catch (err) {
+        console.warn('[ranking] recalculation failed:', (err as Error).message)
+      }
+    }
+
     // Trigger search reindex if status changed to published
     if (body.status === 'published') {
       try {
@@ -195,7 +275,10 @@ export async function PATCH(
       }
     }
 
-    return NextResponse.json({ data })
+    return NextResponse.json({
+      data,
+      audit: { changesRecorded, overridesFlagged, rankingTotal, benchmarksMoved, devicesRecalculated },
+    })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unauthorized'
     return NextResponse.json({ error: message }, { status: message === 'Forbidden' ? 403 : 401 })

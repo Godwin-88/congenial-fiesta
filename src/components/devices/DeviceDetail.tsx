@@ -22,6 +22,7 @@ import PageProgress from '@/components/devices/PageProgress'
 import SectionHeader from '@/components/ui/SectionHeader'
 import VideoReview from '@/components/devices/VideoReview'
 import { getRelatedDevices } from '@/lib/devices/queries'
+import { readRearCameras, readSelfieCamera } from '@/lib/devices/camera-types'
 import type { Device } from '@/types/cms'
 
 interface DeviceDetailProps {
@@ -34,20 +35,17 @@ interface DeviceDetailProps {
 /** Flatten the nested camera JSONB into display-ready rows for the specs accordion. */
 function cameraToRows(cam?: Record<string, unknown>): { label: string; value?: string }[] {
   if (!cam) return []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const c = cam as any
   const rows: { label: string; value?: string }[] = []
-  const rear = Array.isArray(c.rear) ? c.rear : []
-  if (rear.length > 0) {
-    rear.forEach((r: any, i: number) => {
-      if (r?.sensorType) rows.push({ label: `Rear camera ${i + 1}`, value: String(r.sensorType) })
-    })
-  } else if (c.main) {
-    rows.push({ label: 'Rear camera', value: String(c.main) })
-  }
-  if (c.selfie?.sensorType) rows.push({ label: 'Selfie camera', value: String(c.selfie.sensorType) })
-  if (c.video?.rear) rows.push({ label: 'Video (rear)', value: String(c.video.rear) })
-  if (c.video?.front) rows.push({ label: 'Video (front)', value: String(c.video.front) })
+  // Shared readers resolve the lens role from the stored `type`/`slot` (and
+  // fall back positionally), so "Rear camera 1/2/3" becomes
+  // "Main camera / Ultrawide camera / Telephoto camera…" for every stored shape.
+  for (const r of readRearCameras(cam)) rows.push({ label: r.label, value: r.value })
+  const selfie = readSelfieCamera(cam)
+  if (selfie) rows.push({ label: 'Selfie camera', value: selfie.value })
+  const c = cam as Record<string, unknown>
+  const video = (c.video ?? null) as Record<string, unknown> | null
+  if (video?.rear) rows.push({ label: 'Video (rear)', value: String(video.rear) })
+  if (video?.front) rows.push({ label: 'Video (front)', value: String(video.front) })
   if (c.extras) rows.push({ label: 'Camera extras', value: String(c.extras) })
   return rows
 }

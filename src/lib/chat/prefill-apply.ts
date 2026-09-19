@@ -12,7 +12,7 @@ import type {
   PrefillCollection,
 } from '@/lib/chat/prefill-schemas'
 import type { CameraSpec, RearCameraType } from '@/lib/camera-spec'
-import { REAR_CAMERA_TYPES } from '@/lib/camera-spec'
+import { tokenToSlot, slotToken } from '@/lib/devices/camera-types'
 
 export type DeviceSetters = {
   setName: (v: string) => void
@@ -46,6 +46,13 @@ export type DeviceSetters = {
   setRelatedVideoId: (v: string) => void
   setSeoTitle: (v: string) => void
   setSeoDescription: (v: string) => void
+  // Phone Database §13/§20 — variant + provenance identity fields.
+  setModelNumber: (v: string) => void
+  setVariantLabel: (v: string) => void
+  setRegion: (v: string) => void
+  setParentDeviceId: (v: number | null) => void
+  setImportStatus: (v: string) => void
+  setVerifiedDate: (v: string) => void
 }
 
 export type ArticleSetters = {
@@ -113,11 +120,17 @@ export function applyDevicePrefill(fields: DevicePrefill, s: DeviceSetters): voi
     if (sp.camera && Object.keys(sp.camera).length) {
       const cam = sp.camera
       const merged: CameraSpec = {
-        rear: (cam.rear ?? []).map((r: { type: string; sensorType: string }, i: number) => ({
-          id: `prefill-rear-${i}`,
-          type: (REAR_CAMERA_TYPES.includes(r.type as RearCameraType) ? r.type : 'Main') as RearCameraType,
-          sensorType: r.sensorType,
-        })),
+        rear: (cam.rear ?? []).map((r: { type: string; sensorType: string }, i: number) => {
+          // Resolve any type dialect to a canonical slot; only fall back
+          // positionally (never blanket-default to 'Main').
+          const slot = tokenToSlot(r.type) ?? 'main'
+          return {
+            id: `prefill-rear-${i}`,
+            slot,
+            type: slotToken(slot) as RearCameraType,
+            sensorType: r.sensorType,
+          }
+        }),
         selfie: { sensorType: cam.selfie ?? '' },
         video: { rear: cam.video ?? '', front: '', features: '' },
         extras: cam.extras ?? '',
@@ -141,6 +154,13 @@ export function applyDevicePrefill(fields: DevicePrefill, s: DeviceSetters): voi
   if (fields.relatedVideoId) s.setRelatedVideoId(fields.relatedVideoId)
   if (fields.seoTitle) s.setSeoTitle(fields.seoTitle)
   if (fields.seoDescription) s.setSeoDescription(fields.seoDescription)
+  // Phone Database §13/§20 — variant + provenance identity fields.
+  if (fields.modelNumber) s.setModelNumber(fields.modelNumber)
+  if (fields.variantLabel) s.setVariantLabel(fields.variantLabel)
+  if (fields.region) s.setRegion(fields.region)
+  if (fields.parentDeviceId != null) s.setParentDeviceId(fields.parentDeviceId)
+  if (fields.importStatus) s.setImportStatus(fields.importStatus)
+  if (fields.verifiedDate) s.setVerifiedDate(fields.verifiedDate)
 }
 /** Apply an article prefill payload to article form setters. */
 export function applyArticlePrefill(fields: ArticlePrefill, s: ArticleSetters): void {
@@ -191,7 +211,7 @@ export function countPrefillFields(fields: unknown): number {
   if (!fields || typeof fields !== 'object') return 0
   const o = fields as Record<string, unknown>
   let count = 0
-  const top = ['name', 'brandName', 'releaseYear', 'priceKes', 'priceUsd', 'priceTier', 'majorCategory', 'tagline', 'relatedVideoId', 'seoTitle', 'seoDescription', 'title', 'excerpt', 'category']
+  const top = ['name', 'brandName', 'releaseYear', 'priceKes', 'priceUsd', 'priceTier', 'majorCategory', 'tagline', 'relatedVideoId', 'seoTitle', 'seoDescription', 'modelNumber', 'variantLabel', 'region', 'importStatus', 'verifiedDate', 'title', 'excerpt', 'category']
   top.forEach((k) => {
     const v = o[k]
     if (v != null && v !== '') count += 1
