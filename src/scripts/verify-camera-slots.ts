@@ -128,7 +128,7 @@ check('round-trip keeps main OIS', resavedRear[0]?.ois, 'yes')
 check('round-trip keeps main slot', resavedRear[0]?.slot, 'Main')
 check('round-trip keeps ultrawide slot', resavedRear[1]?.slot, 'Ultrawide')
 check('round-trip keeps ultrawide AF', resavedRear[1]?.af, 'AF')
-check('round-trip keeps selfie megapixels', (resaved.selfie as Record<string, unknown>)?.megapixels, 32)
+check('round-trip keeps selfie megapixels', ((resaved.selfie as Array<Record<string, unknown>>) ?? [])[0]?.megapixels, 32)
 check('round-trip keeps video features', resaved.video_features, ['8K@30fps', '4K@60fps'])
 
 // Hand-entered free text must still contribute structured values to ranking.

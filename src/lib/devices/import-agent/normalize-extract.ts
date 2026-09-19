@@ -80,22 +80,28 @@ export function normalizeDisplay(raw: Section | null | undefined): Section {
   if (size != null) out.size_inches = size
   const dtype = pickString(raw, 'display_type')
   if (dtype) out.display_type = dtype
-  const resRaw = pickString(raw, 'resolution_width') ?? pickString(raw, 'resolution_height')
+  // `resolution` is an accepted alias — gpt-oss-class models emit the WxH
+  // string under it despite the dictionary pointing at resolution_width.
+  const resRaw = pickString(raw, 'resolution_width') ?? pickString(raw, 'resolution_height') ?? pickString(raw, 'resolution')
   const res = splitResolution(resRaw)
   if (res) {
     out.resolution_width = res[0]
     out.resolution_height = res[1]
   }
   const refreshRaw = pickString(raw, 'refresh_hz')
+  const arRaw = pickString(raw, 'adaptive_refresh')
+  // The adaptive flag must reflect the DEDICATED field, not the refresh_range
+  // phrase: a fixture carrying adaptive_refresh:'ltpo' must stay ltpo even
+  // when refresh_hz is a bare number (norm.adaptiveRefresh('120') → 'fixed').
+  const arDedicated = norm.adaptiveRefresh(arRaw)
   if (refreshRaw) {
     const all = refreshRaw.replace(/,/g, '').match(/\d+(?:\.\d+)?/g)?.map(Number).filter((n) => Number.isFinite(n) && n > 0 && n <= 500)
     const hz = all && all.length > 0 ? Math.max(...all) : norm.hertz(refreshRaw)
     if (hz != null) out.refresh_hz = hz
-    const ar = norm.adaptiveRefresh(refreshRaw) ?? norm.adaptiveRefresh(pickString(raw, 'adaptive_refresh'))
+    const ar = arDedicated ?? norm.adaptiveRefresh(refreshRaw)
     if (ar) out.adaptive_refresh = ar
-  } else {
-    const ar = norm.adaptiveRefresh(pickString(raw, 'adaptive_refresh'))
-    if (ar) out.adaptive_refresh = ar
+  } else if (arDedicated) {
+    out.adaptive_refresh = arDedicated
   }
   const nits = pickNum(raw, 'peak_brightness_nits', norm.nits)
   if (nits != null) out.peak_brightness_nits = nits
@@ -115,7 +121,7 @@ export function normalizeDisplay(raw: Section | null | undefined): Section {
     if (ssize != null) sd.size_inches = ssize
     const stype = pickString(s, 'display_type')
     if (stype) sd.display_type = stype
-    const sresRaw = pickString(s, 'resolution_width') ?? pickString(s, 'resolution_height')
+    const sresRaw = pickString(s, 'resolution_width') ?? pickString(s, 'resolution_height') ?? pickString(s, 'resolution')
     const sres = splitResolution(sresRaw)
     if (sres) {
       sd.resolution_width = sres[0]

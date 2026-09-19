@@ -68,6 +68,7 @@ const migrations = [
   '044_youtube_import_source.sql',
   '045_device_type_aliases.sql',
   '046_camera_slot_taxonomy.sql',
+  '047_enable_gsmarena_source.sql',
 ]
 
 async function runMigrations() {

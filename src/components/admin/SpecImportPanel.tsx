@@ -320,6 +320,8 @@ export default function SpecImportPanel({
                 <span className="text-xs font-medium text-white">{src.sourceLabel}</span>
                 {src.error ? (
                   <span className="text-[11px] text-amber-400">{src.error}</span>
+                ) : src.sourceSlug === 'manufacturer' && src.matches.length === 0 ? (
+                  <span className="text-[11px] text-gray-500">paste-only source — add the spec sheet below</span>
                 ) : (
                   <span className="text-[11px] text-gray-500">
                     {src.matches.length} match{src.matches.length === 1 ? '' : 'es'} · {src.durationMs}ms

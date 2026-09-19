@@ -1,0 +1,185 @@
+Dimensions
+Height:
+16.14 cm
+Width
+7.67 cm
+Thickness:
+0.82 cm (Infinite Black/Ultra Violet)
+0.81 cm (Sand Storm)
+Weight:
+215g (Infinite Black/Ultra Violet)
+211g (Sand Storm)
+Display
+Parameters
+Size: 17.23 cm (6.78 inches, measured diagonally from corner to corner)
+Resolution: 2772*1272 (FHD+), 450 ppi
+Aspect Ratio: 20/9
+HBM: 1800 nits
+Refresh Rate: 1-120Hz Adaptive, Maximum 165Hz in gaming
+Display Cover Glass: Corning Gorilla Glass Victus 2
+Support 100% DCI-P3(Typical) 1.07 billion colors(10-bit)
+Features
+Sun display
+Reduce white point
+Eye comfort reminders
+Motion cues
+Minimum 1nit
+Eye comfort for gaming
+Performance
+Operating System: OxygenOS 16.0 based on Android 16
+Platform: Snapdragon 8 Elite Gen 5 Mobile Platform
+CPU: Qualcomm Oryon CPU @4.608GHz
+GPU: Adreno 840@1200MHZ
+RAM: 12GB/16GB LPDDR5X Ultra/Ultra+
+Storage: 256GB/512GB UFS 4.1
+Battery: 7,300 mAh (Dual-cell 3,650 mAh, non-removable)
+Vibration: X-axis linear motor
+Available configurations: 12GB+256GB / 16GB+512GB
+Charge
+120W SUPERVOOC
+50W AIRVOOC
+Camera
+Main Camera
+Sensor: Sony's IMX906
+Megapixels: 50
+Lens Quantity: 6P
+Optical Image Stabilization: Yes
+Aperture: f/1.8
+Field of View: 84
+Autofocus: Yes
+Telephoto Camera
+Sensor: S5KJN5 with 3.5X optical zoom, 7x optical quality zoom
+Megapixels: 50
+Lens Quantity: 4P
+Optical Image Stabilization: Yes
+Aperture: f/2.8
+Field of View: 30
+Autofocus: Yes
+Ultra Res (digital) Zoom: up to 120x zoom
+Ultra-wide Camera
+Sensor: OV50D
+Megapixels: 50
+Lens Quantity: 6P
+Aperture: f/2.0
+Field of view: 116
+Autofocus: Yes
+Flash
+LED
+Autofocus
+Multi Autofocus(All pixel omni-directional PDAF+CDAF+LDAF)
+Video
+8K video: 30 fps
+4K video: 120fps, 60 fps, 30 fps
+1080p video: 120fps, 60 fps, 30 fps(with Retouch on)
+720p video: 30 fps
+4K EIS/OIS video: 120fps, 60 fps, 30 fps
+1080P EIS/OIS video: 120fps, 60 fps, 30 fps(with Retouch on)
+720P EIS/OIS video: 30 fps
+4K SLO-MO video: 120fps
+1080P SLO-MO video: 240 fps, 120fps
+720P SLO-MO video: 480 fps, 240 fps
+4K TIME-LAPSE: 30 fps
+1080P TIME-LAPSE: 30 fps
+Support multi-view video shooting
+Support HDR video shooting
+Support video zoom shooting
+Optical zoom: Up to 3.5X
+Digital Zoom: Up to 18X
+Features
+Photo, Video, Portrait, Night, Panorama, SLO-MO, Long Exposure, Dual-view video, TIME-LAPSE, HI-RES, Underwater, Master, TEXT SCANNER, DOC SCANNER, TILT-SHIFT, PRO VIDEO
+Front Camera
+Sensor: Sony IMX709
+Megapixels: 32
+Lens Quantity: 5P
+Focal Length: 21 mm equivalent
+Autofocus: Supported
+Aperture: f/2.4
+Video
+4K video: 60 fps, 30 fps
+1080p video: 60 fps, 30 fps(with Retouch on)
+720p video: 30 fps
+4K EIS/OIS video: 60 fps, 30 fps
+1080P EIS/OIS video: 60 fps, 30 fps
+720P EIS/OIS video: 30 fps
+4K TIME-LAPSE: 30 fps
+1080P TIME-LAPSE: 30 fps
+Support multi-view video shooting
+Support HDR video shooting
+Support video zoom shooting
+Features
+Photo, Video, Portrait, Night, Panorama, Dual-view video, TIME-LAPSE, Retouch, Screen Fill Light
+Connectivity
+eSIM
+Supported
+LTE/LTE-A
+4x4 MIMO, Supports up to UL cat18(211Mbps)
+DL cat20(2000Mbps), depending on carrier support
+Band
+GSM: 850/900/1800/1900MHz
+WCDMA: Band 1/2/4/5/6/8/19
+LTE FDD: Band 1/2/3/4/5/7/8/12/13/17/18/19/20/25/26/28/30/32/66/71
+LTE TDD: Band 34/38/39/40/41/42/48
+5G NR: n1/n2/n3/n5/n7/n8/n12/n13/n20/n25/n26/n28/n30/n38/n40/n41/n48/n66/n71/n75/n77/n78
+Wi-Fi
+Wi-Fi 7 (802.11be)
+Wi-Fi 6 (802.11ax)
+Wi-Fi 5 (802.11ac)
+Wi-Fi Display
+WLAN Tethering
+Wi-Fi 2.4GHz 2x2+Wi-Fi 5GHz 2x2 concurrent
+Wi-Fi 5GHz 160MHz
+Wi-Fi 6GHz 320MHz
+2x2 MIMO
+Bluetooth
+Bluetooth 6.0, Low Energy
+SBC, AAC, LDAC, aptX, aptX HD, aptX Adaptive, LHDC 5.0
+NFC
+NFC enabled
+Positioning
+Dual band: GPS(L1+L5), GLONASS(G1), BeiDou(B1I+B1C+B2a), Galileo(E1+E5a), QZSS(L1+L5)
+Sensors
+Proximity sensor
+Ambient light sensor
+Color temperature sensor
+E-compass
+Accelerometer
+Gyroscope
+In-display ultrasonic fingerprint sensor
+Hall Sensor
+Laser focusing sensor
+Spectral sensor
+Infrared remote control
+Ports
+USB 3.2 Gen 1
+Type-C
+Support standard Type-C earphones
+Dual nano-SIM slot
+Buttons
+Interface uses virtual navigation buttons and navigation gestures.
+Audio
+OReality Audio
+3-mic noise cancellation
+Multimedia
+HDR Supported
+HDR10+, HDRViVid
+Audio Supported Formats
+MP3, AAC, AMR, APE, OGG, FLAC, WAV, MIDI
+Video Supported Formats
+MP4, 3GP, MKV, MOV, AVI, FLV, HEVC, AVC, VP9, VP8, AV1, WEBM, TS, M2TS, ASF
+Image Supported Formats
+JPEG, BMP, PNG, DNG, HEIF, AVIF, WEBP, GIF, WBMP, ICO
+In The Box
+OnePlus 15
+USB data cable
+SIM Ejector Tool
+Quick Guide
+Safety Guide
+Note
+1. Relevant product parameter descriptions have been addressed on the corresponding pages and will not be repeated here. For details, please refer to the specific instructions on each page.
+2. Due to the mobile phone system file occupying space (including Android system and pre-installed apps), the available memory capacity is less than this value. Storage capacity will vary based on software version and may vary from device to device.
+3. Photo pixels of different camera modes may vary, please refer to the actual situation. Video pixels of different shooting modes may also vary, please refer to the actual situation.
+4. The battery of the OnePlus 15 adopts a serial dual-cell design, with a typical capacity of 3650mAh, equivalent to 7300mAh; typical energy: 27.6Wh. The rated capacity is 3575mAh, equivalent to 7150mAh; rated energy: 27.03Wh. The data is based on the OnePlus Test Laboratory calculation, and due to different individual usage habits, machine aging and other factors, the experience may vary, please refer to the actual experience.
+5. Product pictures and content on the page are for illustrative purposes only. The actual results (including but not limited to appearance, color, size) and the screen display content (including but not limited to background, UI, and picture) may vary.
+6. Numbers are theoretical, obtained under a controlled test environment (see each specific description) and provided by the supplier or the OnePlus laboratory. Actual performance may vary due to individual product differences, software versions, use conditions and environmental factors. Please refer to the actual experience.
+7. Due to the real-time changes in product batches and supply factors, in order to provide accurate information on product information, specifications, and product characteristics, OnePlus may adjust and revise the text descriptions, picture effects, and other content on the above pages in real time to match the reality of the product performance, specifications, index, parts and other information; in the event that page modifications and adjustments are necessary, no special notice will be given.
+8. The operating system information is for reference only, subject to the actual product. If updated, no further notice will be given.

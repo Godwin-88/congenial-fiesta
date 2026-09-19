@@ -1,11 +1,29 @@
 // Strict extraction schema for free-text spec sheets.
 // Mirrors spec-schema.ts canonical keys. Section objects accept string values
 // with units ("161.42 mm", "ƒ/1.8", "7300 mAh") — the orchestrator normalizes
-// them to typed values before validateSpecs. Free-form key names are NOT
-// accepted here: anything off-dictionary is rejected by zod, loudly.
+// them to typed values before validateSpecs. Off-dictionary keys are stripped
+// by zod; canonical keys are never rejected for being present.
+//
+// ACCEPTANCE vs WIRE: this zod schema is the ACCEPTANCE gate — it tolerates
+// what gpt-oss-class models actually emit: omitted keys (`.nullish()` — the
+// model drops what the sheet does not state), explicit nulls, and garbage
+// value shapes (`.catch(null)` — one bad value nulls the field, not the
+// section). The WIRE schema handed to strict structured-output providers is
+// derived from this same definition (`toStrictJsonSchema` in
+// strict-json-schema.ts), which rewrites it into strict form afterwards:
+// every property re-listed in `required`, null kept as an allowed type,
+// `additionalProperties: false` everywhere.
 import { z } from 'zod'
+import { toStrictJsonSchema } from './strict-json-schema'
 
-const strOrNum = z.union([z.string(), z.number(), z.null()]).optional()
+/**
+ * A value may arrive as text with units, as a bare number, as null, or be
+ * omitted entirely (the model drops what the sheet does not state). A garbage
+ * shape (e.g. an array where a scalar belongs) becomes null — one bad value
+ * must not void the whole section.
+ */
+const strOrNum = z.union([z.string(), z.number(), z.null()]).nullish().catch(null)
+const strList = z.array(z.union([z.string(), z.number()])).nullish().catch(null)
 
 const cameraUnitExtraction = z.object({
   type: strOrNum,
@@ -18,16 +36,16 @@ const cameraUnitExtraction = z.object({
   af: strOrNum,
   focal_length_mm: strOrNum,
   optical_zoom_x: strOrNum,
-  video_modes: z.array(z.string()).optional(),
-  features: z.array(z.string()).optional(),
+  video_modes: strList,
+  features: strList,
 })
 
 export const textSpecsSchema = z.object({
-  name: z.string().nullable(),
-  brand: z.string().nullable(),
-  model_number: z.string().nullable(),
-  release_year: z.number().int().min(2000).max(2100).nullable(),
-  tagline: z.string().max(300).nullable(),
+  name: z.string().nullish().catch(null),
+  brand: z.string().nullish().catch(null),
+  model_number: z.string().nullish().catch(null),
+  release_year: z.number().int().min(2000).max(2100).nullish().catch(null),
+  tagline: z.string().max(300).nullish().catch(null),
   specs_design: z
     .object({
       height_mm: strOrNum,
@@ -38,17 +56,21 @@ export const textSpecsSchema = z.object({
       frame_material: strOrNum,
       back_material: strOrNum,
       front_glass_protection: strOrNum,
-      colors: z.array(z.string()).optional(),
+      colors: strList,
       speakers: strOrNum,
       ports: strOrNum,
     })
-    .nullable(),
+    .nullish().catch(null),
   specs_display: z
     .object({
       size_inches: strOrNum,
       display_type: strOrNum,
       resolution_width: strOrNum,
       resolution_height: strOrNum,
+      // gpt-oss-class models often emit the WxH string under this invented
+      // key despite the dictionary pointing at resolution_width; accepted
+      // here and split by the normalizer.
+      resolution: strOrNum,
       refresh_hz: strOrNum,
       adaptive_refresh: strOrNum,
       peak_brightness_nits: strOrNum,
@@ -65,10 +87,9 @@ export const textSpecsSchema = z.object({
           protection: strOrNum,
           note: strOrNum,
         })
-        .nullable()
-        .optional(),
+        .nullish().catch(null),
     })
-    .nullable(),
+    .nullish().catch(null),
   specs_processor: z
     .object({
       chipset_name: strOrNum,
@@ -79,24 +100,26 @@ export const textSpecsSchema = z.object({
       npu: strOrNum,
       max_clock_ghz: strOrNum,
     })
-    .nullable(),
+    .nullish().catch(null),
   specs_memory: z
     .object({
       ram_gb: strOrNum,
       ram_type: strOrNum,
       storage_gb: strOrNum,
       storage_type: strOrNum,
-      variants: z.unknown().optional(),
+      variants: z
+        .array(z.object({ ram_gb: strOrNum, storage_gb: strOrNum }))
+        .nullish(),
     })
-    .nullable(),
+    .nullish().catch(null),
   specs_camera: z
     .object({
-      rear: z.array(cameraUnitExtraction).optional(),
-      selfie: z.array(cameraUnitExtraction).optional(),
-      video_features: z.array(z.string()).optional(),
+      rear: z.array(cameraUnitExtraction).nullish(),
+      selfie: z.array(cameraUnitExtraction).nullish(),
+      video_features: strList,
       extras: strOrNum,
     })
-    .nullable(),
+    .nullish().catch(null),
   specs_battery: z
     .object({
       capacity_mah: strOrNum,
@@ -104,29 +127,29 @@ export const textSpecsSchema = z.object({
       wired_w: strOrNum,
       wireless_w: strOrNum,
       reverse_wireless_w: strOrNum,
-      protocols: z.array(z.string()).optional(),
+      protocols: strList,
     })
-    .nullable(),
+    .nullish().catch(null),
   specs_connectivity: z
     .object({
       wifi: strOrNum,
       bluetooth: strOrNum,
       nfc: strOrNum,
       usb: strOrNum,
-      positioning: z.array(z.string()).optional(),
+      positioning: strList,
       ir_blaster: strOrNum,
     })
-    .nullable(),
+    .nullish().catch(null),
   specs_network: z
     .object({
-      sim: z.array(z.string()).optional(),
-      technology: z.array(z.string()).optional(),
+      sim: strList,
+      technology: strList,
       bands_2g: strOrNum,
       bands_3g: strOrNum,
       bands_4g: strOrNum,
       bands_5g: strOrNum,
     })
-    .nullable(),
+    .nullish().catch(null),
   specs_software: z
     .object({
       os: strOrNum,
@@ -134,25 +157,36 @@ export const textSpecsSchema = z.object({
       os_upgrades: strOrNum,
       security_patches: strOrNum,
     })
-    .nullable(),
+    .nullish().catch(null),
 })
 
 /**
+ * The wire schema handed to the model. Derived from `textSpecsSchema` so there
+ * is a single definition, then rewritten into strict form (every property
+ * required, no additional properties) as strict structured-output providers
+ * demand.
+ */
+export const TEXT_SPECS_STRICT_JSON_SCHEMA = toStrictJsonSchema(textSpecsSchema)
+
+/**
  * Field dictionary given to the model so it emits canonical keys instead of
- * free-form labels ("Height" → height_mm). A downstream normalizer strips
- * units ("161.42 mm" → 161.42) before zod validation, so string values with
- * units are FINE — but made-up key names are rejected by the schema.
+ * free-form labels ("Height" → height_mm). Kept SHORT on purpose: the prompt
+ * plus a full spec sheet must fit the 8k TPM free-tier request budget. A
+ * downstream normalizer strips units ("161.42 mm" → 161.42) before zod
+ * validation, so string values with units are FINE — but made-up key names
+ * are rejected by the schema.
  */
 export const TEXT_SPECS_FIELD_DICTIONARY = [
-  'DESIGN: height_mm (e.g. "161.42 mm"), width_mm, thickness_mm, weight_g (e.g. "215g"), ip_rating, frame_material, back_material, front_glass_protection, colors (array), speakers, ports.',
-  'DISPLAY: size_inches (e.g. "6.78 inches" or 6.78), display_type (e.g. "AMOLED", "LTPO AMOLED"), resolution as ONE string like "2772x1272" in EITHER resolution_width or resolution_height (the normalizer splits WxH), refresh_hz (e.g. "120Hz" or "1-120Hz Adaptive" — put the whole phrase in, max number wins), adaptive_refresh ("ltpo" if LTPO/adaptive/1-120Hz is stated), peak_brightness_nits (e.g. "1800 nits" — use the HBM/peak figure), hdr (e.g. "HDR10+, HDR Vivid" — the normalizer maps it). FOLDABLES: put the outer/cover screen under secondary_display with the same fields (size_inches, display_type, resolution_width, refresh_hz, peak_brightness_nits, protection) — e.g. {"size_inches": "6.2 inches", "display_type": "Super AMOLED", "refresh_hz": "120Hz"}.',
-  'PROCESSOR: chipset_name (full platform name, e.g. "Snapdragon 8 Elite Gen 5"), cpu (e.g. "Oryon CPU @4.608GHz"), gpu (e.g. "Adreno 840"), max_clock_ghz (e.g. "4.608GHz"), process_node, npu, cpu_architecture.',
-  'MEMORY: ram_gb (first figure wins, e.g. "12GB/16GB" → put the whole string, 12 is kept), ram_type (e.g. "LPDDR5X"), storage_gb (e.g. "256GB/512GB" → whole string, 256 kept), storage_type (e.g. "UFS 4.1"), variants (array of {ram_gb, storage_gb}, e.g. 12+256 / 16+512).',
-  'CAMERA: an object with rear (array, one entry per lens: Main, Telephoto, Ultra-wide, Macro) and selfie (array — include EVERY front camera the source lists; dual-selfie phones have a main selfie plus an ultrawide selfie, each its own entry). Each lens: type, megapixels (e.g. 50), sensor_model (e.g. "IMX906"), aperture as the f-string (e.g. "ƒ/1.8" or "f/2.8" — the normalizer parses it), ois ("yes" if Optical Image Stabilization is stated), af ("yes" or the AF type), focal_length_mm (e.g. "21 mm equivalent"), optical_zoom_x (e.g. "3.5X optical zoom"), video_modes (array of strings like "8K 30fps"). NEVER nest under "Main Camera"/"Telephoto Camera" headings — flatten into the rear array.',
-  'BATTERY: capacity_mah (e.g. "7,300 mAh" — put the whole string, 7300 is kept), wired_w (e.g. "80W SUPERVOOC"), wireless_w (e.g. "50W AIRVOOC"), battery_type, protocols (array, e.g. ["SUPERVOOC", "AIRVOOC"]).',
-  'CONNECTIVITY: wifi (e.g. "Wi-Fi 7"), bluetooth (e.g. "Bluetooth 6.0"), nfc ("yes" if NFC enabled), usb (e.g. "USB 3.2 Gen 1 Type-C"), positioning (array), ir_blaster.',
-  'NETWORK: sim (array, e.g. ["Dual nano-SIM", "eSIM"]), technology (array, e.g. ["GSM","LTE","5G"]), bands_2g/3g/4g/5g as the raw band strings.',
-  'SOFTWARE: os (e.g. "Android 16"), ui (e.g. "OxygenOS 16.0").',
+  'TOP: name (device name), brand, model_number. Omit release_year and tagline unless clearly stated.',
+  'DESIGN: height_mm (e.g. "161.42 mm"), width_mm, thickness_mm, weight_g (e.g. "215g"), ip_rating, frame_material, back_material, front_glass_protection ("Gorilla Glass Victus 2"), ports (e.g. "USB-C").',
+  'DISPLAY: size_inches (e.g. "6.78 inches"), display_type (e.g. "AMOLED"), resolution as ONE string like "2772x1272" in EITHER resolution_width or resolution_height (the normalizer splits WxH — NEVER put both), refresh_hz as ONE number like 120 (a range like "1-120Hz Adaptive" means 120), adaptive_refresh ("ltpo" if LTPO/adaptive/1-120Hz), peak_brightness_nits (e.g. 1800), hdr ("HDR10+" becomes hdr10_plus automatically).',
+  'PROCESSOR: chipset_name (full platform, e.g. "Snapdragon 8 Elite Gen 5"), cpu (e.g. "Oryon CPU 4.6GHz"), gpu (e.g. "Adreno 840"). Omit the rest unless stated.',
+  'MEMORY: ram_gb (e.g. 12), storage_gb (e.g. 256), storage_type ("UFS 4.1"). Omit the rest unless stated.',
+  'CAMERA: object {rear: array, selfie: array}. Rear has one entry per lens titled Main/Telephoto/Ultra-wide; selfie usually one entry (32MP). Each lens: type ("Main"), megapixels (50 not "50MP"), aperture ("f/1.8" or 1.8), sensor_model ("IMX906"), ois ("yes" or "no"), af ("yes" or "PDAF"), optical_zoom_x (3.5 not "3.5X zoom"), sensor_size ("1/1.3 inch" or null), focal_length_mm (21). NEVER invent; omit lenses not stated. video_features is an array of strings,Extras is a short string or null.',
+  'BATTERY: capacity_mah (e.g. 7300), wired_w (e.g. 80), wireless_w (e.g. 50). Omit the rest unless stated.',
+  'CONNECTIVITY: wifi ("Wi-Fi 7"), bluetooth ("Bluetooth 6.0"), nfc ("yes" or "no"), usb ("USB-C"). Omit the rest unless stated.',
+  'NETWORK: sim (array like ["Dual nano-SIM","eSIM"]), technology (array like ["GSM","LTE","5G"]), bands as raw strings only if practical.',
+  'SOFTWARE: os ("Android 16"), ui ("OxygenOS 16"). Omit the rest unless stated.',
 ].join('\n')
 
 export type TextSpecsExtraction = z.infer<typeof textSpecsSchema>

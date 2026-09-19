@@ -199,7 +199,11 @@ export function createMobileApiAdapter(): SourceAdapter {
     isConfigured: () => Boolean(process.env.MOBILEAPI_KEY),
 
     async search(query, limit = 10): Promise<SourceMatch[]> {
-      const devices = await fetchAllPages('/devices', { search: query, limit: 30 }, limit)
+      // failFast: a first-page API failure (e.g. "Monthly request limit
+      // reached") must surface as a source error, not a silent 0 matches.
+      const devices = await fetchAllPages('/devices', { search: query, limit: 30 }, limit, {
+        failFast: true,
+      })
       return devices
         .map((d) => {
           const { identity } = mapMobileApiDevice(d)

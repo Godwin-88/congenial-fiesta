@@ -102,6 +102,7 @@ export async function fetchAllPages(
   path: string,
   params: Record<string, string | number | undefined> = {},
   limit?: number,
+  opts: { failFast?: boolean } = {},
 ): Promise<MobileApiDevice[]> {
   const out: MobileApiDevice[] = []
   const pageSize = params.limit ?? 30
@@ -114,6 +115,10 @@ export async function fetchAllPages(
     try {
       data = await apiGet(url)
     } catch (err) {
+      // A first-page failure is a real API problem (exhausted quota, bad key,
+      // 4xx/5xx) — rethrow so the caller can surface it instead of silently
+      // reporting "0 matches". Later-page failures stay non-fatal.
+      if (opts.failFast && page === 1) throw err
       // A request for a non-existent page (or rate-limit) shouldn't discard
       // everything collected so far — just stop paginating.
       console.warn(`  page fetch failed (${url}): ${(err as Error).message}`)

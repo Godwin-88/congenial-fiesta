@@ -138,7 +138,9 @@ export function hdrType(value: unknown): string | null {
   const t = text(value)
   if (!t) return null
   const s = t.toLowerCase()
-  const hasH10 = s.includes('hdr10+') || s.includes('hdr10 plus')
+  // 'hdr10_plus' is the canonical token itself — accept it back so the
+  // normalizer is idempotent on already-canonical input.
+  const hasH10 = s.includes('hdr10+') || s.includes('hdr10 plus') || s.includes('hdr10_plus')
   const hasDv = s.includes('dolby vision')
   if (hasH10 && hasDv) return 'hdr10_plus_dolby_vision'
   if (hasDv) return 'dolby_vision'
