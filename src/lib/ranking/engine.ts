@@ -22,6 +22,7 @@ import {
   scoreBattery,
   type ProcessorBenchmarks,
 } from './formula'
+import { normalizeChipsetName } from '@/lib/devices/canonical-write'
 
 export interface RankingBreakdown {
   scoring_version: string
@@ -143,26 +144,57 @@ export async function loadGlobalBenchmarks(supabase: SupabaseClient): Promise<Gl
   }
 }
 
+/**
+ * Minimum "known" points (out of 100) before an engine score may be persisted
+ * into device_rankings or mirrored into devices.scores_overall. Below this the
+ * score is noise dominated by what the engine could NOT read — publishing it
+ * would stomp editorial scores with garbage (the OnePlus 15 = 9.1 incident).
+ */
+export const MIN_EFFECTIVE_MAX_TO_PUBLISH = 50
+
 async function loadChipsetForDevice(
   supabase: SupabaseClient,
   device: DeviceSpecData,
 ): Promise<{ chipsetId: number | null; benchmarks: ProcessorBenchmarks | null }> {
   const chipsetName = device.specs_processor?.chipset_name as string | null
   if (!chipsetName) return { chipsetId: null, benchmarks: null }
+  const wanted = normalizeChipsetName(chipsetName) ?? chipsetName
   const { data: chipset } = await supabase
     .from('chipsets')
     .select('id')
     .ilike('name', chipsetName)
     .maybeSingle()
-  if (!chipset) return { chipsetId: null, benchmarks: null }
+  if (chipset) return resolveChipsetBenchmarks(supabase, chipset.id)
+
+  // Marketing-dialect fallback: compare normalized names (®/™/"Mobile
+  // Platform" stripped) against names AND aliases. The chipsets table is
+  // small, so a full scan is cheaper than a fuzzy index.
+  const { data: candidates } = await supabase.from('chipsets').select('id, name, aliases').limit(2000)
+  const match = (candidates ?? []).find((c) => {
+    const cName = normalizeChipsetName(c.name)
+    if (cName && cName.toLowerCase() === wanted.toLowerCase()) return true
+    return (c.aliases ?? []).some((a: string) => {
+      const aNorm = normalizeChipsetName(a)
+      return aNorm != null && aNorm.toLowerCase() === wanted.toLowerCase()
+    })
+  })
+  if (!match) return { chipsetId: null, benchmarks: null }
+  return resolveChipsetBenchmarks(supabase, match.id)
+}
+
+/** Load + aggregate active benchmark rows for one chipset id. */
+async function resolveChipsetBenchmarks(
+  supabase: SupabaseClient,
+  chipsetId: number,
+): Promise<{ chipsetId: number; benchmarks: ProcessorBenchmarks | null }> {
   const { data: rows } = await supabase
     .from('chipset_benchmarks')
     .select('benchmark_name, single_core, multi_core, gpu_score, active')
-    .eq('chipset_id', chipset.id)
+    .eq('chipset_id', chipsetId)
     .eq('active', true)
   const agg = aggregateChipsetBenchmarks((rows ?? []) as unknown as RawBenchmarkRow[])
   return {
-    chipsetId: chipset.id,
+    chipsetId,
     benchmarks:
       agg.single_core != null || agg.multi_core != null
         ? {
@@ -211,7 +243,14 @@ export async function recalculateDevice(
   })
 
   // Only publish a score when there is enough real data to be meaningful.
+  // Two tiers (§31b):
+  //   - < 20 known points: pure noise, never persisted anywhere.
+  //   - < 50 known points (MIN_EFFECTIVE_MAX_TO_PUBLISH): the computation runs
+  //     but NOTHING is persisted and devices.scores_overall is left untouched —
+  //     a low-coverage total (e.g. 9.1 from one parseable selfie camera) must
+  //     never overwrite an editorial score on the field the public site reads.
   if (breakdown.effectiveMax < 20) return breakdown
+  if (breakdown.effectiveMax < MIN_EFFECTIVE_MAX_TO_PUBLISH) return breakdown
 
   await supabase.from('device_rankings').upsert(
     {

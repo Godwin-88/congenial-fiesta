@@ -188,7 +188,10 @@ export function processorScore(
   benchmarks: ProcessorBenchmarks | null,
   best: ProcessorBenchmarks,
 ): ComponentResult {
-  if (!benchmarks) return { points: null, max: 18, detail: { effectiveMax: 0 } }
+  // No benchmark data → nothing is evaluable → 0 known points (NOT a phantom
+  // max: a missing score must not sit in the denominator, or a fully
+  // documented device with an unseeded chipset gets structurally crushed).
+  if (!benchmarks) return { points: null, max: 0, detail: { effectiveMax: 0 } }
   const singleF = clamp01(benchmarks.single_core / best.single_core)
   const multiF = clamp01(benchmarks.multi_core / best.multi_core)
   const gpuF = clamp01(benchmarks.gpu_score / best.gpu_score)
@@ -203,7 +206,8 @@ export function processorScore(
 export function ramScore(ram: Record<string, unknown> | null): ComponentResult {
   const gb = ram?.ram_gb as number | null
   const ramType = (ram?.ram_type as string | null)?.toUpperCase().replace(/\s+/g, '') ?? null
-  if (!gb) return { points: null, max: 3, detail: { effectiveMax: 0 } }
+  // Same prorating rule as the processor: without a capacity nothing is known.
+  if (!gb) return { points: null, max: 0, detail: { effectiveMax: 0 } }
   const capacityF = Math.min(1, pow(gb / cfg.THRESHOLDS.ramGb, 0.55))
   const genMult = ramType ? (cfg.RAM_GENERATION[ramType] ?? 1.0) : 1.0
   return {

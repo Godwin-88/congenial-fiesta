@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth, getAdminClient } from '@/lib/admin/require-admin'
 import { flagManualOverrides, maybeRecalculateRanking, maybeRefreshBenchmarksOnPublish } from '@/lib/devices/audit'
+import { canonicalizeSpecSections } from '@/lib/devices/canonical-write'
 
 async function getScoreWeights(supabase: ReturnType<typeof getAdminClient>) {
   const { data } = await supabase
@@ -158,6 +159,24 @@ export async function POST(request: NextRequest) {
       value: body.score_value,
     }, weights)
 
+    // ── Canonical write gate (§24b) ──────────────────────────────────────
+    // The form (and the chat prefill) may carry label-keyed sections
+    // ("Dimensions", "RAM", "Capacity" …). Map them onto the canonical schema
+    // the ranking engine reads BEFORE persisting — a label-keyed row is
+    // invisible to the engine (see canonical-write.ts header for the 9.1
+    // incident). Never destructive: unmappable sections are kept as-is.
+    const canonicalSpecs = canonicalizeSpecSections({
+      specs_design: body.specs_design ?? {},
+      specs_display: body.specs_display ?? {},
+      specs_processor: body.specs_processor ?? {},
+      specs_memory: body.specs_memory ?? {},
+      specs_camera: body.specs_camera ?? {},
+      specs_battery: body.specs_battery ?? {},
+      specs_connectivity: body.specs_connectivity ?? {},
+      specs_software: body.specs_software ?? {},
+      specs_network: body.specs_network ?? {},
+    })
+
     const payload: Record<string, unknown> = {
       name: body.name.trim(),
       slug: body.slug.trim(),
@@ -188,15 +207,15 @@ export async function POST(request: NextRequest) {
       verdict_bottom_line: body.verdict_bottom_line?.trim() ?? null,
       verdict_full: body.verdict_full?.trim() ?? null,
       images: body.images ?? [],
-      specs_design: body.specs_design ?? {},
-      specs_display: body.specs_display ?? {},
-      specs_processor: body.specs_processor ?? {},
-      specs_memory: body.specs_memory ?? {},
-      specs_camera: body.specs_camera ?? {},
-      specs_battery: body.specs_battery ?? {},
-      specs_connectivity: body.specs_connectivity ?? {},
-      specs_software: body.specs_software ?? {},
-      specs_network: body.specs_network ?? {},
+      specs_design: canonicalSpecs.sections.specs_design ?? {},
+      specs_display: canonicalSpecs.sections.specs_display ?? {},
+      specs_processor: canonicalSpecs.sections.specs_processor ?? {},
+      specs_memory: canonicalSpecs.sections.specs_memory ?? {},
+      specs_camera: canonicalSpecs.sections.specs_camera ?? {},
+      specs_battery: canonicalSpecs.sections.specs_battery ?? {},
+      specs_connectivity: canonicalSpecs.sections.specs_connectivity ?? {},
+      specs_software: canonicalSpecs.sections.specs_software ?? {},
+      specs_network: canonicalSpecs.sections.specs_network ?? {},
       buy_links: body.buy_links ?? [],
       related_video_id: body.related_video_id?.trim() ?? null,
       related_tiktok_url: body.related_tiktok_url?.trim() ?? null,

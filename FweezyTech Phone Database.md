@@ -3056,5 +3056,21 @@ The desired result is an improved version of the existing FweezyTech workflow:
 
 **Manual Entry OR Automated Import → Existing Admin Form → Draft → Admin Verification → Images → Publish → Public Website → Fair Phone Ranking** 
 
-The system should be built so that FweezyTech can eventually have a large, reliable, structured phone database without requiring the administrator to manually type every specification for every phone. 
+The system should be built so that FweezyTech can eventually have a large, reliable, structured phone database without requiring the administrator to manually type every specification for every phone.
+
+---
+
+## Incident 2026-09-19: OnePlus 15 scored 9.1 (canonical write gate added)
+
+**Root cause.** The chat prefill / device form stored spec sections with manufacturer LABEL keys (`"Chipset"`, `"RAM"`, `"Capacity"`, `"Refresh Rate"`), while the ranking engine reads canonical keys (`chipset_name`, `ram_gb`, `capacity_mah`, `refresh_hz`). Result: of 100 points only 29 were "known" (a canonical selfie camera worth 4 + the old fixed 25-pt performance max that counted even with zero data), earned 2.6 → **9.1%** mirrored into `scores_overall`. The published devices' 80–96 scores are editorial — the engine had never scored them either.
+
+**Fixes.**
+1. `src/lib/devices/canonical-write.ts` — deterministic label→canonical dictionary + value parsing (no LLM at the write path), run through the same normalizeExtraction + zod gate as the import agent. Wired into POST `/api/admin/devices` and PUT `/api/admin/devices/[id]` so EVERY writer (form, chat prefill, paste panel) lands canonical. Never destructive: unmappable sections are preserved verbatim; `unmapped` is returned for surfacing.
+2. `normalizeChipsetName` — strips ®/™/"Mobile Platform"/"(3 nm)"; engine chipset matching now falls back to normalized name+aliases comparison instead of a bare exact `ilike`.
+3. Ranking formula prorates performance like build/display/battery: no benchmark data or no RAM ⇒ 0 known points, no phantom max in the denominator.
+4. Coverage gate: `MIN_EFFECTIVE_MAX_TO_PUBLISH = 50` (ranking/engine.ts). Below 50 known points the engine score is computed but NEVER persisted or mirrored — editorial scores can no longer be stomped by low-coverage garbage.
+5. Data repair: all devices canonicalized; drafts re-imported from GSMArena (rear cameras included); the 9.1/8.6/0 draft scores wiped. Two bad re-imports fixed by hand (Tecno Phantom X3 Pro has no GSMArena page → wrong Oppo data wiped, score null until a source carries it; Redmi Note 14 Pro re-imported from the correct Pro 4G global page).
+
+**Known blocker.** nanoreview.net returns 403 to all server-side fetches ⇒ `chipset_benchmarks` stays empty and the performance component scores 0 known points until benchmarks are seeded (manual entry, future API key, or an accessible mirror). Draft scores therefore read 50–58 out of the ~55–59 known points — proportionally fair, structurally capped.
+ 
 

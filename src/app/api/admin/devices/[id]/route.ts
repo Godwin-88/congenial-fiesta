@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth, getAdminClient } from '@/lib/admin/require-admin'
 import { isAdminRole } from '@/lib/admin/roles'
 import { recordDeviceChanges, flagManualOverrides, maybeRecalculateRanking, maybeRefreshBenchmarksOnPublish } from '@/lib/devices/audit'
+import { canonicalizeSpecSections } from '@/lib/devices/canonical-write'
 
 /** Spec sections the deterministic ranking engine reads (§30). */
 const RANKING_SPEC_FIELDS = [
@@ -147,6 +148,25 @@ export async function PATCH(
     // fallback for devices the engine cannot yet score (missing spec data).
     const hasSpecChanges = RANKING_SPEC_FIELDS.some((f) => body[f] !== undefined)
 
+    // ── Canonical write gate (§24b) ──────────────────────────────────────
+    // Only the sections the admin actually sent. The form (and the chat
+    // prefill) may carry label-keyed sections ("Dimensions", "RAM" …) — map
+    // them onto the canonical schema the ranking engine reads BEFORE
+    // persisting (see canonical-write.ts header for the 9.1 incident).
+    // Never destructive: unmappable sections are preserved as-is.
+    const specInput: Record<string, unknown> = {}
+    for (const key of [
+      'specs_design', 'specs_display', 'specs_processor', 'specs_memory',
+      'specs_camera', 'specs_battery', 'specs_connectivity', 'specs_software',
+      'specs_network',
+    ]) {
+      if ((body as Record<string, unknown>)[key] !== undefined) specInput[key] = (body as Record<string, unknown>)[key]
+    }
+    const canonicalSpecs = canonicalizeSpecSections(specInput)
+    const canonSection = (key: string): Record<string, unknown> =>
+      (canonicalSpecs.sections[key] as Record<string, unknown> | undefined) ?? {}
+
+
     // Existing row is needed for the change history (§25) and to detect
     // which spec leaves the administrator corrected (§16 overrides).
     const { data: before } = await supabase
@@ -188,15 +208,15 @@ export async function PATCH(
     if (body.verdict_bottom_line !== undefined) payload.verdict_bottom_line = body.verdict_bottom_line?.trim() ?? null
     if (body.verdict_full !== undefined) payload.verdict_full = body.verdict_full?.trim() ?? null
     if (body.images !== undefined) payload.images = body.images ?? []
-    if (body.specs_design !== undefined) payload.specs_design = body.specs_design ?? {}
-    if (body.specs_display !== undefined) payload.specs_display = body.specs_display ?? {}
-    if (body.specs_processor !== undefined) payload.specs_processor = body.specs_processor ?? {}
-    if (body.specs_memory !== undefined) payload.specs_memory = body.specs_memory ?? {}
-    if (body.specs_camera !== undefined) payload.specs_camera = body.specs_camera ?? {}
-    if (body.specs_battery !== undefined) payload.specs_battery = body.specs_battery ?? {}
-    if (body.specs_connectivity !== undefined) payload.specs_connectivity = body.specs_connectivity ?? {}
-    if (body.specs_software !== undefined) payload.specs_software = body.specs_software ?? {}
-    if (body.specs_network !== undefined) payload.specs_network = body.specs_network ?? {}
+    if (body.specs_design !== undefined) payload.specs_design = canonSection('specs_design')
+    if (body.specs_display !== undefined) payload.specs_display = canonSection('specs_display')
+    if (body.specs_processor !== undefined) payload.specs_processor = canonSection('specs_processor')
+    if (body.specs_memory !== undefined) payload.specs_memory = canonSection('specs_memory')
+    if (body.specs_camera !== undefined) payload.specs_camera = canonSection('specs_camera')
+    if (body.specs_battery !== undefined) payload.specs_battery = canonSection('specs_battery')
+    if (body.specs_connectivity !== undefined) payload.specs_connectivity = canonSection('specs_connectivity')
+    if (body.specs_software !== undefined) payload.specs_software = canonSection('specs_software')
+    if (body.specs_network !== undefined) payload.specs_network = canonSection('specs_network')
     if (body.buy_links !== undefined) payload.buy_links = body.buy_links ?? []
     if (body.related_video_id !== undefined) payload.related_video_id = body.related_video_id?.trim() ?? null
     if (body.related_tiktok_url !== undefined) payload.related_tiktok_url = body.related_tiktok_url?.trim() ?? null

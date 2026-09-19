@@ -6,6 +6,14 @@
 //
 // NanoReview has no public documented API; this adapter uses their public
 // search page's embedded JSON (best-effort, replaceable). Seeded INACTIVE.
+//
+// KNOWN BLOCKER (2026-09-19): nanoreview.net returns HTTP 403 to every
+// server-side fetch (both a bot and a plain browser UA) — same class of
+// protection as GSMArena's search endpoint. Until an API key / allowed UA is
+// arranged, `chipset_benchmarks` stays empty and processorScore correctly
+// reports 0 known points (see formula.ts). The chipset ROWS still seed from
+// device data so matching works the moment benchmarks arrive.
+
 
 const BASE_URL = 'https://nanoreview.net'
 const UA = 'Mozilla/5.0 (compatible; FweezyTechImportBot/1.0; +https://fweezytech.com/bot)'
