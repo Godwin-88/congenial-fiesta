@@ -1,7 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Device = any
 
-import { readRearCameras, readSelfieCamera } from '@/lib/devices/camera-types'
+import { readRearCameras, readSelfieCameras } from '@/lib/devices/camera-types'
 
 interface SpecTableProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -99,6 +99,13 @@ export function SpecTable({ device }: SpecTableProps) {
               <Row label="HDR" value={device.specsDisplay?.['HDR']} />
               <Row label="Color depth" value={device.specsDisplay?.['Color depth']} />
               <Row label="Protection" value={device.specsDisplay?.['Protection']} />
+              <Row label="Cover display" value={device.specsDisplay?.['Cover Display']} />
+              <Row label="Cover Display Size" value={device.specsDisplay?.['Cover Display Size']} />
+              <Row label="Cover Display Type" value={device.specsDisplay?.['Cover Display Type']} />
+              <Row label="Cover Display Resolution" value={device.specsDisplay?.['Cover Display Resolution']} />
+              <Row label="Cover Display Refresh Rate" value={device.specsDisplay?.['Cover Display Refresh Rate']} />
+              <Row label="Cover Display Peak Brightness" value={device.specsDisplay?.['Cover Display Peak Brightness']} />
+              <Row label="Cover Display Protection" value={device.specsDisplay?.['Cover Display Protection']} />
             </>
           )}
 
@@ -131,11 +138,10 @@ export function SpecTable({ device }: SpecTableProps) {
               {readRearCameras((device.specsCamera ?? null) as unknown).map((cam, i) => (
                 <Row key={`${cam.slot}-${i}`} label={cam.label} value={cam.value} />
               ))}
-              <SubHeading>Selfie Camera</SubHeading>
-              <Row
-                label={readSelfieCamera((device.specsCamera ?? null) as unknown)?.label ?? 'Selfie camera'}
-                value={device.specsCamera?.selfie?.sensorType}
-              />
+              <SubHeading>Selfie Cameras</SubHeading>
+              {readSelfieCameras((device.specsCamera ?? null) as unknown).map((cam, i) => (
+                <Row key={`${cam.slot}-selfie-${i}`} label={cam.label} value={cam.value} />
+              ))}
               <SubHeading>Video Recording</SubHeading>
               <Row label="Rear Video" value={device.specsCamera?.video?.rear} />
               <Row label="Front Video" value={device.specsCamera?.video?.front} />

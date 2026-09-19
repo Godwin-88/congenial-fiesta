@@ -798,7 +798,7 @@ export default function EditDevicePage() {
           {/* Specs sections */}
           {([
             { key: 'design', title: 'Specs: Design', data: specsDesign, setter: setSpecsDesign, fields: ['Dimensions', 'Weight', 'Front', 'Back', 'Side', 'Ports', 'Speakers', 'Colours', 'IP Rating'] },
-            { key: 'display', title: 'Specs: Display', data: specsDisplay, setter: setSpecsDisplay, fields: ['Size', 'Type', 'Resolution', 'Refresh Rate', 'Pixel Density', 'Screen-to-body ratio', 'Peak Brightness', 'HDR', 'Color depth', 'Protection'] },
+            { key: 'display', title: 'Specs: Display', data: specsDisplay, setter: setSpecsDisplay, fields: ['Size', 'Type', 'Resolution', 'Refresh Rate', 'Pixel Density', 'Screen-to-body ratio', 'Peak Brightness', 'HDR', 'Color depth', 'Protection', 'Cover Display', 'Cover Display Size', 'Cover Display Type', 'Cover Display Resolution', 'Cover Display Refresh Rate', 'Cover Display Peak Brightness', 'Cover Display Protection'] },
             { key: 'processor', title: 'Specs: Processor', data: specsProcessor, setter: setSpecsProcessor, fields: ['Chipset', 'CPU', 'GPU', 'Node size', 'NPU'] },
             { key: 'memory', title: 'Specs: Memory', data: specsMemory, setter: setSpecsMemory, fields: ['RAM', 'RAM type', 'Storage', 'Storage type', 'Expandable'] },
             { key: 'camera', title: 'Specs: Camera', custom: true },

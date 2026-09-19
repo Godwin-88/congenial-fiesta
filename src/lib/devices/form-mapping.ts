@@ -84,6 +84,11 @@ export function mapDisplay(d: Rec | undefined): Record<string, string> {
   const size = num(d.size_inches)
   const width = num(d.resolution_width)
   const height = num(d.resolution_height)
+  // Foldables: the outer/cover display arrives as a typed secondary_display
+  // block and is flattened onto the same label keys the admin form edits.
+  const sec = (d.secondary_display ?? null) as Rec | null
+  const secW = sec ? num(sec.resolution_width) : ''
+  const secH = sec ? num(sec.resolution_height) : ''
   return dropEmpty({
     Size: size ? `${size}"` : '',
     Type: str(d.display_type),
@@ -91,6 +96,13 @@ export function mapDisplay(d: Rec | undefined): Record<string, string> {
     'Refresh Rate': num(d.refresh_hz, ' Hz'),
     'Peak Brightness': num(d.peak_brightness_nits, ' nits'),
     HDR: d.hdr ? HDR_LABELS[String(d.hdr)] ?? '' : '',
+    'Cover Display': str(sec?.note),
+    'Cover Display Size': sec && num(sec.size_inches) ? `${num(sec.size_inches)}"` : '',
+    'Cover Display Type': str(sec?.display_type),
+    'Cover Display Resolution': secW && secH ? `${secW} x ${secH} px` : '',
+    'Cover Display Refresh Rate': sec ? num(sec.refresh_hz, ' Hz') : '',
+    'Cover Display Peak Brightness': sec ? num(sec.peak_brightness_nits, ' nits') : '',
+    'Cover Display Protection': str(sec?.protection),
   })
 }
 
@@ -203,15 +215,28 @@ export function mapCamera(c: Rec | undefined): CameraSpec | null {
     })
     .filter((u) => u.sensorType.trim().length > 0)
 
-  const selfieUnit = (c.selfie ?? null) as Rec | null
+  // Front cameras: the canonical shape is an array (dual-selfie phones store
+  // two units); a single legacy object is wrapped so both load identically.
+  const selfieSource = Array.isArray(c.selfie) ? (c.selfie as Rec[]) : c.selfie != null ? [c.selfie as Rec] : []
+  const selfie = selfieSource
+    .map((u) => {
+      const slot = resolveCameraSlot(u.type ?? u.slot) ?? 'selfie'
+      return {
+        type: slotToken(slot),
+        slot,
+        sensorType: cameraUnitLabel(u),
+      }
+    })
+    .filter((u) => u.sensorType.trim().length > 0)
+
   const videoModes = Array.isArray(c.video_modes) ? str(c.video_modes) : ''
   const features = join([str(c.features)], ', ')
 
-  if (rear.length === 0 && !selfieUnit && !videoModes) return null
+  if (rear.length === 0 && selfie.length === 0 && !videoModes) return null
 
   return {
     rear,
-    selfie: { sensorType: selfieUnit ? cameraUnitLabel(selfieUnit) : '' },
+    selfie,
     video: { rear: videoModes, front: '', features },
     extras: str(c.extras),
   }
@@ -257,9 +282,15 @@ export function specsToDevicePrefill(source: PrefillSource): DevicePrefill {
   if (Object.keys(network).length) prefillSpecs.network = network
   if (Object.keys(software).length) prefillSpecs.software = software
   if (camera) {
+    const selfieList = camera.selfie.filter((s) => s.sensorType.trim().length > 0)
     prefillSpecs.camera = {
       rear: camera.rear.map((r) => ({ type: r.type, sensorType: r.sensorType })),
-      selfie: camera.selfie.sensorType || null,
+      // Single front camera keeps the legacy string shape; dual-selfie
+      // imports pass the full array so no front lens is dropped.
+      selfie:
+        selfieList.length > 1
+          ? selfieList.map((s) => ({ type: s.type ?? 'Selfie', sensorType: s.sensorType }))
+          : (selfieList[0]?.sensorType ?? null),
       video: camera.video.rear || null,
       extras: camera.extras || null,
     }
@@ -281,7 +312,8 @@ export function countSpecLeaves(specs: Record<string, unknown> | Partial<DeviceS
     if (section === 'specs_camera') {
       const c = values as Rec
       if (Array.isArray(c?.rear_units)) n += c.rear_units.length
-      if (c?.selfie) n += 1
+      if (Array.isArray(c?.selfie)) n += c.selfie.length
+      else if (c?.selfie) n += 1
       if (c?.video_modes) n += 1
       continue
     }

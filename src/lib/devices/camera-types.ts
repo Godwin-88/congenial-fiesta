@@ -306,24 +306,73 @@ export function readRearCameras(raw: unknown): DisplayCamera[] {
   })
 }
 
-/** Read the selfie camera of any stored shape. */
-export function readSelfieCamera(raw: unknown): DisplayCamera | null {
+/** Adjective for a front-camera unit whose role is not plain 'selfie',
+ *  e.g. the second front camera on dual-selfie phones is usually an
+ *  ultrawide ("Ultrawide selfie camera"). */
+const SELFIE_ROLE_ADJECTIVE: Partial<Record<CameraSlot, string>> = {
+  ultrawide: 'Ultrawide',
+  telephoto: 'Telephoto',
+  periscope: 'Periscope',
+  macro: 'Macro',
+  depth: 'Depth',
+  monochrome: 'Monochrome',
+}
+
+/**
+ * Read ALL selfie cameras of any stored shape. Dual front cameras are real
+ * (a main selfie plus an ultrawide selfie), so the selfie array may hold
+ * several units. The first unit is the primary front camera; further units
+ * are labelled by their resolved role ("Ultrawide selfie camera") or, when
+ * roleless, by ordinal ("Selfie camera 2").
+ */
+export function readSelfieCameras(raw: unknown): DisplayCamera[] {
   const cam = asRecord(raw)
-  if (!cam) return null
+  if (!cam) return []
 
-  let unit: Rec | null = null
-  if (Array.isArray(cam.selfie)) unit = asRecord(cam.selfie[0])
-  else if (asRecord(cam.selfie)) unit = asRecord(cam.selfie)
-  else if (asArrayFirst(cam.selfie)) unit = asArrayFirst(cam.selfie)
-
-  if (!unit) {
-    // Legacy flat shape stored the front camera under `Front`.
+  // Collect every front unit — canonical array, legacy structured object,
+  // or the original flat `Front` string.
+  const units: Rec[] = []
+  if (Array.isArray(cam.selfie)) {
+    for (const item of cam.selfie) {
+      const unit = asRecord(item)
+      if (unit) units.push(unit)
+    }
+  } else if (asRecord(cam.selfie)) {
+    units.push(asRecord(cam.selfie) as Rec)
+  } else if (asArrayFirst(cam.selfie)) {
+    units.push(asArrayFirst(cam.selfie) as Rec)
+  } else {
     const legacy = asText(cam.Front) || asText(cam.front)
-    if (legacy) unit = { type: 'Selfie', sensorType: legacy }
+    if (legacy) units.push({ type: 'Selfie', sensorType: legacy })
   }
-  if (!unit) return null
 
-  const value = unitValue(unit)
-  if (!value) return null
-  return { slot: 'selfie', label: SLOT_LABEL.selfie, value, raw: unit }
+  const out: DisplayCamera[] = []
+  for (const unit of units) {
+    const value = unitValue(unit)
+    if (!value) continue
+    const role = resolveCameraSlot(unit.slot ?? unit.type ?? unit.name ?? unit.role) ?? 'selfie'
+    const adjective = SELFIE_ROLE_ADJECTIVE[role]
+    const label =
+      out.length === 0
+        ? SLOT_LABEL.selfie
+        : adjective
+          ? `${adjective} selfie camera`
+          : 'Selfie camera'
+    out.push({ slot: role, label, value, raw: unit })
+  }
+  // Ordinal fallbacks for consecutive plain roleless units beyond the first
+  // (e.g. two front cameras both stored as 'Front').
+  let plainExtra = 0
+  for (let i = 1; i < out.length; i++) {
+    if (!SELFIE_ROLE_ADJECTIVE[out[i].slot]) {
+      plainExtra += 1
+      out[i] = { ...out[i], label: `Selfie camera ${plainExtra + 1}` }
+    }
+  }
+  return out
+}
+
+/** Read the primary selfie camera of any stored shape (first front unit). */
+export function readSelfieCamera(raw: unknown): DisplayCamera | null {
+  return readSelfieCameras(raw)[0] ?? null
 }

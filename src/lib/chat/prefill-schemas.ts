@@ -23,7 +23,7 @@ export const CAMERA_TYPES = REAR_CAMERA_TOKENS as unknown as readonly ['Main', '
 
 export const SPEC_FIELDS = {
   design: ['Dimensions', 'Weight', 'Front', 'Back', 'Side', 'Ports', 'Speakers', 'Colours', 'IP Rating'],
-  display: ['Size', 'Type', 'Resolution', 'Refresh Rate', 'Pixel Density', 'Screen-to-body ratio', 'Peak Brightness', 'HDR', 'Color depth', 'Protection'],
+  display: ['Size', 'Type', 'Resolution', 'Refresh Rate', 'Pixel Density', 'Screen-to-body ratio', 'Peak Brightness', 'HDR', 'Color depth', 'Protection', 'Cover Display', 'Cover Display Size', 'Cover Display Type', 'Cover Display Resolution', 'Cover Display Refresh Rate', 'Cover Display Peak Brightness', 'Cover Display Protection'],
   processor: ['Chipset', 'CPU', 'GPU', 'Node size', 'NPU'],
   memory: ['RAM', 'RAM type', 'Storage', 'Storage type', 'Expandable'],
   battery: ['Capacity', 'Battery type', 'Wired charging', 'Wireless charging', 'Reverse charging', 'Charging protocols'],
@@ -112,7 +112,7 @@ export const devicePrefillSchema = z.object({
               }),
             )
             .optional(),
-          selfie: z.string().nullable().optional(),
+          selfie: z.union([z.string(), z.array(z.object({ type: z.string().optional(), sensorType: z.string() }))]).nullable().optional(),
           video: z.string().nullable().optional(),
           extras: z.string().nullable().optional(),
         })

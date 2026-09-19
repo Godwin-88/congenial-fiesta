@@ -11,7 +11,7 @@ import type {
   SpecKey,
   PrefillCollection,
 } from '@/lib/chat/prefill-schemas'
-import type { CameraSpec, RearCameraType } from '@/lib/camera-spec'
+import type { CameraSpec, RearCameraType, SelfieCameraType } from '@/lib/camera-spec'
 import { tokenToSlot, slotToken } from '@/lib/devices/camera-types'
 
 export type DeviceSetters = {
@@ -131,7 +131,16 @@ export function applyDevicePrefill(fields: DevicePrefill, s: DeviceSetters): voi
             sensorType: r.sensorType,
           }
         }),
-        selfie: { sensorType: cam.selfie ?? '' },
+        selfie: Array.isArray(cam.selfie)
+          ? cam.selfie.map((u: { type?: string; sensorType: string }) => {
+              // Dual-selfie phones: each front unit keeps its own role
+              // ('Selfie' primary, 'Ultrawide' second lens), resolved to the
+              // shared slot vocabulary.
+              const type = (u.type ?? 'Selfie') as SelfieCameraType
+              const slot = type === 'Selfie' ? 'selfie' : (tokenToSlot(type) ?? 'selfie')
+              return { type, slot, sensorType: u.sensorType }
+            })
+          : [{ type: 'Selfie' as SelfieCameraType, slot: 'selfie' as const, sensorType: cam.selfie ?? '' }],
         video: { rear: cam.video ?? '', front: '', features: '' },
         extras: cam.extras ?? '',
       }

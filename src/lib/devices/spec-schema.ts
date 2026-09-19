@@ -38,6 +38,21 @@ export const DesignSpecsSchema = z.object({
   ports: optText,
 })
 
+/** A foldable's outer/cover display. All fields optional — cover screens vary
+ *  in how much detail sources publish. `role` distinguishes 'cover' from a
+ *  possible future third panel. */
+export const SecondaryDisplaySchema = z.object({
+  role: optText, // 'cover' | 'external' …
+  size_inches: optNumber,
+  display_type: optText,
+  resolution_width: optInt,
+  resolution_height: optInt,
+  refresh_hz: optNumber,
+  peak_brightness_nits: optNumber,
+  protection: optText,
+  note: optText, // free text, e.g. '3.4" Super AMOLED, 120Hz'
+})
+
 export const DisplaySpecsSchema = z.object({
   size_inches: optNumber,
   display_type: optText,
@@ -52,6 +67,8 @@ export const DisplaySpecsSchema = z.object({
     .enum(['none', 'hdr10', 'hdr10_plus', 'dolby_vision', 'hdr10_plus_dolby_vision', 'unknown'])
     .nullable()
     .optional(),
+  /** Foldables only — the outer cover display and its own features. */
+  secondary_display: SecondaryDisplaySchema.nullable().optional(),
 })
 
 export const ProcessorSpecsSchema = z.object({
@@ -152,6 +169,7 @@ export const DeviceSpecsSchema = z.object({
 
 export type DesignSpecs = z.infer<typeof DesignSpecsSchema>
 export type DisplaySpecs = z.infer<typeof DisplaySpecsSchema>
+export type SecondaryDisplay = z.infer<typeof SecondaryDisplaySchema>
 export type ProcessorSpecs = z.infer<typeof ProcessorSpecsSchema>
 export type MemorySpecs = z.infer<typeof MemorySpecsSchema>
 export type CameraUnit = z.infer<typeof CameraUnitSchema>

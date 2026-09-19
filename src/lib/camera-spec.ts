@@ -59,6 +59,10 @@ export interface RearCamera {
 }
 
 export interface SelfieCamera {
+  /** Canonical role — 'Selfie' for the primary front camera, 'Ultrawide' for
+   *  the second lens on dual-selfie phones. Kept in sync with `slot`. */
+  type?: string
+  slot?: CameraSlot
   sensorType: string
   megapixels?: number
   sensorModel?: string
@@ -70,21 +74,32 @@ export interface SelfieCamera {
   extra?: Record<string, unknown>
 }
 
+/** Front-camera role options in the admin form. Dual-selfie phones pair a
+ *  primary selfie with (usually) an ultrawide front camera. */
+export type SelfieCameraType = 'Selfie' | 'Ultrawide' | 'Telephoto' | 'Depth' | 'Monochrome'
+export const SELFIE_CAMERA_TYPES: SelfieCameraType[] = ['Selfie', 'Ultrawide', 'Telephoto', 'Depth', 'Monochrome']
+
+export function selfieCameraLabel(type: SelfieCameraType): string {
+  if (type === 'Selfie') return 'Selfie camera'
+  return `${type} selfie camera`
+}
+
 export interface CameraSpec {
   rear: RearCamera[]
-  selfie: SelfieCamera
+  /** All front cameras — index 0 is the primary selfie. */
+  selfie: SelfieCamera[]
   video: { rear: string; front: string; features: string }
   extras: string
 }
 
 export function emptySelfie(): SelfieCamera {
-  return { sensorType: '' }
+  return { type: 'Selfie', slot: 'selfie', sensorType: '' }
 }
 
 export function emptyCamera(): CameraSpec {
   return {
     rear: [],
-    selfie: emptySelfie(),
+    selfie: [emptySelfie()],
     video: { rear: '', front: '', features: '' },
     extras: '',
   }
@@ -93,7 +108,7 @@ export function emptyCamera(): CameraSpec {
 export function cameraHasContent(spec: CameraSpec | null | undefined): boolean {
   if (!spec) return false
   if ((spec.rear ?? []).some((c) => (c.sensorType ?? '').trim().length > 0)) return true
-  if ((spec.selfie?.sensorType ?? '').trim().length > 0) return true
+  if ((spec.selfie ?? []).some((s) => (s.sensorType ?? '').trim().length > 0)) return true
   if (spec.video?.rear?.trim() || spec.video?.front?.trim() || spec.video?.features?.trim()) return true
   if (spec.extras?.trim()) return true
   return false
@@ -261,12 +276,34 @@ function normalizeRearUnit(u: Rec, taken: Set<CameraSlot>): RearCamera | null {
   }
 }
 
+/** Front-camera role options map onto the same slot vocabulary as rear
+ *  lenses, so an 'Ultrawide' selfie resolves to the ultrawide slot while a
+ *  plain 'Selfie' resolves to the selfie slot. */
+function selfieSlotFromType(type: string | undefined): CameraSlot | null {
+  if (!type) return null
+  const resolved = tokenToSlot(type)
+  return resolved ?? null
+}
+
 function normalizeSelfieUnit(u: Rec): SelfieCamera {
   const structured = readStructured(u) as Partial<SelfieCamera>
   const sensorType = toStr(u.sensorType)
   const summary = cameraUnitSummary(u)
+  // Resolve the front role from whatever dialect was stored ('Front',
+  // 'Selfie', 'Ultrawide', 'Ultrawide selfie'…). Unresolvable units stay
+  // plain selfies — never relabelled to a role the source didn't give.
+  const rawRole = toStr(u.type) || toStr(u.slot) || toStr(u.role)
+  const resolvedSlot = resolveCameraSlot(u.slot ?? u.type ?? u.name ?? u.role)
+  const type =
+    resolvedSlot === 'selfie'
+      ? 'Selfie'
+      : resolvedSlot
+        ? slotToken(resolvedSlot)
+        : rawRole || 'Selfie'
   return {
     ...structured,
+    slot: selfieSlotFromType(type) ?? resolvedSlot ?? 'selfie',
+    type,
     sensorType: sensorType || summary,
   }
 }
@@ -295,10 +332,23 @@ export function normalizeCamera(raw: unknown): CameraSpec {
     // Present lenses in physical layout order (wide → ultrawide → tele → …),
     // matching how the public UI labels them.
     rear.sort((a, b) => cameraSlotIndex(a.slot) - cameraSlotIndex(b.slot))
-    let selfie = emptySelfie()
-    const selfieRec = Array.isArray(o.selfie) ? rec(o.selfie[0]) : rec(o.selfie)
-    if (selfieRec) selfie = normalizeSelfieUnit(selfieRec)
-    else if (typeof o.Front === 'string' && o.Front.trim()) selfie = { sensorType: o.Front }
+    // Front cameras: the canonical shape stores an array (dual-selfie phones
+    // have two), the legacy structured shape a single object, the original
+    // flat shape a `Front` string. All three load into the selfie array —
+    // index 0 is always the primary front camera.
+    const selfie: SelfieCamera[] = []
+    const selfieList = Array.isArray(o.selfie) ? o.selfie : o.selfie != null ? [o.selfie] : []
+    for (const item of selfieList) {
+      const selfieRec = rec(item)
+      if (!selfieRec) continue
+      const unit = normalizeSelfieUnit(selfieRec)
+      if (unit.sensorType.trim() || Object.keys(unit).some((k) => k !== 'sensorType' && k !== 'id')) {
+        selfie.push(unit)
+      }
+    }
+    if (selfie.length === 0 && typeof o.Front === 'string' && o.Front.trim()) {
+      selfie.push({ ...emptySelfie(), sensorType: o.Front })
+    }
 
     const videoFeatures = Array.isArray(o.video_features)
       ? o.video_features.filter((v: unknown) => typeof v === 'string' && v.trim()).join(', ')
@@ -331,7 +381,7 @@ export function normalizeCamera(raw: unknown): CameraSpec {
   }
   return {
     rear,
-    selfie: typeof o.Front === 'string' ? { sensorType: o.Front } : emptySelfie(),
+    selfie: typeof o.Front === 'string' && o.Front.trim() ? [{ ...emptySelfie(), sensorType: o.Front }] : [],
     video: {
       rear: typeof o['Video (main)'] === 'string' ? o['Video (main)'] : '',
       front: typeof o['Video (front)'] === 'string' ? o['Video (front)'] : '',
@@ -396,25 +446,35 @@ export function cameraSpecToCanonical(spec: CameraSpec | null | undefined): Reco
     })
     .filter((u) => Object.keys(u).length > 0)
 
-  const selfieRaw = spec?.selfie
-  const selfieParsed = selfieRaw ? parseCameraText(selfieRaw.sensorType) : {}
-  const selfie =
-    selfieRaw && (selfieRaw.sensorType.trim() || selfieRaw.megapixels != null)
-      ? compact({
-          slot: 'selfie',
-          type: 'Selfie',
-          megapixels: selfieRaw.megapixels ?? selfieParsed.megapixels ?? null,
-          sensor_model: selfieRaw.sensorModel ?? selfieParsed.sensorModel ?? null,
-          sensor_size: selfieRaw.sensorSize ?? null,
-          sensor_area_mm2:
-            selfieRaw.sensorAreaMm2 ?? (selfieRaw.sensorSize ? norm.sensorAreaMm2(selfieRaw.sensorSize) : null),
-          aperture: selfieRaw.aperture ?? selfieParsed.aperture ?? null,
-          af: selfieRaw.af ?? selfieParsed.af ?? null,
-          focal_length_mm: selfieRaw.focalLengthMm ?? selfieParsed.focalLengthMm ?? null,
-          extra: selfieRaw.extra ?? null,
-          sensorType: selfieRaw.sensorType.trim() || null,
-        })
-      : null
+  // Front cameras serialize as an array of canonical units — index 0 is the
+  // primary selfie, further units carry their own role token ('Ultrawide'
+  // for the second lens on dual-selfie phones). Free-text descriptions are
+  // parsed so hand-entered front cameras still carry megapixels/aperture/AF.
+  const selfie = (spec?.selfie ?? [])
+    .map((s) => {
+      const parsed = parseCameraText(s.sensorType)
+      const type = (s.type ?? 'Selfie').trim() || 'Selfie'
+      const slot = tokenToSlot(s.slot ?? type) ?? 'selfie'
+      return compact({
+        // Persist the same TitleCase vocabulary as rear lenses: 'Selfie' for
+        // the primary front camera, 'Ultrawide' etc. for the extras.
+        slot: slotToken(slot),
+        type,
+        megapixels: s.megapixels ?? parsed.megapixels ?? null,
+        sensor_model: s.sensorModel ?? parsed.sensorModel ?? null,
+        sensor_size: s.sensorSize ?? null,
+        sensor_area_mm2:
+          s.sensorAreaMm2 ?? (s.sensorSize ? norm.sensorAreaMm2(s.sensorSize) : null),
+        aperture: s.aperture ?? parsed.aperture ?? null,
+        af: s.af ?? parsed.af ?? null,
+        focal_length_mm: s.focalLengthMm ?? parsed.focalLengthMm ?? null,
+        extra: s.extra ?? null,
+        sensorType: s.sensorType.trim() || null,
+      })
+    })
+    .filter((u) => Object.keys(u).length > 0)
+    // A row the admin added but left empty must not persist as a bare token.
+    .filter((u) => Boolean(u.sensorType) || u.megapixels != null)
 
   const videoFeatures = toList(spec?.video?.rear)
   const features = toList(spec?.video?.features)

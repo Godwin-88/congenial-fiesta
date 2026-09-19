@@ -3,7 +3,7 @@ import Link from 'next/link'
 import Script from 'next/script'
 import type { Metadata } from 'next'
 import { getDeviceBySlug } from '@/lib/devices/queries'
-import { readRearCameras, readSelfieCamera } from '@/lib/devices/camera-types'
+import { readRearCameras, readSelfieCameras } from '@/lib/devices/camera-types'
 import type { Device } from '@/types/cms'
 import { ScoreBadge } from '@/components/devices/ScoreBadge'
 import { BuyBox } from '@/components/devices/BuyBox'
@@ -11,6 +11,9 @@ import { VerdictBlock } from '@/components/devices/VerdictBlock'
 import CompareRadarChart from '@/components/compare/CompareRadarChart'
 import CompareSpecTable from '@/components/compare/CompareSpecTable'
 import CompareDevicePicker from '@/components/compare/CompareDevicePicker'
+import CompareViewportGuard from '@/components/compare/CompareViewportGuard'
+import MobileCompareCards from '@/components/compare/MobileCompareCards'
+import MobileCompareBar from '@/components/compare/MobileCompareBar'
 import ShareComparisonButton from '@/components/compare/ShareComparisonButton'
 import SaveComparisonButton from '@/components/compare/SaveComparisonButton'
 
@@ -74,7 +77,12 @@ export default async function ComparePage({ searchParams }: PageProps) {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl px-4 pb-28 py-8 sm:px-6 lg:px-8 lg:pb-8">
+      {/* Portrait phones cap the comparison at 2 devices; this trims the URL
+          (replace, no history) whenever more were requested or the viewport
+          shrinks. Landscape phones/tablets/desktop keep all 3. */}
+      <CompareViewportGuard slugs={slugs} />
+
       {/* Breadcrumb */}
       <nav aria-label="breadcrumb" className="mb-6">
         <ol className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -89,6 +97,24 @@ export default async function ComparePage({ searchParams }: PageProps) {
       <h1 className="mb-6 font-heading text-3xl font-bold text-foreground">
         {devices.map((d: any) => d.name).join(' vs ')}
       </h1>
+
+      {/* Mobile: one self-contained card per device, no horizontal panning. */}
+      <MobileCompareCards devices={devices} />
+
+      {/* Mobile: always-reachable compare actions, sitting above the bottom nav. */}
+      <MobileCompareBar
+        deviceSlugs={slugs}
+        deviceNames={(devices as any[]).map((d: any) => String(d.name))}
+      />
+
+      <CompareDevicePicker
+        selectedSlugs={slugs}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        deviceNames={(devices as any[]).map((d: any) => d.name)}
+      />
+
+      {/* Desktop/tablet: the side-by-side comparison grid. */}
+      <div className="hidden md:block">
 
       {/* Device images side-by-side */}
       <div className={`grid gap-4 mb-8 ${devices.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
@@ -119,12 +145,6 @@ export default async function ComparePage({ searchParams }: PageProps) {
           )
         })}
       </div>
-
-      <CompareDevicePicker
-        selectedSlugs={slugs}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        deviceNames={(devices as any[]).map((d: any) => d.name)}
-      />
 
       <div className="mt-8 flex flex-col items-center">
         <CompareRadarChart
@@ -179,6 +199,11 @@ export default async function ComparePage({ searchParams }: PageProps) {
               'Peak Brightness': { label: 'Peak Brightness', value: d.specs_display?.['Peak Brightness'] },
               'HDR': { label: 'HDR', value: d.specs_display?.['HDR'] },
               'Color depth': { label: 'Color depth', value: d.specs_display?.['Color depth'] },
+              'Cover display': { label: 'Cover display', value: d.specs_display?.['Cover Display'] },
+              'Cover Display Size': { label: 'Cover Display Size', value: d.specs_display?.['Cover Display Size'] },
+              'Cover Display Type': { label: 'Cover Display Type', value: d.specs_display?.['Cover Display Type'] },
+              'Cover Display Resolution': { label: 'Cover Display Resolution', value: d.specs_display?.['Cover Display Resolution'] },
+              'Cover Display Refresh Rate': { label: 'Cover Display Refresh Rate', value: d.specs_display?.['Cover Display Refresh Rate'] },
             },
             Processor: {
               Chipset: { label: 'Chipset', value: d.specs_processor?.['Chipset'] },
@@ -204,7 +229,12 @@ export default async function ComparePage({ searchParams }: PageProps) {
               },
               Selfie: {
                 label: 'Selfie',
-                value: readSelfieCamera(d.specs_camera)?.value ?? d.specs_camera?.selfie?.sensorType,
+                value:
+                  (readSelfieCameras(d.specs_camera)
+                    .map((s) => `${s.label}: ${s.value}`)
+                    .join(' · ') as string) ||
+                  d.specs_camera?.selfie?.sensorType ||
+                  undefined,
               },
               'Rear Video': { label: 'Rear Video', value: d.specs_camera?.video?.rear },
               'Front Video': { label: 'Front Video', value: d.specs_camera?.video?.front },
@@ -280,6 +310,8 @@ export default async function ComparePage({ searchParams }: PageProps) {
       <div className="mt-8 flex justify-end gap-3">
         <SaveComparisonButton deviceSlugs={slugs} />
         <ShareComparisonButton />
+      </div>
+
       </div>
 
       {/* Schema.org JSON-LD */}

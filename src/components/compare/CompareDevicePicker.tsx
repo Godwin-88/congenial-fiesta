@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search } from 'lucide-react'
+import { Search, Info } from 'lucide-react'
+import { maxCompareDevices } from '@/lib/devices/compare-viewport'
 
 interface CompareDevicePickerProps {
   selectedSlugs: string[]
@@ -14,8 +15,26 @@ export default function CompareDevicePicker({ selectedSlugs, deviceNames }: Comp
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<{ slug: string; name: string }[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
+  const [cap, setCap] = useState(3)
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // The picker must respect the same cap the page layout enforces: 2 devices
+  // on a portrait phone, 3 once the viewport is wide (landscape/tablet/desktop).
+  useEffect(() => {
+    function update() {
+      setCap(maxCompareDevices(window.innerWidth, window.innerHeight))
+    }
+    update()
+    window.addEventListener('resize', update)
+    window.addEventListener('orientationchange', update)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('orientationchange', update)
+    }
+  }, [])
+
+  const atCap = selectedSlugs.length >= cap
 
   useEffect(() => {
     if (query.trim().length < 2) return
@@ -52,6 +71,7 @@ export default function CompareDevicePicker({ selectedSlugs, deviceNames }: Comp
   }, [])
 
   const handleAdd = (slug: string) => {
+    if (atCap) return
     const updated = [...selectedSlugs, slug].sort()
     router.push(`/compare?devices=${updated.join(',')}`)
     setQuery('')
@@ -70,7 +90,10 @@ export default function CompareDevicePicker({ selectedSlugs, deviceNames }: Comp
 
   return (
     <div className="rounded-xl border border-border bg-card p-4">
-      <div className="flex flex-wrap items-center gap-2 mb-3">
+      <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Devices in this comparison
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
         {selectedSlugs.map((slug) => (
           <span
             key={slug}
@@ -87,7 +110,7 @@ export default function CompareDevicePicker({ selectedSlugs, deviceNames }: Comp
           </span>
         ))}
 
-        {selectedSlugs.length < 3 && (
+        {!atCap && (
           <div className="relative">
             <input
               ref={inputRef}
@@ -122,6 +145,15 @@ export default function CompareDevicePicker({ selectedSlugs, deviceNames }: Comp
               </div>
             )}
           </div>
+        )}
+
+        {atCap && (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            {cap === 2
+              ? 'Comparing the maximum of 2 devices on this screen. Rotate to landscape or use a tablet or desktop to compare 3.'
+              : 'Comparing the maximum of 3 devices.'}
+          </p>
         )}
       </div>
     </div>

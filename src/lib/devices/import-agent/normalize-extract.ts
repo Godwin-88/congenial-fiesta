@@ -101,6 +101,36 @@ export function normalizeDisplay(raw: Section | null | undefined): Section {
   if (nits != null) out.peak_brightness_nits = nits
   const hdr = norm.hdrType(pickString(raw, 'hdr'))
   if (hdr) out.hdr = hdr
+
+  // Foldables: the outer/cover display. Accepts either a structured
+  // secondary_display object or a single free-text note — both normalize into
+  // the same typed block; anything unparseable lands in `note` verbatim.
+  const sec = raw.secondary_display
+  if (sec && typeof sec === 'object' && !Array.isArray(sec)) {
+    const s = sec as Section
+    const sd: Section = {}
+    const role = pickString(s, 'role') ?? 'cover'
+    if (role) sd.role = role
+    const ssize = pickNum(s, 'size_inches', norm.inches)
+    if (ssize != null) sd.size_inches = ssize
+    const stype = pickString(s, 'display_type')
+    if (stype) sd.display_type = stype
+    const sresRaw = pickString(s, 'resolution_width') ?? pickString(s, 'resolution_height')
+    const sres = splitResolution(sresRaw)
+    if (sres) {
+      sd.resolution_width = sres[0]
+      sd.resolution_height = sres[1]
+    }
+    const srefresh = pickNum(s, 'refresh_hz', norm.hertz)
+    if (srefresh != null) sd.refresh_hz = srefresh
+    const snits = pickNum(s, 'peak_brightness_nits', norm.nits)
+    if (snits != null) sd.peak_brightness_nits = snits
+    const sprot = pickString(s, 'protection')
+    if (sprot) sd.protection = sprot
+    const snote = pickString(s, 'note')
+    if (snote) sd.note = snote
+    if (Object.keys(sd).length > 0) out.secondary_display = sd
+  }
   return out
 }
 

@@ -22,7 +22,7 @@ import PageProgress from '@/components/devices/PageProgress'
 import SectionHeader from '@/components/ui/SectionHeader'
 import VideoReview from '@/components/devices/VideoReview'
 import { getRelatedDevices } from '@/lib/devices/queries'
-import { readRearCameras, readSelfieCamera } from '@/lib/devices/camera-types'
+import { readRearCameras, readSelfieCameras } from '@/lib/devices/camera-types'
 import type { Device } from '@/types/cms'
 
 interface DeviceDetailProps {
@@ -40,8 +40,7 @@ function cameraToRows(cam?: Record<string, unknown>): { label: string; value?: s
   // fall back positionally), so "Rear camera 1/2/3" becomes
   // "Main camera / Ultrawide camera / Telephoto camera…" for every stored shape.
   for (const r of readRearCameras(cam)) rows.push({ label: r.label, value: r.value })
-  const selfie = readSelfieCamera(cam)
-  if (selfie) rows.push({ label: 'Selfie camera', value: selfie.value })
+  for (const s of readSelfieCameras(cam)) rows.push({ label: s.label, value: s.value })
   const c = cam as Record<string, unknown>
   const video = (c.video ?? null) as Record<string, unknown> | null
   if (video?.rear) rows.push({ label: 'Video (rear)', value: String(video.rear) })
@@ -84,7 +83,10 @@ export default async function DeviceDetail({ device, isPreview = false, origin =
   const dCamMain = (() => {
     const rear = (dSpecsCamera as any)?.rear
     if (Array.isArray(rear) && rear[0]?.sensorType) return String(rear[0].sensorType).split(' ')[0]
-    const selfie = (dSpecsCamera as any)?.selfie?.sensorType
+    // Selfie may be an array (canonical) or a single object (legacy admin).
+    const selfie = Array.isArray((dSpecsCamera as any)?.selfie)
+      ? (dSpecsCamera as any)?.selfie?.[0]?.sensorType
+      : (dSpecsCamera as any)?.selfie?.sensorType
     if (selfie) return String(selfie).split(' ')[0]
     return undefined
   })()
@@ -114,7 +116,7 @@ export default async function DeviceDetail({ device, isPreview = false, origin =
   // Convert the unstructured JSONB spec objects into stable {title, rows} groups.
   const specGroups = [
     { title: 'Design & Build', data: dSpecsDesign, keys: ['Dimensions', 'Weight', 'Front', 'Back', 'Colours', 'IP Rating'] },
-    { title: 'Display', data: dSpecsDisplay, keys: ['Size', 'Type', 'Resolution', 'Refresh Rate', 'Pixel Density', 'Peak Brightness', 'HDR', 'Protection'] },
+    { title: 'Display', data: dSpecsDisplay, keys: ['Size', 'Type', 'Resolution', 'Refresh Rate', 'Pixel Density', 'Peak Brightness', 'HDR', 'Protection', 'Cover Display', 'Cover Display Size', 'Cover Display Type', 'Cover Display Resolution', 'Cover Display Refresh Rate', 'Cover Display Peak Brightness', 'Cover Display Protection'] },
     { title: 'Processor', data: dSpecsProcessor, keys: ['Chipset', 'CPU', 'GPU'] },
     { title: 'Memory', data: dSpecsMemory, keys: ['RAM', 'RAM type', 'Storage', 'Expandable'] },
     { title: 'Battery', data: dSpecsBattery, keys: ['Capacity', 'Battery type', 'Wired charging', 'Wireless charging', 'Reverse charging'] },
