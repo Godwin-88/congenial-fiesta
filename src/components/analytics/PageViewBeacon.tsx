@@ -28,8 +28,15 @@ export default function PageViewBeacon() {
     lastPathRef.current = pathname
 
     const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+    // Compare pages: append the query string so /compare?devices=a,b records WHICH
+    // pair ran — the compare tab's Live Rivalries is built from these paths.
+    // Scoped to /compare only, so top-page/path grouping everywhere else stays clean.
+    const trackedPath =
+      pathname === '/compare' && params && params.toString()
+        ? `${pathname}?${params.toString()}`
+        : pathname
     const payload = JSON.stringify({
-      path: pathname,
+      path: trackedPath,
       referrer: document.referrer,
       userAgent: navigator.userAgent,
       utm_source: params?.get('utm_source'),
