@@ -4,6 +4,7 @@ import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { formatAxisDate, formatHoverDate } from './chartFormat'
+import ChartHoverCard from './ChartHoverCard'
 
 type TrendPoint = { date: string; views: number; avg: number | null }
 
@@ -13,23 +14,17 @@ const axisColor = 'var(--muted-foreground)'
 const gridColor = 'var(--border)'
 
 // Custom tooltip so the hover shows "Wed, Sep 9, 2026" plus views & rolling avg.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function TrendTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
-      <p className="font-semibold text-foreground">{formatHoverDate(String(label))}</p>
-      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-      {payload.map((p: any) => (
-        <div key={p.dataKey} className="mt-1 flex items-center justify-between gap-5 text-xs">
-          <span className="flex items-center gap-1.5 text-muted-foreground">
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.stroke || p.fill }} />
-            {p.dataKey === 'views' ? 'Views' : 'Rolling avg'}
-          </span>
-          <span className="font-medium text-foreground">{Number(p.value).toLocaleString()}</span>
-        </div>
-      ))}
-    </div>
+    <ChartHoverCard
+      title={formatHoverDate(String(label))}
+      rows={payload.map((p: any) => ({
+        color: String(p.stroke || p.fill || '#3B82F6'),
+        label: p.dataKey === 'views' ? 'Views' : 'Rolling avg',
+        value: `${Number(p.value).toLocaleString()} views`,
+      }))}
+    />
   )
 }
 

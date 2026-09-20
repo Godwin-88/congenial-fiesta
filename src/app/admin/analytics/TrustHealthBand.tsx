@@ -4,8 +4,15 @@
 // healthy (proof is compounding) · thin (one voice) · stale (proof is ageing
 // out) · silent (no proof at all). Width is the share of devices; the red
 // silent band is deliberately last so the eye lands on the backlog size.
+//
+// Hover/tap a band to pin the full metrics card for that health state — the same
+// hover-card idiom as the date hovers on Content Velocity and Campaign Reach.
 
+'use client'
+
+import { useState } from 'react'
 import { TRUST_HEALTH_COLORS, TRUST_HEALTH_DESCRIPTIONS, type TrustHealth } from '@/lib/analytics/community'
+import ChartHoverCard from './ChartHoverCard'
 
 type Props = {
   mix: Array<{ health: TrustHealth; label: string; devices: number; sharePct: number }>
@@ -14,6 +21,8 @@ type Props = {
 
 export default function TrustHealthBand({ mix, total }: Props) {
   const visible = mix.filter((m) => m.devices > 0)
+  const [activeHealth, setActiveHealth] = useState<TrustHealth | null>(null)
+  const activeBand = activeHealth ? mix.find((m) => m.health === activeHealth) ?? null : null
 
   if (total <= 0) {
     return (
@@ -25,16 +34,41 @@ export default function TrustHealthBand({ mix, total }: Props) {
 
   return (
     <div>
+      {activeBand && (
+        <div className="mb-3 flex justify-start">
+          <ChartHoverCard
+            title={`${activeBand.label} — ${activeBand.devices.toLocaleString()} devices (${activeBand.sharePct}%)`}
+            rows={[
+              {
+                color: TRUST_HEALTH_COLORS[activeBand.health],
+                label: 'Devices',
+                value: activeBand.devices.toLocaleString(),
+              },
+              {
+                color: TRUST_HEALTH_COLORS[activeBand.health],
+                label: 'Share of catalog',
+                value: `${activeBand.sharePct}%`,
+              },
+            ]}
+            footer={TRUST_HEALTH_DESCRIPTIONS[activeBand.health]}
+          />
+        </div>
+      )}
       <div className="flex h-10 w-full overflow-hidden rounded-lg border border-border">
         {visible.map((band) => (
-          <div
+          <button
             key={band.health}
-            title={`${band.label}: ${band.devices.toLocaleString()} devices (${band.sharePct}%) — ${TRUST_HEALTH_DESCRIPTIONS[band.health]}`}
-            className="flex items-center justify-center text-[11px] font-semibold text-white/95"
+            type="button"
+            onClick={() => setActiveHealth((prev) => (prev === band.health ? null : band.health))}
+            onMouseEnter={() => setActiveHealth(band.health)}
+            onMouseLeave={() => setActiveHealth(null)}
+            onFocus={() => setActiveHealth(band.health)}
+            aria-label={`${band.label}: ${band.devices} devices, ${band.sharePct}% — activate to pin the breakdown`}
+            className="flex cursor-pointer items-center justify-center text-[11px] font-semibold text-white/95 outline-none transition focus-visible:ring-2 focus-visible:ring-brand-primary/60"
             style={{ width: `${Math.max(band.sharePct, 1.5)}%`, backgroundColor: TRUST_HEALTH_COLORS[band.health] }}
           >
             {band.sharePct >= 8 ? `${band.label} ${band.sharePct}%` : ''}
-          </div>
+          </button>
         ))}
       </div>
 

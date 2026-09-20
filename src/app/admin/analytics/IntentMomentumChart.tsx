@@ -5,8 +5,15 @@
 // Same read as the Devices tab's demand-rhythm heatmap (a lit row-top means a
 // warming action), but keyed by intent rather than price tier: it shows which
 // behaviour is accelerating and which is flat-lining.
+//
+// Hover/tap a bucket header to pin that date's full breakdown: the same figures
+// the charts on the other tabs show on date hover.
 
-import { tint } from './chartFormat'
+'use client'
+
+import { useState } from 'react'
+import { tint, formatHoverDate } from './chartFormat'
+import ChartHoverCard from './ChartHoverCard'
 import { INTENT_ACTION_COLORS, type IntentAction } from '@/lib/analytics/consideration'
 
 type Props = {
@@ -31,6 +38,9 @@ function cellColor(value: number, maxCell: number): string {
 
 export default function IntentMomentumChart({ momentum, maxCell }: Props) {
   const total = momentum.reduce((s, m) => s + m.total, 0)
+  const [activeBucket, setActiveBucket] = useState<string | null>(null)
+  const activeRow = activeBucket ? momentum.find((m) => m.bucket === activeBucket) ?? null : null
+
   if (momentum.length === 0 || total === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
@@ -41,13 +51,39 @@ export default function IntentMomentumChart({ momentum, maxCell }: Props) {
 
   return (
     <div className="overflow-x-auto">
+      {activeRow && (
+        <div className="mb-3 flex justify-start">
+          <ChartHoverCard
+            title={formatHoverDate(activeRow.bucket)}
+            subtitle={`${activeRow.total.toLocaleString()} intent events`}
+            rows={ACTIONS.map(({ key, label }) => ({
+              color: INTENT_ACTION_COLORS[key],
+              label,
+              value: `${(activeRow[key] ?? 0).toLocaleString()} events`,
+            }))}
+            footer="Pinned — tap the same header again to dismiss."
+          />
+        </div>
+      )}
       <table className="w-full border-separate border-spacing-0.5 text-xs">
         <thead>
           <tr>
             <th className="sticky left-0 bg-card px-1 text-left font-medium text-muted-foreground">Action</th>
             {momentum.map((m) => (
               <th key={m.bucket} className="px-1 text-center font-medium text-muted-foreground">
-                {m.bucket}
+                <button
+                  type="button"
+                  onClick={() => setActiveBucket((prev) => (prev === m.bucket ? null : m.bucket))}
+                  onMouseEnter={() => setActiveBucket(m.bucket)}
+                  onMouseLeave={() => setActiveBucket(null)}
+                  onFocus={() => setActiveBucket(m.bucket)}
+                  aria-label={`${formatHoverDate(m.bucket)} — show per-action breakdown`}
+                  className={`cursor-pointer rounded underline decoration-dotted underline-offset-2 ${
+                    activeBucket === m.bucket ? 'text-foreground' : 'hover:text-foreground'
+                  }`}
+                >
+                  {m.bucket}
+                </button>
               </th>
             ))}
             <th className="px-1 text-right font-medium text-muted-foreground">Total</th>

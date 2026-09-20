@@ -16,9 +16,28 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { formatHoverDate } from './chartFormat'
+import ChartHoverCard from './ChartHoverCard'
 
 type Props = {
   momentum: Array<{ bucket: string; ratings: number; comments: number; total: number }>
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function VoiceTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null
+  const total = payload.reduce((s: number, p: any) => s + Number(p.value ?? 0), 0)
+  return (
+    <ChartHoverCard
+      title={formatHoverDate(String(label))}
+      subtitle={`${total.toLocaleString()} signals`}
+      rows={payload.map((p: any) => ({
+        color: String(p.color || p.fill || '#8B5CF6'),
+        label: String(p.name),
+        value: `${Number(p.value ?? 0).toLocaleString()} signals`,
+      }))}
+    />
+  )
 }
 
 export default function VoiceMomentumChart({ momentum }: Props) {
@@ -39,14 +58,7 @@ export default function VoiceMomentumChart({ momentum }: Props) {
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
           <XAxis dataKey="bucket" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
           <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              fontSize: 12,
-            }}
-          />
+          <Tooltip content={<VoiceTooltip />} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           <Bar dataKey="ratings" name="Ratings" stackId="voice" fill="#8B5CF6" radius={[0, 0, 0, 0]} />
           <Bar dataKey="comments" name="Comments" stackId="voice" fill="#10B981" radius={[3, 3, 0, 0]} />

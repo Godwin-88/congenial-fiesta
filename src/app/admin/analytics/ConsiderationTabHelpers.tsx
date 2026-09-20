@@ -3,7 +3,7 @@ import {
   QUALIFICATION_COLORS,
   type QualificationTier,
 } from '@/lib/analytics/consideration'
-import type { ConsiderationInsights, DeviceInsights, CommunityInsights, RevenueInsights, SearchInsights } from '@/lib/analytics/queries'
+import type { ConsiderationInsights, DeviceInsights, CommunityInsights, RevenueInsights, SearchInsights, CampaignInsights } from '@/lib/analytics/queries'
 import { RECON_LABELS } from '@/lib/analytics/revenue'
 
 type DeviceChip = { label: string; value: string }
@@ -179,6 +179,47 @@ export function searchChipsFor(insights: SearchInsights): SearchChip[] {
   }
   if (insights.action.fixQueue.length > 0) {
     chips.push({ label: 'Backlog', value: `${insights.action.fixQueue.length} terms` })
+  }
+  return chips
+}
+
+type CampaignChip = { label: string; value: string }
+
+export function campaignChipsFor(insights: CampaignInsights): CampaignChip[] {
+  const { totals, attribution, efficiency } = insights
+  const chips: CampaignChip[] = [
+    { label: 'Tagged views', value: `${totals.taggedViews.toLocaleString()} (${totals.tagRatePct}% of traffic)` },
+    { label: 'Campaigns', value: totals.distinctCampaigns.toLocaleString() },
+    { label: 'Visitors identified', value: `${totals.identityCoveragePct}%` },
+  ]
+
+  const uncreditable = attribution.uncreditedClicks + attribution.unknownIdentityClicks
+  if (uncreditable > 0) {
+    chips.push({ label: 'Clicks uncreditable', value: `${uncreditable} without a campaign tag` })
+  } else if (attribution.creditedClicks > 0) {
+    chips.push({ label: 'Clicks credited', value: attribution.creditedClicks.toLocaleString() })
+  }
+
+  if (efficiency.campaigns.length > 0) {
+    const scale = efficiency.campaigns.filter((c) => c.verdict === 'scale').length
+    const pause = efficiency.campaigns.filter((c) => c.verdict === 'pause').length
+    chips.push({ label: 'Verdicts', value: `${scale} scale · ${pause} pause` })
+    chips.push({ label: 'Clean tags', value: `${efficiency.cleanSharePct}% of tagged views` })
+  }
+
+  if (efficiency.bestCampaign) {
+    chips.push({
+      label: 'Best rate',
+      value: `${efficiency.bestCampaign.campaign || '(not set)'} · ${efficiency.bestCampaign.clickRatePer1k}/1k views`,
+    })
+  }
+
+  if (attribution.downstreamViews > 0) {
+    chips.push({ label: 'Tag durability', value: `${attribution.tagDurabilityPct}% of in-session rows` })
+  }
+
+  if (insights.action.fixQueue.length > 0) {
+    chips.push({ label: 'Campaign queue', value: `${insights.action.fixQueue.length} items` })
   }
   return chips
 }

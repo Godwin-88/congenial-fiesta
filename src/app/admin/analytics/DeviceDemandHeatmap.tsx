@@ -4,8 +4,15 @@
 // own dimension: where attention moves across the price ladder, and whether a
 // tier is warming up or cooling down. Hand-rolled table (no chart lib) so the
 // cells stay exact and readable at 30/90-day densities.
+//
+// Hover/tap a row label to pin that bucket's full breakdown: the same figures
+// the charts on the other tabs show on date hover.
 
-import { tint } from './chartFormat'
+'use client'
+
+import { useState } from 'react'
+import { tint, formatHoverDate } from './chartFormat'
+import ChartHoverCard from './ChartHoverCard'
 
 type Props = {
   buckets: string[]
@@ -24,12 +31,33 @@ function cellColor(value: number, maxCell: number): string {
 }
 
 export default function DeviceDemandHeatmap({ buckets, tiers, tierLabels, matrix, maxCell }: Props) {
+  const [activeBucket, setActiveBucket] = useState<string | null>(null)
+
   if (matrix.length === 0 || tiers.length === 0) {
     return <p className="py-8 text-center text-sm text-muted-foreground">No device-page views in this period.</p>
   }
 
+  const activeRow = activeBucket ? matrix.find((r) => r.bucket === activeBucket) ?? null : null
+  const activeTotal = activeRow?.total ?? 0
+
   return (
     <div className="overflow-x-auto">
+      {activeRow && (
+        <div className="mb-3 flex justify-start">
+          <ChartHoverCard
+            title={formatHoverDate(activeRow.bucket)}
+            subtitle={`${activeTotal.toLocaleString()} device views`}
+            rows={tiers.map((tier, i) => ({
+              color: BASE,
+              label: tierLabels[i],
+              value: `${(activeRow.tiers[tier] ?? 0).toLocaleString()} views · ${
+                activeTotal > 0 ? Math.round(((activeRow.tiers[tier] ?? 0) / activeTotal) * 10) / 10 : 0
+              }%`,
+            }))}
+            footer="Pinned — tap the same row again to dismiss."
+          />
+        </div>
+      )}
       <table className="w-full border-separate border-spacing-0.5 text-xs">
         <thead>
           <tr>
@@ -44,8 +72,20 @@ export default function DeviceDemandHeatmap({ buckets, tiers, tierLabels, matrix
         </thead>
         <tbody>
           {matrix.map((row) => (
-            <tr key={row.bucket}>
-              <td className="sticky left-0 whitespace-nowrap bg-card px-1 text-muted-foreground">{row.bucket}</td>
+            <tr key={row.bucket} className={activeBucket === row.bucket ? 'outline outline-1 outline-brand-primary/40' : undefined}>
+              <td className="sticky left-0 whitespace-nowrap bg-card px-1 text-muted-foreground">
+                <button
+                  type="button"
+                  onClick={() => setActiveBucket((prev) => (prev === row.bucket ? null : row.bucket))}
+                  onMouseEnter={() => setActiveBucket(row.bucket)}
+                  onMouseLeave={() => setActiveBucket(null)}
+                  onFocus={() => setActiveBucket(row.bucket)}
+                  className="cursor-pointer rounded px-1 underline decoration-dotted underline-offset-2 hover:text-foreground"
+                  aria-label={`${formatHoverDate(row.bucket)} — ${row.total.toLocaleString()} device views. Activate to pin the breakdown.`}
+                >
+                  {row.bucket}
+                </button>
+              </td>
               {tiers.map((tier, i) => {
                 const value = row.tiers[tier] ?? 0
                 return (

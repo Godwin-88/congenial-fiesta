@@ -17,8 +17,27 @@ import {
   YAxis,
 } from 'recharts'
 import type { RevenueMomentumBucket } from '@/lib/analytics/queries'
+import { formatHoverDate } from './chartFormat'
+import ChartHoverCard from './ChartHoverCard'
 
 const RETAILER_TINTS = ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#F97316', '#EF4444']
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ClicksTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null
+  const total = payload.reduce((s: number, p: any) => s + Number(p.value ?? 0), 0)
+  return (
+    <ChartHoverCard
+      title={formatHoverDate(String(label))}
+      subtitle={`${total.toLocaleString()} clicks`}
+      rows={payload.map((p: any) => ({
+        color: String(p.color || p.fill || '#10B981'),
+        label: String(p.name),
+        value: `${Number(p.value ?? 0).toLocaleString()} clicks`,
+      }))}
+    />
+  )
+}
 
 type Props = {
   momentum: RevenueMomentumBucket[]
@@ -52,14 +71,7 @@ export default function ClickMomentumChart({ momentum }: Props) {
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
           <XAxis dataKey="bucket" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
           <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              fontSize: 12,
-            }}
-          />
+          <Tooltip content={<ClicksTooltip />} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           {retailers.map((retailer, i) => (
             <Bar

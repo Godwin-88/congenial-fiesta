@@ -131,6 +131,8 @@ These are *our* implementation's contribution — recorded **here** as "proposed
 - **Phase 10 (Community & Trust intelligence) — ✅ LIVE:** the Community tab rebuilt as the social-proof story — `getCommunityInsights(period)` joins ratings + comments + votes + watchers to traffic (Trust → Voice → People → Action); shared trust model (healthy/thin/stale/silent bands, `trustGrade()`, contributor grades) in `src/lib/analytics/community.ts`; five purpose-built visuals + a prescriptive community queue with issue codes; two new CSV reports + a JSON endpoint — see §7.6.
 - **Phase 11 (Affiliate & Revenue intelligence) — ✅ LIVE (+ normalised rate-sheet join):** the Affiliate tab rebuilt as the money story — `getRevenueInsights(period)` joins the click stream to the rate sheet + earnings ledger + link health (Money → Flow → Channels → Action); shared revenue model (monetization tiers converter→unsold, reconciliation states reconciled/over/under/blind, channel states priced/mismatch/unpriced/idle) in `src/lib/analytics/revenue.ts`; seven purpose-built visuals + a prescriptive revenue queue; two new CSV reports + a JSON endpoint — see §7.7.
 - **Phase 12 (Search & Discovery intelligence + engine telemetry) — ✅ LIVE:** the Search tab rebuilt as the demand story — `getSearchInsights(period)` joins the query log to the catalog and the index (Demand → Supply → Habit & Health → Action); shared query model (answer states answered/thin/zero/**unknown**, intent shapes, near-miss Dice matching, stake weighting) in `src/lib/analytics/searchStory.ts`; six purpose-built visuals incl. the dashboard's only treemap + a prescriptive backlog; two CSV reports + a JSON endpoint — see §7.8. Search itself fixed end-to-end (3-layer hybrid + publish-aware index eviction); Upstash index-side telemetry (query volume, capture-rate reconciliation, latency percentiles) wired through the account Developer API.
+- **Phase 13 (Campaigns & Acquisition intelligence) — ✅ LIVE:** the Campaigns tab rebuilt as the acquisition-integrity story — `getCampaignInsights(period)` joins page_views to affiliate_clicks + interactions by `fp_id` and grades every raw UTM tuple (Reach → Attribution → Efficiency & Governance → Action); shared campaign model (attribution classes tagged/untagged/direct, tag-convention lint, channel vocabulary from utm_medium, median-split verdicts scale/optimise/test/pause) in `src/lib/analytics/campaigns.ts`; the legacy row-level `getCampaignMetrics` is superseded and removed; two CSV reports (`campaign-ledger`, `campaign-queue`) + a JSON endpoint — see §7.9.
+- **Phase 13b (chart date-hover, cross-tab consistency) — ✅ LIVE:** `ChartHoverCard` is now the single hover-card contract (title = formatted date via `formatHoverDate`, colour-dot metric rows, optional footer); recharts tooltips and the hand-rolled heatmaps/bands all render it — Content Velocity, Traffic Trend, Click & Voice Momentum, Query Repeat, Device Demand Heatmap, Intent Momentum, Answer Coverage Band, Trust Health Band and Campaign Reach. Every date-bearing visual on the dashboard now shows its full per-date metrics on hover, and tap-to-pin makes it work on touch screens too.
 
 
 ### 5.3 KPI dictionary skeleton (every KPI ships with full metadata — ℹ glossary)
@@ -578,6 +580,81 @@ impossible. `documentCount` from Upstash is shown beside our own index enumerati
 - Telemetry is account-level per **index**, not per query, and cannot be broken down by term or channel.
 - If `UPSTASH_EMAIL`/`UPSTASH_API_KEY` are absent the panel says exactly that and first-party demand analytics
   are unaffected — telemetry is additive, never load-bearing.
+
+
+### 7.9 Campaigns & Acquisition tab — the acquisition-integrity story (Phase 13, ✅ LIVE)
+
+The old tab was one table (`getCampaignMetrics`: raw UTM rows + a click count read off the click rows' own tags)
+plus a roadmap card. Phase 13 replaces it with a governed acquisition read built on one honest modelling decision:
+
+**The attribution model (first-touch by `fp_id`).** Every UTM surface in the capture layer reads the **live URL**:
+`PageViewBeacon` reads `window.location.search` per page view, `trackEvent` does the same for interactions, and
+`/api/out/[device]/[retailer]` reads the **outbound buy link's own** params. So a campaign tag exists on the
+landing request and vanishes on the next internal navigation, while `affiliate_clicks.utm_*` carries the
+retailer's tagging, not ours. The only durable thread between "which campaign" and "did it make money" is the
+first-party `fweezy_fp` cookie. Therefore:
+
+- a visitor (fp_id) is credited to the campaign on their **earliest page view inside the window**;
+- clicks and interactions are joined back to that entry row;
+- `tagDurabilityPct` measures how many in-session rows still carry a tag (structurally ~0 — the number exists to
+  prove the model, not to flatter it);
+- clicks whose visitor entered untagged, or has no in-window entry at all, are **uncredited money** — counted and
+  queued, never silently attributed;
+- clicks tagged by the outbound link are shown per campaign as `(n out)` **context**, never as visit attribution.
+
+**Story shape — Reach → Attribution → Efficiency & Governance → Action:**
+
+| Act | Visual | What it answers |
+|---|---|---|
+| Reach | 4 KPI cards (Tagged Share · Identity Coverage · Credited Clicks · Clean Tags) | how much traffic we can name, and whether the join key even exists |
+| Reach | `CampaignReachChart` — daily stacked strip by attribution state, hover/tap per day | when tagged work delivered, and how big the amber "referrer-only" leak is |
+| Reach | `CampaignLandingTable` — tuple × top landing × deep-landing % | whether each campaign's click is spent on an actable page |
+| Attribution | `AttributionJourneyStrip` — visitors → 2nd page → click, one bar per entry state + durability & uncredited panels | the only downstream journey first-party data can prove |
+| Efficiency | `CampaignEfficiencyMatrix` — reach × click-rate bubble matrix, median-split quadrants | which campaigns to scale / test / optimise / pause |
+| Governance | `CampaignTagRegistry` — every raw tuple, convention-graded, channel-labelled | whether the tags themselves are governable |
+| Action | `CampaignFixQueue` — one row per campaign (worst issue) + per-source gaps, stake-ranked | the work, with money rows first |
+
+**Shared vocabulary (`src/lib/analytics/campaigns.ts`, dependency-free like its siblings).** Attribution classes
+`tagged / untagged / direct` (any of the three utm params = tagged; else the first-party `source` class decides);
+tag-convention lint with issue codes (`no_source · no_medium · unmapped_medium · spaces · uppercase · underscores ·
+dated`) and grades `clean / warn / broken`; channel classes derived from `utm_medium` via a shared vocabulary
+(`cpc→paid · creator/influencer→creator · newsletter→email · …` with `unmapped` as the budgetable gap); landing
+kinds with depth (`device / compare / article` = deep, everything else shallow); verdicts
+`scale / optimise / test / pause / untracked` on **period medians** (floors: 5 views, 1 click/1k). Stake weights:
+uncredited clicks ×8, creator traffic ×2, shallow landing ×1.5, no-outcome reach ×1.2, unmapped medium ×1,
+no-medium ×0.8, convention ×0.4, stale ×0.3 — one row per campaign so sloppy tags cannot triple-count themselves.
+Self-referrals and dev hosts are flagged `internal` (counted in reach, excluded from the queue).
+
+**Endpoints & registration.** JSON:
+`GET /api/admin/analytics/campaigns?period=7d|30d|90d&view=full|summary|reach|attribution|efficiency|queue`
+(`meta.definitions` documents the first-touch model, durability, verdict quadrants and stake weights). CSVs:
+`campaign-ledger` (the registry with verdicts + compliance) and `campaign-queue`, registered in `generateReportCsv`
++ `REPORT_LABELS` and `SCHEDULED_EXPORT_REPORTS`.
+
+**Live reads / caveats (surfaced in the UI):** the live DB currently has **0 tagged views**, so the tab renders its
+honest zero states (queue leads with `no_tagged_traffic`), 41 identified visitors join cleanly, and all 16 clicks in
+the window are shown as uncredited — exactly the campaign-integrity gap this tab exists to close. The fix queue's
+creator/referral rows exclude internal referrers (`fweezytech.com`, `localhost`, vercel.app previews) because they
+are noise, not placements.
+
+
+### 7.10 Chart date hover — one hover-card contract (Phase 13b, ✅ LIVE)
+
+`src/app/admin/analytics/ChartHoverCard.tsx` is the single hover-card markup every analytics visual now renders:
+bold title (the date, already formatted through `formatHoverDate`), colour-dot metric rows (label + tabular value),
+optional subtitle and footer. Two consumers:
+
+1. **Recharts tooltips** (client charts) pass a custom `content={<XTooltip />}` that maps the hovered payload onto
+   the card — Traffic Trend, Click Momentum (affiliate) and Voice Momentum (community). The full
+   "Wed, Sep 9, 2026" + per-series metrics hover matches the Overview/Content idiom everywhere.
+2. **Hand-rolled heatmaps & bands** (pure CSS, previously `title=`-only) keep their compact grid and pin the card
+   above the chart driven by hover **and** tap — Content Velocity (`ContentMomentumChart`), Device Demand Heatmap,
+   Intent Momentum, Query Repeat, Answer Coverage Band, Trust Health Band and Campaign Reach. Tap-to-pin (click the
+   bucket/band again to dismiss) makes the same metrics reachable on touch screens, and every control carries an
+   `aria-label` so keyboard users get the identical figures.
+
+Rule going forward: **any chart whose x-axis is a date must surface the formatted date and that date's metrics
+through `ChartHoverCard`** — no new tooltip markup, no `title=`-only date cells.
 
 
 ## 8. Open Questions (for architecture review)

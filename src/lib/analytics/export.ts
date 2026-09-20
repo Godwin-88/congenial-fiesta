@@ -15,6 +15,7 @@ import {
   getCommunityInsights,
   getRevenueInsights,
   getSearchInsights,
+  getCampaignInsights,
 } from './queries'
 
 export const REPORT_LABELS: Record<string, string> = {
@@ -34,6 +35,8 @@ export const REPORT_LABELS: Record<string, string> = {
   'revenue-queue': 'Revenue Queue (Pricing Leaks)',
   'search-demand': 'Search Demand Ledger',
   'search-backlog': 'Search Backlog Queue',
+  'campaign-ledger': 'Campaign UTM Ledger',
+  'campaign-queue': 'Campaign Tag Queue',
   explore: 'Explore',
 }
 
@@ -362,6 +365,53 @@ export async function generateReportCsv(
           })),
         ),
         filename: `search-backlog-${period}-${date}.csv`,
+      }
+    }
+    case 'campaign-ledger': {
+      const insights = await getCampaignInsights(period)
+      return {
+        csv: toCSV(
+          insights.efficiency.campaigns.map((c, i) => ({
+            rank: i + 1,
+            campaign: c.campaign,
+            source: c.source,
+            medium: c.medium,
+            channel_class: c.channelClass,
+            views: c.views,
+            visitors: c.visitors,
+            clicks: c.clicks,
+            outbound_tagged_clicks: c.outboundTaggedClicks,
+            click_rate_per_1k: c.clickRatePer1k,
+            verdict: c.verdict,
+            tag_compliance: c.compliance,
+            tag_issues: c.issues.join(' | '),
+            deep_landing_pct: c.deepLandingPct,
+            top_landing: c.topLanding?.path ?? '',
+            active_days: c.activeDays,
+            last_seen: c.lastSeen ?? '',
+            stale: c.stale,
+          })),
+        ),
+        filename: `campaign-ledger-${period}-${date}.csv`,
+      }
+    }
+    case 'campaign-queue': {
+      const insights = await getCampaignInsights(period)
+      return {
+        csv: toCSV(
+          insights.action.fixQueue.map((item, i) => ({
+            rank: i + 1,
+            priority: item.severity,
+            issue: item.issue,
+            target: item.target,
+            campaign: item.campaign ?? '',
+            at_stake: item.stake,
+            detail: item.detail,
+            action: item.action,
+            href: `https://fweezytech.co.ke${item.href}`,
+          })),
+        ),
+        filename: `campaign-queue-${period}-${date}.csv`,
       }
     }
     case 'explore': {

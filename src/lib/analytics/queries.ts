@@ -54,6 +54,37 @@ import {
   normalizeQuery,
   searchSeverity,
 } from './searchStory'
+import {
+  type AttributionClass,
+  type TagIssue,
+  type TagCompliance,
+  type ChannelClass,
+  type CampaignVerdict,
+  type LandingKind,
+  type CampaignIssue,
+  ATTRIBUTION_ORDER,
+  ATTRIBUTION_LABELS,
+  CHANNEL_CLASS_ORDER,
+  CHANNEL_CLASS_LABELS,
+  TAG_COMPLIANCE_LABELS,
+  TAG_ISSUE_META,
+  VERDICT_LABELS,
+  CAMPAIGN_ISSUE_META,
+  LANDING_KIND_LABELS,
+  attributionClassFor,
+  campaignSeverity,
+  campaignVerdict,
+  classifyLandingPath,
+  classifyMedium,
+  clickRatePer1k,
+  isTagged,
+  isInternalReferrer,
+  landingDepth,
+  median,
+  normalizeTag,
+  tagComplianceFor,
+  tagIssuesFor,
+} from './campaigns'
 
 export type {
   IntentAction,
@@ -63,8 +94,10 @@ export type {
 } from './consideration'
 export type { TrustHealth, ModerationIssue } from './community'
 export type { MonetizationTier, ReconState, ChannelState, RevenueIssue } from './revenue'
+export type { AttributionClass, TagIssue, TagCompliance, ChannelClass, CampaignVerdict, LandingKind, CampaignIssue } from './campaigns'
 export { MODERATION_ISSUE_META } from './community'
 export { REVENUE_ISSUE_META } from './revenue'
+export { CAMPAIGN_ISSUE_META, TAG_ISSUE_META } from './campaigns'
 export { INTENT_WEIGHTS, AFFILIATE_CLICK_WEIGHT, SIGNED_IN_BONUS, qualificationTier } from './consideration'
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
@@ -588,40 +621,6 @@ export async function getConsiderationMetrics(
     .slice(0, 10)
   return { total: rows.length, saves, addToCompare, watches, relatedClicks, topDevices }
 }
-// UTM campaign channel mix — page views + affiliate clicks attributed by UTM
-export async function getCampaignMetrics(
-  period: string
-): Promise<Array<{ source: string; medium: string; campaign: string; views: number; clicks: number }>> {
-  const since = sinceISO(period)
-  const [views, clicks] = await Promise.all([
-    supabase.from('page_views').select('utm_source, utm_medium, utm_campaign').gte('created_at', since),
-    supabase.from('affiliate_clicks').select('utm_source, utm_medium, utm_campaign').gte('created_at', since),
-  ])
-
-  const rows = new Map<string, { source: string; medium: string; campaign: string; views: number; clicks: number }>()
-  const keyOf = (s: string | null, m: string | null, c: string | null) => `${s ?? '(direct)'}::${m ?? ''}::${c ?? ''}`
-
-  for (const row of views.data ?? []) {
-    const key = keyOf(row.utm_source, row.utm_medium, row.utm_campaign)
-    const cur = rows.get(key) ?? {
-      source: row.utm_source ?? '(direct)',
-      medium: row.utm_medium ?? '',
-      campaign: row.utm_campaign ?? '',
-      views: 0,
-      clicks: 0,
-    }
-    cur.views++
-    rows.set(key, cur)
-  }
-  for (const row of clicks.data ?? []) {
-    const key = keyOf(row.utm_source, row.utm_medium, row.utm_campaign)
-    const cur = rows.get(key)
-    if (cur) cur.clicks++
-  }
-
-  return Array.from(rows.values()).sort((a, b) => b.views - a.views).slice(0, 15)
-}
-
 // Trust coverage — % of published devices with at least one rating or comment in period
 export async function getTrustMetrics(
   period: string
@@ -1771,6 +1770,8 @@ export const SCHEDULED_EXPORT_REPORTS = [
   'revenue-queue',
   'search-demand',
   'search-backlog',
+  'campaign-ledger',
+  'campaign-queue',
   'explore',
 ]
 
@@ -6143,6 +6144,829 @@ export async function getSearchInsights(period: string): Promise<SearchInsights>
         .slice(0, 10),
     },
     health,
+    action: {
+      fixQueue: fixQueue.slice(0, 25),
+      stakeTotal: Math.round(fixQueue.reduce((s, i) => s + i.stake, 0) * 10) / 10,
+    },
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 13 — Campaigns & Acquisition intelligence
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One row of the UTM registry: a raw, as-recorded tag tuple. */
+export interface CampaignTagRow {
+  /** Raw values. Case / whitespace variants stay distinct on purpose — that is
+   *  exactly what the registry exists to expose. */
+  source: string
+  medium: string
+  campaign: string
+  /** Medium → paid · social · creator · email · affiliate · search · owned · unmapped. */
+  channelClass: ChannelClass
+  channelLabel: string
+  views: number
+  visitors: number
+  /** Clicks attributed by FIRST-TOUCH fp_id join (visit-level), not by the click row. */
+  clicks: number
+  clickRatePer1k: number
+  sharePct: number
+  verdict: CampaignVerdict
+  compliance: TagCompliance
+  complianceLabel: string
+  issues: TagIssue[]
+  activeDays: number
+  lastSeen: string | null
+  stale: boolean
+  topLanding: { path: string; kind: LandingKind; kindLabel: string; views: number } | null
+  /** Share of this campaign's views landing on a device / article / comparison. */
+  deepLandingPct: number
+  /** Clicks whose OUTBOUND buy link carried this campaign value (retailer-side tags). */
+  outboundTaggedClicks: number
+}
+
+/** One row of the prescriptive campaign queue. */
+export interface CampaignFixQueueItem {
+  issue: CampaignIssue
+  label: string
+  /** What the row is about: a campaign tuple, a platform, or the whole account. */
+  target: string
+  campaign: string | null
+  detail: string
+  action: string
+  stake: number
+  severity: 'high' | 'medium' | 'low'
+  href: string
+}
+
+export interface CampaignInsights {
+  totals: {
+    views: number
+    visitors: number
+    taggedViews: number
+    untaggedViews: number
+    directViews: number
+    /** Tagged views ÷ all views × 100 — how much acquisition is nameable. */
+    tagRatePct: number
+    /** Untagged views with an external referrer ÷ all views × 100. */
+    labelledReferralPct: number
+    distinctCampaigns: number
+    distinctSources: number
+    distinctMediums: number
+    activeDays: number
+    clicks: number
+    interactions: number
+    /** Views whose row carries no fp_id — they cannot enter the join model. */
+    unidentifiedViews: number
+    identityCoveragePct: number
+    taggedVisitors: number
+    untaggedVisitors: number
+    directVisitors: number
+  }
+  reach: {
+    trend: Array<{ date: string; tagged: number; untagged: number; direct: number; total: number }>
+    maxDaily: number
+    byClass: Array<{
+      attribution: AttributionClass
+      label: string
+      views: number
+      visitors: number
+      sharePct: number
+    }>
+    landings: Array<{
+      kind: LandingKind
+      label: string
+      depth: 'deep' | 'shallow'
+      views: number
+      sharePct: number
+      topPath: string
+    }>
+    /** Top campaigns by views (the registry holds the full list). */
+    topCampaigns: CampaignTagRow[]
+    /** Referrer-classified but untagged entry sources, biggest first. */
+    untaggedSources: Array<{
+      label: string
+      platform: string | null
+      sourceClass: string
+      views: number
+      visitors: number
+      /** Self-referral / dev host — counted in reach, excluded from the queue. */
+      internal: boolean
+    }>
+  }
+  attribution: {
+    segments: Array<{
+      attribution: AttributionClass
+      label: string
+      visitors: number
+      views: number
+      /** Visitors who saw more than the entry page. */
+      engagedVisitors: number
+      engagedPct: number
+      clickers: number
+      clicks: number
+      clickPct: number
+      interactions: number
+    }>
+    identifiedVisitors: number
+    unidentifiedViews: number
+    downstreamViews: number
+    downstreamTaggedViews: number
+    /** Downstream rows still carrying a tag ÷ all downstream rows × 100. */
+    tagDurabilityPct: number
+    creditedClicks: number
+    uncreditedClicks: number
+    unknownIdentityClicks: number
+  }
+  efficiency: {
+    campaigns: CampaignTagRow[]
+    reachMedian: number
+    rateMedian: number
+    channelMix: Array<{
+      channelClass: ChannelClass
+      label: string
+      views: number
+      clicks: number
+      campaigns: number
+      sharePct: number
+    }>
+    complianceMix: Array<{ compliance: TagCompliance; label: string; campaigns: number; views: number; sharePct: number }>
+    gradedCampaigns: number
+    cleanSharePct: number
+    bestCampaign: CampaignTagRow | null
+    worstCampaign: CampaignTagRow | null
+  }
+  action: {
+    fixQueue: CampaignFixQueueItem[]
+    stakeTotal: number
+  }
+}
+
+
+
+/**
+ * Campaigns & Acquisition intelligence — the acquisition-integrity story.
+ *
+ * REACH → ATTRIBUTION → EFFICIENCY → ACTION, from four first-party sources:
+ * page_views (the landing/entry record), affiliate_clicks (the money) and
+ * interactions (the intent) joined back to page_views by `fp_id`, plus the
+ * published catalog to classify where each click actually lands.
+ *
+ * The model is FIRST-TOUCH BY fp_id, because that is the only durable link the
+ * capture layer gives us: the beacons read utm_* from the live URL, so a tag
+ * exists on the landing request and vanishes on the next internal navigation,
+ * while affiliate_clicks carry the OUTBOUND buy link's own params. Anything the
+ * join cannot reach is reported as unattributed rather than guessed.
+ */
+export async function getCampaignInsights(period: string): Promise<CampaignInsights> {
+  const since = sinceISO(period)
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30
+  const nowMs = Date.now()
+
+  // Zero-fill every calendar day (UTC) so the reach strip keeps its shape even
+  // on quiet days — same discipline as the Traffic tab.
+  const dayKeys: string[] = []
+  for (let i = days - 1; i >= 0; i--) {
+    dayKeys.push(new Date(nowMs - i * 86400000).toISOString().split('T')[0])
+  }
+  const daySet = new Set(dayKeys)
+
+  const [viewsRes, clicksRes, interactionsRes, devicesRes, articlesRes] = await Promise.all([
+    supabase
+      .from('page_views')
+      .select('path, referrer, source, platform, fp_id, utm_source, utm_medium, utm_campaign, created_at')
+      .gte('created_at', since)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('affiliate_clicks')
+      .select('fp_id, utm_source, utm_medium, utm_campaign, created_at')
+      .gte('created_at', since),
+    supabase.from('interactions').select('action, content_type, device_slug, fp_id, created_at').gte('created_at', since),
+    supabase.from('devices').select('slug').eq('status', 'published'),
+    supabase.from('articles').select('slug').eq('status', 'published'),
+  ])
+
+  type ViewRow = {
+    path: string | null
+    referrer: string | null
+    source: string | null
+    platform: string | null
+    fp_id: string | null
+    utm_source: string | null
+    utm_medium: string | null
+    utm_campaign: string | null
+    created_at: string
+  }
+
+  const views = (viewsRes.data ?? []) as ViewRow[]
+  const clickRows = (clicksRes.data ?? []) as Array<{
+    fp_id: string | null
+    utm_source: string | null
+    utm_medium: string | null
+    utm_campaign: string | null
+    created_at: string
+  }>
+  const interactionRows = (interactionsRes.data ?? []) as Array<{
+    action: string
+    content_type: string | null
+    device_slug: string | null
+    fp_id: string | null
+    created_at: string
+  }>
+
+  const deviceSlugs = new Set((devicesRes.data ?? []).map((d) => String(d.slug)))
+  const articleSlugs = new Set((articlesRes.data ?? []).map((a) => String(a.slug)))
+
+  const toDayKey = (iso: string) => new Date(iso).toISOString().split('T')[0]
+
+  // ── A · reach — what did the tagged work deliver? ─────────────────────────
+  type Enriched = ViewRow & {
+    tagged: boolean
+    attribution: AttributionClass
+    kind: LandingKind
+    dayKey: string
+  }
+
+  const enriched: Enriched[] = views.map((r) => {
+    const tagged = isTagged(r)
+    return {
+      ...r,
+      tagged,
+      attribution: attributionClassFor(tagged, r.source),
+      kind: classifyLandingPath(r.path ?? '/', deviceSlugs, articleSlugs),
+      dayKey: toDayKey(r.created_at),
+    }
+  })
+
+  const totalViews = enriched.length
+  const taggedViews = enriched.filter((v) => v.attribution === 'tagged')
+  const untaggedViews = enriched.filter((v) => v.attribution === 'untagged')
+  const directViews = enriched.filter((v) => v.attribution === 'direct')
+
+  const visitorsOf = (rows: Enriched[]) => {
+    const set = new Set<string>()
+    for (const r of rows) if (r.fp_id) set.add(r.fp_id)
+    return set
+  }
+
+  const identifiedRows = enriched.filter((v) => v.fp_id)
+  const visitorSet = visitorsOf(enriched)
+  const taggedVisitorSet = visitorsOf(taggedViews)
+  const untaggedVisitorSet = visitorsOf(untaggedViews)
+  const directVisitorSet = visitorsOf(directViews)
+
+  const activeDays = new Set(enriched.map((v) => v.dayKey).filter((d) => daySet.has(d))).size
+
+  const tagValue = (v: string | null) => normalizeTag(v)
+  const campaignSet = new Set(taggedViews.map((v) => tagValue(v.utm_campaign)).filter(Boolean))
+  const sourceSet = new Set(taggedViews.map((v) => tagValue(v.utm_source)).filter(Boolean))
+  const mediumSet = new Set(taggedViews.map((v) => tagValue(v.utm_medium)).filter(Boolean))
+
+
+  const byClass: CampaignInsights['reach']['byClass'] = ATTRIBUTION_ORDER.map((cls) => {
+    const rows = enriched.filter((v) => v.attribution === cls)
+    return {
+      attribution: cls,
+      label: ATTRIBUTION_LABELS[cls],
+      views: rows.length,
+      visitors: visitorsOf(rows).size,
+      sharePct: sharePct(rows.length, totalViews, 1),
+    }
+  })
+
+  const LANDING_ORDER: LandingKind[] = ['device', 'compare', 'article', 'video', 'brand', 'home', 'search', 'other']
+  const landings: CampaignInsights['reach']['landings'] = LANDING_ORDER.map((kind) => {
+    const rows = enriched.filter((v) => v.kind === kind)
+    const pathCounts = new Map<string, number>()
+    for (const r of rows) {
+      const p = r.path ?? '/'
+      pathCounts.set(p, (pathCounts.get(p) ?? 0) + 1)
+    }
+    const topPath = Array.from(pathCounts.entries()).sort((a, b) => b[1] - a[1])[0]
+    return {
+      kind,
+      label: LANDING_KIND_LABELS[kind],
+      depth: landingDepth(kind),
+      views: rows.length,
+      sharePct: sharePct(rows.length, totalViews, 1),
+      topPath: topPath ? topPath[0] : '',
+    }
+  }).filter((l) => l.views > 0)
+
+  const trend = dayKeys.map((date) => {
+    const rows = enriched.filter((v) => v.dayKey === date)
+    const t = rows.filter((v) => v.attribution === 'tagged').length
+    const d = rows.filter((v) => v.attribution === 'direct').length
+    return { date, tagged: t, untagged: rows.length - t - d, direct: d, total: rows.length }
+  })
+
+  // Reached from an external referrer with no tag: the platform is knowable, the
+  // campaign is not. Grouped per platform (social) or per referrer host. Our own
+  // domain and dev hosts are self-referral noise — still counted in reach, but
+  // flagged here so the queue never asks anyone to "tag" a localhost redirect.
+  const untaggedSourceMap = new Map<
+    string,
+    {
+      label: string
+      platform: string | null
+      sourceClass: string
+      views: number
+      visitors: Set<string>
+      internal: boolean
+    }
+  >()
+  for (const r of untaggedViews) {
+    let host = 'unknown referrer'
+    try {
+      if (r.referrer) host = new URL(r.referrer).hostname.replace(/^www\./, '')
+    } catch {
+      host = 'unknown referrer'
+    }
+    const label = r.platform ?? host
+    const key = `${r.source ?? 'referral'}::${label}`
+    const cur =
+      untaggedSourceMap.get(key) ?? {
+        label,
+        platform: r.platform,
+        sourceClass: r.source ?? 'referral',
+        views: 0,
+        visitors: new Set<string>(),
+        internal: isInternalReferrer(host),
+      }
+    cur.views++
+    if (r.fp_id) cur.visitors.add(r.fp_id)
+    untaggedSourceMap.set(key, cur)
+  }
+  const untaggedSources = Array.from(untaggedSourceMap.values())
+    .map((s) => ({
+      label: s.label,
+      platform: s.platform,
+      sourceClass: s.sourceClass,
+      views: s.views,
+      visitors: s.visitors.size,
+      internal: s.internal,
+    }))
+    .sort((a, b) => b.views - a.views)
+
+  // ── B · attribution — first-touch by fp_id ────────────────────────────────
+  //
+  // `enriched` is ordered by created_at ascending, so the first row seen for an
+  // fp_id is that visitor's entry page INSIDE the window. That is the only
+  // campaign we can honestly credit — the rows after it carry no tag at all
+  // (the beacon reads utm_* from the live URL).
+  const rowsByVisitor = new Map<string, Enriched[]>()
+  for (const r of enriched) {
+    if (!r.fp_id) continue
+    const list = rowsByVisitor.get(r.fp_id)
+    if (list) list.push(r)
+    else rowsByVisitor.set(r.fp_id, [r])
+  }
+
+  const entryByVisitor = new Map<string, Enriched>()
+  const viewsByVisitor = new Map<string, number>()
+  for (const [fp, rows] of rowsByVisitor) {
+    entryByVisitor.set(fp, rows[0])
+    viewsByVisitor.set(fp, rows.length)
+  }
+
+  const clicksByVisitor = new Map<string, number>()
+  let unknownIdentityClicks = 0
+  for (const c of clickRows) {
+    if (!c.fp_id || !entryByVisitor.has(c.fp_id)) {
+      // No identity, or the visitor's entry page sits outside the window — we
+      // cannot say anything about where they came from, so it is not a "miss".
+      unknownIdentityClicks++
+      continue
+    }
+    clicksByVisitor.set(c.fp_id, (clicksByVisitor.get(c.fp_id) ?? 0) + 1)
+  }
+
+  const interactionsByVisitor = new Map<string, number>()
+  for (const i of interactionRows) {
+    if (!i.fp_id) continue
+    interactionsByVisitor.set(i.fp_id, (interactionsByVisitor.get(i.fp_id) ?? 0) + 1)
+  }
+
+  // Tag durability: of the rows that are NOT the entry page for a tagged
+  // visitor, how many still carry a tag? Since every beacon reads the live URL,
+  // this is expected to sit at ~0 — the number exists to prove it, not to
+  // flatter the model.
+  let downstreamViews = 0
+  let downstreamTaggedViews = 0
+  let creditedClicks = 0
+  let uncreditedClicks = 0
+  for (const [fp, rows] of rowsByVisitor) {
+    const entry = rows[0]
+    const visitorClicks = clicksByVisitor.get(fp) ?? 0
+    if (entry.attribution === 'tagged') {
+      creditedClicks += visitorClicks
+      for (let i = 1; i < rows.length; i++) {
+        downstreamViews++
+        if (rows[i].tagged) downstreamTaggedViews++
+      }
+    } else {
+      // Money we can see being made by a visitor whose campaign we never saw.
+      uncreditedClicks += visitorClicks
+    }
+  }
+
+
+  // ── C · efficiency — the UTM registry, graded ─────────────────────────────
+  //
+  // The registry keys on the RAW tuple: `Ramadan Sale` and `ramadan-sale` are
+  // deliberately two rows, because that fork is precisely the governance
+  // problem the registry exists to expose.
+  type CampaignBucket = {
+    source: string
+    medium: string
+    campaign: string
+    views: number
+    visitors: Set<string>
+    landingCounts: Map<LandingKind, number>
+    pathCounts: Map<string, number>
+    firstSeen: string
+    lastSeen: string
+    days: Set<string>
+    clicks: number
+  }
+
+  const registry = new Map<string, CampaignBucket>()
+  const tupleKey = (source: string, medium: string, campaign: string) => `${source}|${medium}|${campaign}`
+
+  for (const r of taggedViews) {
+    const source = tagValue(r.utm_source)
+    const medium = tagValue(r.utm_medium)
+    const campaign = tagValue(r.utm_campaign)
+    const key = tupleKey(source, medium, campaign)
+    const bucket =
+      registry.get(key) ??
+      {
+        source,
+        medium,
+        campaign,
+        views: 0,
+        visitors: new Set<string>(),
+        landingCounts: new Map<LandingKind, number>(),
+        pathCounts: new Map<string, number>(),
+        firstSeen: r.created_at,
+        lastSeen: r.created_at,
+        days: new Set<string>(),
+        clicks: 0,
+      }
+    bucket.views++
+    if (r.fp_id) bucket.visitors.add(r.fp_id)
+    bucket.landingCounts.set(r.kind, (bucket.landingCounts.get(r.kind) ?? 0) + 1)
+    const p = r.path ?? '/'
+    bucket.pathCounts.set(p, (bucket.pathCounts.get(p) ?? 0) + 1)
+    if (r.created_at < bucket.firstSeen) bucket.firstSeen = r.created_at
+    if (r.created_at > bucket.lastSeen) bucket.lastSeen = r.created_at
+    bucket.days.add(r.dayKey)
+    registry.set(key, bucket)
+  }
+
+  // Visit-level click attribution: a click belongs to the campaign the visitor
+  // ENTERED on, which is the only tag that survived long enough to be recorded.
+  const entryTupleKeyByVisitor = new Map<string, string>()
+  for (const [fp, entry] of entryByVisitor) {
+    if (entry.attribution !== 'tagged') continue
+    entryTupleKeyByVisitor.set(
+      fp,
+      tupleKey(tagValue(entry.utm_source), tagValue(entry.utm_medium), tagValue(entry.utm_campaign)),
+    )
+  }
+  for (const [fp, count] of clicksByVisitor) {
+    const key = entryTupleKeyByVisitor.get(fp)
+    if (!key) continue
+    const bucket = registry.get(key)
+    if (bucket) bucket.clicks += count
+  }
+
+  // Outbound-side tags: affiliate_clicks carry the BUY LINK's own utm params
+  // (the retailer's tagging), so they are reported as context, never as the
+  // campaign attribution.
+  const outboundTagClicks = new Map<string, number>()
+  for (const c of clickRows) {
+    if (!isTagged(c)) continue
+    const key = tupleKey(tagValue(c.utm_source), tagValue(c.utm_medium), tagValue(c.utm_campaign))
+    outboundTagClicks.set(key, (outboundTagClicks.get(key) ?? 0) + 1)
+  }
+
+  const staleCutoff = dayKeys[Math.max(0, dayKeys.length - 8)] ?? dayKeys[0]
+  const bucketRows = Array.from(registry.values()).map((b) => {
+    const issues = tagIssuesFor({ source: b.source, medium: b.medium, campaign: b.campaign })
+    const deepViews = Array.from(b.landingCounts.entries())
+      .filter(([kind]) => landingDepth(kind) === 'deep')
+      .reduce((s, [, n]) => s + n, 0)
+    const topPath = Array.from(b.pathCounts.entries()).sort((a, b2) => b2[1] - a[1])[0]
+    const topKind = Array.from(b.landingCounts.entries()).sort((a, b2) => b2[1] - a[1])[0]
+    const lastSeenDay = toDayKey(b.lastSeen)
+    return {
+      source: b.source,
+      medium: b.medium,
+      campaign: b.campaign,
+      channelClass: classifyMedium(b.medium),
+      views: b.views,
+      visitors: b.visitors.size,
+      clicks: b.clicks,
+      clickRatePer1k: clickRatePer1k(b.clicks, b.views),
+      firstSeen: b.firstSeen,
+      lastSeen: b.lastSeen,
+      activeDays: b.days.size,
+      issues,
+      compliance: tagComplianceFor(issues),
+      deepLandingPct: sharePct(deepViews, b.views, 1),
+      topLanding: topPath
+        ? {
+            path: topPath[0],
+            kind: (topKind ? topKind[0] : 'other') as LandingKind,
+            kindLabel: LANDING_KIND_LABELS[(topKind ? topKind[0] : 'other') as LandingKind],
+            views: topPath[1],
+          }
+        : null,
+      stale: lastSeenDay < staleCutoff,
+      outboundTaggedClicks: outboundTagClicks.get(tupleKey(b.source, b.medium, b.campaign)) ?? 0,
+    }
+  })
+
+  const reachMedian = median(bucketRows.map((r) => r.views))
+  const rateMedian = median(bucketRows.map((r) => r.clickRatePer1k))
+
+  const campaigns: CampaignTagRow[] = bucketRows
+    .map((r) => {
+      const verdict = campaignVerdict({
+        views: r.views,
+        clicks: r.clicks,
+        reachMedian,
+        rateMedian,
+      })
+      return {
+        source: r.source,
+        medium: r.medium,
+        campaign: r.campaign,
+        channelClass: r.channelClass,
+        channelLabel: CHANNEL_CLASS_LABELS[r.channelClass],
+        views: r.views,
+        visitors: r.visitors,
+        clicks: r.clicks,
+        clickRatePer1k: r.clickRatePer1k,
+        sharePct: sharePct(r.views, taggedViews.length, 1),
+        verdict,
+        compliance: r.compliance,
+        complianceLabel: TAG_COMPLIANCE_LABELS[r.compliance],
+        issues: r.issues,
+        activeDays: r.activeDays,
+        lastSeen: r.lastSeen,
+        stale: r.stale,
+        topLanding: r.topLanding,
+        deepLandingPct: r.deepLandingPct,
+        outboundTaggedClicks: r.outboundTaggedClicks,
+      }
+    })
+    .sort((a, b) => b.views - a.views || b.clicks - a.clicks)
+
+  const segments: CampaignInsights['attribution']['segments'] = ATTRIBUTION_ORDER.map((cls) => {
+    const rows = enriched.filter((v) => v.attribution === cls)
+    const classVisitors = new Set<string>()
+    for (const r of rows) if (r.fp_id) classVisitors.add(r.fp_id)
+
+    let engaged = 0
+    let clickers = 0
+    let clicks = 0
+    let interactions = 0
+    for (const fp of classVisitors) {
+      if ((viewsByVisitor.get(fp) ?? 0) > 1) engaged++
+      const c = clicksByVisitor.get(fp) ?? 0
+      if (c > 0) clickers++
+      clicks += c
+      interactions += interactionsByVisitor.get(fp) ?? 0
+    }
+
+    return {
+      attribution: cls,
+      label: ATTRIBUTION_LABELS[cls],
+      visitors: classVisitors.size,
+      views: rows.length,
+      engagedVisitors: engaged,
+      engagedPct: sharePct(engaged, classVisitors.size, 1),
+      clickers,
+      clicks,
+      clickPct: sharePct(clickers, classVisitors.size, 1),
+      interactions,
+    }
+  })
+
+
+  const channelMix: CampaignInsights['efficiency']['channelMix'] = CHANNEL_CLASS_ORDER.map((cls) => {
+    const rows = campaigns.filter((c) => c.channelClass === cls)
+    const views = rows.reduce((s, c) => s + c.views, 0)
+    const clicks = rows.reduce((s, c) => s + c.clicks, 0)
+    return {
+      channelClass: cls,
+      label: CHANNEL_CLASS_LABELS[cls],
+      views,
+      clicks,
+      campaigns: rows.length,
+      sharePct: sharePct(views, taggedViews.length, 1),
+    }
+  }).filter((r) => r.campaigns > 0)
+
+  const complianceMix: CampaignInsights['efficiency']['complianceMix'] = (
+    ['clean', 'warn', 'broken'] as TagCompliance[]
+  )
+    .map((compliance) => {
+      const rows = campaigns.filter((c) => c.compliance === compliance)
+      const views = rows.reduce((s, c) => s + c.views, 0)
+      return {
+        compliance,
+        label: TAG_COMPLIANCE_LABELS[compliance],
+        campaigns: rows.length,
+        views,
+        sharePct: sharePct(views, taggedViews.length, 1),
+      }
+    })
+    .filter((r) => r.campaigns > 0)
+
+  const cleanViews = complianceMix.find((c) => c.compliance === 'clean')?.views ?? 0
+  const graded = campaigns.filter((c) => c.views >= 5)
+  const byRateDesc = [...graded].sort((a, b) => b.clickRatePer1k - a.clickRatePer1k)
+
+  // ── D · action — one row per campaign, carrying its most actionable issue ──
+  const STAKE_WEIGHT: Partial<Record<CampaignIssue, number>> = {
+    campaign_no_click: 1.2,
+    shallow_landing: 1.5,
+    unmapped_medium: 1,
+    no_medium: 0.8,
+    naming_violation: 0.4,
+    stale_campaign: 0.3,
+  }
+
+  const fixQueue: CampaignFixQueueItem[] = []
+  const campaignQueueHref = '/admin/analytics?tab=campaigns'
+
+  // Money we can see and cannot credit — always the top row when it exists.
+  const uncreditedTotal = uncreditedClicks + unknownIdentityClicks
+  if (uncreditedTotal > 0) {
+    const stake = uncreditedTotal * 8
+    fixQueue.push({
+      issue: 'unattributed_clicks',
+      label: CAMPAIGN_ISSUE_META.unattributed_clicks.label,
+      target: 'Attribution integrity',
+      campaign: null,
+      detail: `${uncreditedTotal} affiliate click${uncreditedTotal === 1 ? '' : 's'} this period came from visitors whose entry page carried no campaign tag (${uncreditedClicks} entered untagged, ${unknownIdentityClicks} had no in-window entry at all) — the commission exists, the campaign cannot be credited.`,
+      action: CAMPAIGN_ISSUE_META.unattributed_clicks.action,
+      stake,
+      severity: campaignSeverity(stake),
+      href: '/admin/analytics?tab=affiliate',
+    })
+  }
+
+  // Creator-led discovery that arrived untagged (per platform).
+  for (const s of untaggedSources
+    .filter((x) => x.sourceClass === 'social' && !x.internal)
+    .slice(0, 3)) {
+    const stake = s.views * 2
+    fixQueue.push({
+      issue: 'creator_unattributed',
+      label: CAMPAIGN_ISSUE_META.creator_unattributed.label,
+      target: s.label,
+      campaign: null,
+      detail: `${s.views} view${s.views === 1 ? '' : 's'} from ${s.visitors} visitor${s.visitors === 1 ? '' : 's'} arrived from ${s.label} with no campaign tag — the platform is visible, the creator is not.`,
+      action: CAMPAIGN_ISSUE_META.creator_unattributed.action,
+      stake,
+      severity: campaignSeverity(stake),
+      href: '/admin/analytics?tab=traffic',
+    })
+  }
+
+  // Everything else that arrived with a referrer but no name. Self-referrals and
+  // dev hosts are skipped: they are noise, not a placement anyone can tag.
+  for (const s of untaggedSources
+    .filter((x) => x.sourceClass !== 'social' && !x.internal)
+    .slice(0, 4)) {
+    const stake = s.views * 0.6
+    fixQueue.push({
+      issue: 'untagged_referral',
+      label: CAMPAIGN_ISSUE_META.untagged_referral.label,
+      target: s.label,
+      campaign: null,
+      detail: `${s.views} view${s.views === 1 ? '' : 's'} from ${s.sourceClass} referral(s) to ${s.label} with no utm tags.`,
+      action: CAMPAIGN_ISSUE_META.untagged_referral.action,
+      stake,
+      severity: campaignSeverity(stake),
+      href: '/admin/analytics?tab=traffic',
+    })
+  }
+
+  // One row per campaign: the single most actionable problem it has, so a badly
+  // tagged campaign cannot triple-count its own views in the stake total.
+  for (const c of campaigns) {
+    const target = `${c.campaign || '(campaign not set)'} · ${c.source || '(source not set)'} / ${c.medium || '(medium not set)'}`
+    let issue: CampaignIssue | null = null
+    if (c.views >= 5 && c.clicks === 0) issue = 'campaign_no_click'
+    else if (c.views >= 5 && c.deepLandingPct < 50) issue = 'shallow_landing'
+    else if (c.issues.includes('unmapped_medium')) issue = 'unmapped_medium'
+    else if (c.issues.includes('no_medium')) issue = 'no_medium'
+    else if (c.issues.some((i) => i === 'spaces' || i === 'uppercase' || i === 'underscores' || i === 'dated')) {
+      issue = 'naming_violation'
+    } else if (c.stale && c.views >= 3) issue = 'stale_campaign'
+    if (!issue) continue
+
+    const stake = c.views * (STAKE_WEIGHT[issue] ?? 1)
+    let detail: string
+    if (issue === 'campaign_no_click') {
+      detail = `${c.views} views from ${c.visitors} visitors and zero affiliate clicks · landing on ${c.topLanding ? c.topLanding.kindLabel.toLowerCase() : 'an unknown page'}.`
+    } else if (issue === 'shallow_landing') {
+      detail = `Only ${c.deepLandingPct}% of its ${c.views} views landed on a device page, article or comparison — top landing: ${c.topLanding?.path ?? 'unknown'}.`
+    } else if (issue === 'stale_campaign') {
+      detail = `Last seen ${c.lastSeen ? c.lastSeen.slice(0, 10) : 'unknown'} — no traffic in the last week of the window.`
+    } else if (issue === 'naming_violation') {
+      detail = `Tag issues: ${c.issues.map((i) => TAG_ISSUE_META[i].label).join(', ')}.`
+    } else if (issue === 'no_medium') {
+      detail = `Campaign tagged with no utm_medium across ${c.views} views.`
+    } else {
+      detail = `Medium "${c.medium}" is outside the shared vocabulary across ${c.views} views.`
+    }
+
+    fixQueue.push({
+      issue,
+      label: CAMPAIGN_ISSUE_META[issue].label,
+      target,
+      campaign: c.campaign || null,
+      detail,
+      action: CAMPAIGN_ISSUE_META[issue].action,
+      stake,
+      severity: campaignSeverity(stake),
+      href: campaignQueueHref,
+    })
+  }
+
+  if (taggedViews.length === 0 && totalViews > 0) {
+    fixQueue.push({
+      issue: 'no_tagged_traffic',
+      label: CAMPAIGN_ISSUE_META.no_tagged_traffic.label,
+      target: 'All acquisition',
+      campaign: null,
+      detail: `0 of ${totalViews} views in this period carried a campaign tag.`,
+      action: CAMPAIGN_ISSUE_META.no_tagged_traffic.action,
+      stake: 25,
+      severity: 'high',
+      href: '/admin/analytics?tab=traffic',
+    })
+  }
+
+  fixQueue.sort((a, b) => b.stake - a.stake)
+
+  return {
+    totals: {
+      views: totalViews,
+      visitors: visitorSet.size,
+      taggedViews: taggedViews.length,
+      untaggedViews: untaggedViews.length,
+      directViews: directViews.length,
+      tagRatePct: sharePct(taggedViews.length, totalViews, 1),
+      labelledReferralPct: sharePct(untaggedViews.length, totalViews, 1),
+      distinctCampaigns: campaignSet.size,
+      distinctSources: sourceSet.size,
+      distinctMediums: mediumSet.size,
+      activeDays,
+      clicks: clickRows.length,
+      interactions: interactionRows.length,
+      unidentifiedViews: totalViews - identifiedRows.length,
+      identityCoveragePct: sharePct(identifiedRows.length, totalViews, 1),
+      taggedVisitors: taggedVisitorSet.size,
+      untaggedVisitors: untaggedVisitorSet.size,
+      directVisitors: directVisitorSet.size,
+    },
+    reach: {
+      trend,
+      maxDaily: trend.reduce((m, t) => Math.max(m, t.total), 0),
+      byClass,
+      landings,
+      topCampaigns: campaigns.slice(0, 12),
+      untaggedSources: untaggedSources.slice(0, 12),
+    },
+    attribution: {
+      segments,
+      identifiedVisitors: rowsByVisitor.size,
+      unidentifiedViews: totalViews - identifiedRows.length,
+      downstreamViews,
+      downstreamTaggedViews,
+      tagDurabilityPct: sharePct(downstreamTaggedViews, downstreamViews, 1),
+      creditedClicks,
+      uncreditedClicks,
+      unknownIdentityClicks,
+    },
+    efficiency: {
+      campaigns,
+      reachMedian: Math.round(reachMedian * 10) / 10,
+      rateMedian: Math.round(rateMedian * 10) / 10,
+      channelMix,
+      complianceMix,
+      gradedCampaigns: graded.length,
+      cleanSharePct: sharePct(cleanViews, taggedViews.length, 1),
+      bestCampaign: byRateDesc[0] ?? null,
+      worstCampaign: [...graded].sort((a, b) => a.clickRatePer1k - b.clickRatePer1k)[0] ?? null,
+    },
     action: {
       fixQueue: fixQueue.slice(0, 25),
       stakeTotal: Math.round(fixQueue.reduce((s, i) => s + i.stake, 0) * 10) / 10,

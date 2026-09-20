@@ -4,13 +4,14 @@ import {
   getPageViewsOverTime, getTopPages, getTrafficSources, getDeviceTypeBreakdown,
   getTopAffiliatePages, getAffiliateCTR, getClicksByRetailer, getFunnelMetrics,
   getZeroReport, getTopDevices, getTopContentPages, type ContentSection,
-  getAudienceMetrics, getConsiderationMetrics, getCampaignMetrics, getTrustMetrics,
+  getAudienceMetrics, getConsiderationMetrics, getTrustMetrics,
   getRevenueProxy,
   getQualifiedLeads, getEarningsReconciliation, getLinkHealthSummary,
   getAlertRules, computeAlertKpiValues, listAlertEvents,
   getRetentionStatus, listRetentionLog,
   runExploreQuery, listScheduledExports, getTrafficInsights, getContentInsights, getDeviceInsights,
   getConsiderationInsights, getCommunityInsights, getRevenueInsights, getSearchInsights,
+  getCampaignInsights,
 } from '@/lib/analytics/queries'
 import { ROLE_ALLOWED, type TabId } from '@/lib/analytics/tabs'
 import {
@@ -109,7 +110,14 @@ import QueryShapeBreakdown from './QueryShapeBreakdown'
 import QueryRepeatChart from './QueryRepeatChart'
 import SearchIndexHealth from './SearchIndexHealth'
 import SearchFixQueue from './SearchFixQueue'
-import { deviceChipsFor, considerationChipsFor, communityChipsFor, revenueChipsFor, searchChipsFor, tierBadgeClass, tierLabel, TierDot } from './ConsiderationTabHelpers'
+import CampaignReachChart from './CampaignReachChart'
+import CampaignLandingTable from './CampaignLandingTable'
+import AttributionJourneyStrip from './AttributionJourneyStrip'
+import CampaignEfficiencyMatrix from './CampaignEfficiencyMatrix'
+import CampaignTagRegistry from './CampaignTagRegistry'
+import CampaignFixQueue from './CampaignFixQueue'
+import CampaignsTabBody from './CampaignsTabBody'
+import { deviceChipsFor, considerationChipsFor, communityChipsFor, revenueChipsFor, searchChipsFor, campaignChipsFor, tierBadgeClass, tierLabel, TierDot } from './ConsiderationTabHelpers'
 import RoadmapPanel, { type RoadmapItem } from './RoadmapPanel'
 import QualifiedLeadsTable from './QualifiedLeadsTable'
 import LinkHealthTable from './LinkHealthTable'
@@ -165,20 +173,10 @@ const ROADMAP_REVENUE: RoadmapItem[] = [
   },
 ]
 
-const ROADMAP_CAMPAIGNS: RoadmapItem[] = [
-  {
-    phase: 'Phase 2',
-    feature: 'UTM-based channel mix per campaign',
-    data: 'utm_source/medium/campaign capture in page_views',
-    kpi: 'Campaign CTR + revenue proxy per campaign',
-  },
-  {
-    phase: 'Phase 3',
-    feature: 'Influencer & social trend tracking',
-    data: 'creator-linked referrer/UTM + platform API data',
-    kpi: 'Creator → click → revenue attribution',
-  },
-]
+// (Replaced by the Campaigns tab's story roadmap in CampaignsTabBody.)
+// Kept as an empty array so no dead constant lingers on the dashboard.
+const ROADMAP_CAMPAIGNS_LEGACY: RoadmapItem[] = []
+void ROADMAP_CAMPAIGNS_LEGACY
 
 const ROADMAP_OUTREACH: RoadmapItem[] = [
   {
@@ -342,7 +340,7 @@ export default async function AnalyticsPage({
     totalViews,
     viewsOverTime, topPages, trafficSources, deviceTypes, topAffiliate,
     funnel, zeroReport, topDevices, topContentPages,
-    audience, consideration, campaignRows, trust, revenueProxy,
+    audience, consideration, trust, revenueProxy,
     qualifiedLeads, linkHealth,
   ] = await Promise.all([
     getTotalPageViews(period),
@@ -357,7 +355,6 @@ export default async function AnalyticsPage({
     getTopContentPages(period, 150),
     getAudienceMetrics(period),
     getConsiderationMetrics(period),
-    getCampaignMetrics(period),
     getTrustMetrics(period),
     getRevenueProxy(period),
     getQualifiedLeads(period, 25),
@@ -502,6 +499,15 @@ export default async function AnalyticsPage({
     searchInsights = await getSearchInsights(period)
   }
   const searchChips = searchInsights ? searchChipsFor(searchInsights) : []
+
+  // Campaigns & Acquisition analytics hang off one aggregator too: reach →
+  // attribution integrity (first-touch fp_id join) → efficiency + tag governance
+  // → ranked tag queue.
+  let campaignInsights: Awaited<ReturnType<typeof getCampaignInsights>> | null = null
+  if (activeTab === 'campaigns' && allowedTabs.includes('campaigns')) {
+    campaignInsights = await getCampaignInsights(period)
+  }
+  const campaignChips = campaignInsights ? campaignChipsFor(campaignInsights) : []
 
 const csvLinks = [
     { href: `/api/admin/export/top-pages?period=${period}`, label: 'Top Pages CSV' },
@@ -3206,62 +3212,7 @@ const csvLinks = [
       )}
 
       {activeTab === 'campaigns' && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Megaphone className="h-5 w-5 text-brand-primary" />
-                UTM Campaign Channel Mix
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-muted-foreground border-b border-border">
-                      <th className="text-left py-2 pr-4 font-medium">Source</th>
-                      <th className="text-left py-2 pr-4 font-medium">Medium</th>
-                      <th className="text-left py-2 pr-4 font-medium">Campaign</th>
-                      <th className="text-right py-2 pr-4 font-medium">Views</th>
-                      <th className="text-right py-2 font-medium">Affiliate Clicks</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {campaignRows.map((c) => (
-                      <tr key={`${c.source}::${c.medium}::${c.campaign}`} className="border-b border-border last:border-0 hover:bg-foreground/5">
-                        <td className="py-2 pr-4 text-foreground">{c.source}</td>
-                        <td className="py-2 pr-4 text-muted-foreground">{c.medium || '—'}</td>
-                        <td className="py-2 pr-4 text-muted-foreground">{c.campaign || '—'}</td>
-                        <td className="py-2 pr-4 text-right">{c.views.toLocaleString()}</td>
-                        <td className="py-2 text-right">{c.clicks.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                    {campaignRows.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="py-4 text-center text-muted-foreground">
-                          No UTM-tagged traffic yet — share links with utm_source / utm_medium / utm_campaign
-                          to see channel performance
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Megaphone className="h-5 w-5 text-brand-primary" />
-                Creator & Influencer Attribution — Roadmap
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <RoadmapPanel items={ROADMAP_CAMPAIGNS} />
-            </CardContent>
-          </Card>
-        </div>
+        <CampaignsTabBody insights={campaignInsights} chips={campaignChips} />
       )}
 
       {activeTab === 'outreach' && (
