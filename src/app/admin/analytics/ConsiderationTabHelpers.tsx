@@ -139,7 +139,7 @@ export function revenueChipsFor(insights: RevenueInsights): RevenueChip[] {
   }
   chips.push({ label: 'Recon', value: RECON_LABELS[insights.money.recon.state] })
   if (insights.money.totals.unpricedClicks > 0) {
-    chips.push({ label: 'Unpriced clicks', value: `${insights.money.totals.unpricedClicks} (priced at 0)` })
+    chips.push({ label: 'Unpriced clicks', value: `${insights.money.totals.unpricedClicks} (no rate)` })
   }
   if (insights.action.fixQueue.length > 0) {
     chips.push({ label: 'Revenue queue', value: `${insights.action.fixQueue.length} leaks` })

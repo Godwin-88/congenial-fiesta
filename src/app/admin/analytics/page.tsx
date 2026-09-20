@@ -449,10 +449,10 @@ export default async function AnalyticsPage({
   // Devices/Compare/Community): every click priced, every retailer a channel,
   // every number reconcilable.
   let revenueInsights: Awaited<ReturnType<typeof getRevenueInsights>> | null = null
-if (activeTab === 'affiliate' && allowedTabs.includes('affiliate')) {
-  revenueInsights = await getRevenueInsights(period)
-}
-const revenueChips = revenueInsights ? revenueChipsFor(revenueInsights) : []
+  if (activeTab === 'affiliate' && allowedTabs.includes('affiliate')) {
+    revenueInsights = await getRevenueInsights(period)
+  }
+  const revenueChips = revenueInsights ? revenueChipsFor(revenueInsights) : []
 
 const csvLinks = [
     { href: `/api/admin/export/top-pages?period=${period}`, label: 'Top Pages CSV' },

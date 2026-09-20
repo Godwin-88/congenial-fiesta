@@ -129,7 +129,7 @@ These are *our* implementation's contribution — recorded **here** as "proposed
 - **Phase 8 (Devices & Catalog intelligence) — ✅ LIVE:** the Devices tab rebuilt as a catalog-revenue story — `getDeviceInsights(period)` joins the catalog to the audience (coverage → demand → leakage → action) with no new instrumentation, no migration and no new cron; new visuals + a prescriptive fix queue; two new CSV reports + a JSON endpoint (see §7.4).
 - **Phase 9 (Compare & Consideration intelligence) — ✅ LIVE:** the Compare tab rebuilt as the intent story — `getConsiderationInsights(period)` joins the intent beacon to traffic + catalog (funnel → mix → audience → pairs → action); shared qualification model (hot/warm/cold MQL tiers) in `src/lib/analytics/consideration.ts`; six purpose-built visuals + a prescriptive consideration queue; two new CSV reports + a JSON endpoint + two new Explore surfaces (`intent_score` metric · `qualification_tier` dimension) — see §7.5.
 - **Phase 10 (Community & Trust intelligence) — ✅ LIVE:** the Community tab rebuilt as the social-proof story — `getCommunityInsights(period)` joins ratings + comments + votes + watchers to traffic (Trust → Voice → People → Action); shared trust model (healthy/thin/stale/silent bands, `trustGrade()`, contributor grades) in `src/lib/analytics/community.ts`; five purpose-built visuals + a prescriptive community queue with issue codes; two new CSV reports + a JSON endpoint — see §7.6.
-- **Phase 11 (Affiliate & Revenue intelligence) — ✅ LIVE:** the Affiliate tab rebuilt as the money story — `getRevenueInsights(period)` joins the click stream to the rate sheet + earnings ledger + link health (Money → Flow → Channels → Action); shared revenue model (monetization tiers converter→unsold, reconciliation states priced/over/under/blind, channel states incl. taxonomy mismatch) in `src/lib/analytics/revenue.ts`; seven purpose-built visuals + a prescriptive revenue queue; two new CSV reports + a JSON endpoint — see §7.7.
+- **Phase 11 (Affiliate & Revenue intelligence) — ✅ LIVE (+ normalised rate-sheet join):** the Affiliate tab rebuilt as the money story — `getRevenueInsights(period)` joins the click stream to the rate sheet + earnings ledger + link health (Money → Flow → Channels → Action); shared revenue model (monetization tiers converter→unsold, reconciliation states reconciled/over/under/blind, channel states priced/mismatch/unpriced/idle) in `src/lib/analytics/revenue.ts`; seven purpose-built visuals + a prescriptive revenue queue; two new CSV reports + a JSON endpoint — see §7.7.
 
 
 ### 5.3 KPI dictionary skeleton (every KPI ships with full metadata — ℹ glossary)
@@ -475,6 +475,9 @@ roadmap; `EarningsImportCard` and `AffiliateNetworksPanel` stay as the tab's fin
   with the mismatch/unpriced rows, which is the true state of the ledger, not a bug.
 - Actuals are joined by `imported_at` (statement import day), not the statement's own period — monthly statements
   land with a lag; the momentum pairing is import-day-honest, not period-matched.
+- All proxies price through the same normalised join (`getRevenueProxy` · Explore `revenue_proxy` · the tab): a
+  mismatched key still surfaces as `tax_mismatch` in the channel ledger, but it prices — the state is a taxonomy
+  warning, not a zero. Only `unpriced` (no rate anywhere) shows clicks with an empty bar.
 - Rate thresholds (±10% recon, 3%/1% CTR tiers, 100/20 stake severity) live in `revenue.ts` so UI and aggregator
   cannot drift.
 
