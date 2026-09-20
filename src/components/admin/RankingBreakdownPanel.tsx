@@ -203,7 +203,7 @@ export default function RankingBreakdownPanel({
           <div className="rounded border border-border p-3">
             <p className="text-xs text-gray-500 uppercase tracking-wide">
               {previewMode
-                ? 'FweezyTech Score (agent computation — live preview)'
+                ? 'FweezyTech Score (agent computation — for audit only)'
                 : 'FweezyTech Score (final, deterministic)'}
             </p>
             <p className="text-2xl text-white font-medium">
@@ -219,6 +219,11 @@ export default function RankingBreakdownPanel({
               <p className="text-[11px] text-amber-400">
                 Prorated — some ranking inputs are unknown, so unknown categories are excluded rather
                 than scored as zero (§28).
+              </p>
+            )}
+            {breakdown && previewMode && (
+              <p className="text-[11px] text-gray-500">
+                This number never reaches the public page when the Fweezy Score above is filled — your manual score supersedes it on save (§48).
               </p>
             )}
             {!breakdown && <p className="text-[11px] text-amber-400">{data.note}</p>}
