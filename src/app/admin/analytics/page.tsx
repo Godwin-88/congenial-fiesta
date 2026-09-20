@@ -10,7 +10,7 @@ import {
   getAlertRules, computeAlertKpiValues, listAlertEvents,
   getRetentionStatus, listRetentionLog,
   runExploreQuery, listScheduledExports, getTrafficInsights, getContentInsights, getDeviceInsights,
-  getConsiderationInsights, getCommunityInsights,
+  getConsiderationInsights, getCommunityInsights, getRevenueInsights,
 } from '@/lib/analytics/queries'
 import { ROLE_ALLOWED, type TabId } from '@/lib/analytics/tabs'
 import { getAdminUser } from '@/lib/admin/require-admin'
@@ -60,7 +60,6 @@ import ContentLaunchChart from './ContentLaunchChart'
 import ContentOpportunityList from './ContentOpportunityList'
 import ContentDecayQueue from './ContentDecayQueue'
 import { countryName, flagEmoji, formatHoverDate, titleCase } from './chartFormat'
-import AffiliateTable from './AffiliateTable'
 import FunnelStrip from './FunnelStrip'
 import ZeroReportTable from './ZeroReportTable'
 import SectionHeading from './SectionHeading'
@@ -88,10 +87,16 @@ import RatingHistogram from './RatingHistogram'
 import DiscussionTable from './DiscussionTable'
 import ContributorRoster from './ContributorRoster'
 import CommunityFixQueue from './CommunityFixQueue'
-import { deviceChipsFor, considerationChipsFor, communityChipsFor, tierBadgeClass, tierLabel, TierDot } from './ConsiderationTabHelpers'
+import RevenueMixChart from './RevenueMixChart'
+import ReconciliationGauge from './ReconciliationGauge'
+import ClickMomentumChart from './ClickMomentumChart'
+import MonetizationThermometer from './MonetizationThermometer'
+import RetailerLedger from './RetailerLedger'
+import DeviceEarnersTable from './DeviceEarnersTable'
+import RevenueFixQueue from './RevenueFixQueue'
+import { deviceChipsFor, considerationChipsFor, communityChipsFor, revenueChipsFor, tierBadgeClass, tierLabel, TierDot } from './ConsiderationTabHelpers'
 import RoadmapPanel, { type RoadmapItem } from './RoadmapPanel'
 import QualifiedLeadsTable from './QualifiedLeadsTable'
-import EarningsReconciliationTable from './EarningsReconciliationTable'
 import LinkHealthTable from './LinkHealthTable'
 import GoalsPanel from './GoalsPanel'
 import RetentionPanel from './RetentionPanel'
@@ -127,6 +132,21 @@ const ROADMAP_COMMUNITY: RoadmapItem[] = [
     feature: 'Sentiment → CTR correlation',
     data: 'content sentiment joined to affiliate clicks',
     kpi: 'Social/YouTube promotion picks per review',
+  },
+]
+
+const ROADMAP_REVENUE: RoadmapItem[] = [
+  {
+    phase: 'Live',
+    feature: 'Revenue proxy + finance reconciliation',
+    data: 'affiliate_clicks × affiliate_commission_rates vs affiliate_earnings ledger',
+    kpi: 'kpi_rev_proxy · kpi_affiliate_ctr (variance ±10% reads reconciled)',
+  },
+  {
+    phase: 'Live',
+    feature: 'Network API connectors + scheduled exports',
+    data: 'affiliate_networks sync → earnings ledger → revenue-ledger CSV',
+    kpi: 'Zero-touch statements; owner gets the monthly payout file on schedule',
   },
 ]
 
@@ -278,10 +298,10 @@ export default async function AnalyticsPage({
 
   const [
     totalViews,
- viewsOverTime, topPages, trafficSources, deviceTypes, topAffiliate, affiliateCTR, clicksByRetailer,
+ viewsOverTime, topPages, trafficSources, deviceTypes, topAffiliate,
  searchQueries, funnel, zeroReport, topDevices, topContentPages,
     audience, consideration, campaignRows, trust, revenueProxy, searchQuality,
-    qualifiedLeads, earningsRecon, linkHealth,
+    qualifiedLeads, linkHealth,
   ] = await Promise.all([
     getTotalPageViews(period),
     getPageViewsOverTime(period),
@@ -289,8 +309,6 @@ export default async function AnalyticsPage({
     getTrafficSources(period),
     getDeviceTypeBreakdown(period),
     getTopAffiliatePages(period, 20),
-    getAffiliateCTR(period),
-    getClicksByRetailer(period),
     getTopSearchQueries(20),
     getFunnelMetrics(period),
     getZeroReport(period, 10),
@@ -303,7 +321,6 @@ export default async function AnalyticsPage({
     getRevenueProxy(period),
     getSearchQuality(period, 10),
     getQualifiedLeads(period, 25),
-    getEarningsReconciliation(period),
     getLinkHealthSummary(10),
   ])
 
@@ -428,7 +445,16 @@ export default async function AnalyticsPage({
   }
   const communityChips = communityInsights ? communityChipsFor(communityInsights) : []
 
-  const csvLinks = [
+  // Affiliate & Revenue analytics hang off one aggregator (same discipline as
+  // Devices/Compare/Community): every click priced, every retailer a channel,
+  // every number reconcilable.
+  let revenueInsights: Awaited<ReturnType<typeof getRevenueInsights>> | null = null
+if (activeTab === 'affiliate' && allowedTabs.includes('affiliate')) {
+  revenueInsights = await getRevenueInsights(period)
+}
+const revenueChips = revenueInsights ? revenueChipsFor(revenueInsights) : []
+
+const csvLinks = [
     { href: `/api/admin/export/top-pages?period=${period}`, label: 'Top Pages CSV' },
     { href: `/api/admin/export/affiliate-clicks?period=${period}`, label: 'Affiliate Clicks CSV' },
     { href: `/api/admin/export/qualified-leads?period=${period}`, label: 'Qualified Leads CSV' },
@@ -1493,69 +1519,324 @@ export default async function AnalyticsPage({
 
       {activeTab === 'affiliate' && (
         <div className="space-y-6">
+          <SectionHeading
+            letter="A"
+            title="Money — is the proxy honest?"
+            hint="kpi_rev_proxy · clicks priced · reconciliation"
+          />
+
+          {revenueInsights && (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {revenueChips.map((chip) => (
+                  <span
+                    key={chip.label}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs"
+                  >
+                    <span className="text-muted-foreground">{chip.label}:</span>
+                    <span className="font-semibold text-foreground">{chip.value}</span>
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Data sources:{' '}
+                <span className="font-medium text-foreground">
+                  affiliate_clicks · affiliate_commission_rates · affiliate_earnings · link_health_checks · devices ·
+                  brands · page_views
+                </span>
+                <span className="ml-1">
+                  — revenue-owned: the proxy prices every click by channel, the ledger checks it against what networks
+                  actually paid, and the queue names the leak. Coverage → flow → channels → action.
+                </span>
+              </p>
+            </div>
+          )}
+          {/* KPI strip — the four money numbers */}
+          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Est. Revenue Proxy</CardTitle>
+                <MetricInfo
+                  metric="Est. revenue proxy"
+                  definition="Commission-weighted clicks: each affiliate click priced by its retailer's rate from the commission sheet. It is a proxy, not revenue — the reconciliation card asks what the networks actually paid."
+                  formula="Σ clicks × rate(retailer), KES"
+                  ga4Alias="— (GA has no equivalent — this is the moat)"
+                  dataSource="affiliate_clicks × affiliate_commission_rates"
+                  action="The proxy is only as honest as the rate sheet and the retailer keys behind it — check the channel ledger for mismatches before quoting the number."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">
+                  KES {revenueInsights?.money.totals.proxy.toLocaleString() ?? revenueProxy.weightedClicks.toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  from {(revenueInsights?.money.totals.clicks ?? 0).toLocaleString()} clicks ·{' '}
+                  {(revenueInsights?.money.totals.pricedClicks ?? 0).toLocaleString()} priced
+                  {(revenueInsights?.money.totals.unpricedClicks ?? 0) > 0
+                    ? ` · ${(revenueInsights?.money.totals.unpricedClicks ?? 0).toLocaleString()} unpriced`
+                    : ''}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Device CTR</CardTitle>
+                <MetricInfo
+                  metric="Affiliate CTR"
+                  definition="Affiliate clicks ÷ device-page views × 100. The conversion heartbeat of the catalog — every other money metric is downstream of it."
+                  formula="clicks ÷ device views × 100"
+                  ga4Alias="≈ outbound_click_rate"
+                  dataSource="affiliate_clicks × page_views (/devices/*)"
+                  action="Below 1% overall is a buy-box placement problem before it is a traffic problem — the thermometer shows which shelves to fix."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">{revenueInsights?.money.totals.ctr ?? 0}%</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {(revenueInsights?.money.totals.deviceViews ?? 0).toLocaleString()} device views in period
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Revenue RPM</CardTitle>
+                <MetricInfo
+                  metric="Revenue per mille"
+                  definition="Proxy KES earned per 1,000 device-page views — the site's monetization rate, comparable across periods even as traffic grows. RPM falling while clicks rise means the traffic mix is moving to cheaper shelves."
+                  formula="proxy ÷ device views × 1,000"
+                  ga4Alias="≈ ad RPM (revenue per thousand impressions)"
+                  dataSource="affiliate_clicks × page_views"
+                  action="Track RPM, not raw proxy: it decouples the earning rate from traffic seasonality."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">
+                  KES {revenueInsights?.money.totals.rpm ?? 0}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">per 1,000 device views</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Reconciliation</CardTitle>
+                <MetricInfo
+                  metric="Proxy vs actual variance"
+                  definition="Imported network earnings against the proxy. Within ±10% the rate sheet reads honest; over means the proxy promises more than networks paid; blind means no statements were imported at all."
+                  formula="(proxy − actual) ÷ proxy × 100"
+                  dataSource="affiliate_earnings (imported ledger)"
+                  action="Import the statements before the monthly review — a proxy nobody reconciled is a forecast, not finance."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">
+                  {revenueInsights
+                    ? `${revenueInsights.money.recon.variancePct >= 0 ? '+' : ''}${revenueInsights.money.recon.variancePct}%`
+                    : '—'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  actual KES {(revenueInsights?.money.totals.actual ?? 0).toLocaleString()} ·{' '}
+                  {revenueInsights?.money.recon.state ?? 'blind'}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Wallet className="h-5 w-5 text-brand-primary" />
+                  Where The Proxy Is Made
+                  <MetricInfo
+                    metric="Revenue mix by channel"
+                    definition="Each retailer channel as a pair: the KES the proxy prices into it (bar, state-coloured) over the raw clicks it sent (thin line). A channel with clicks and no bar is being priced at zero — mismatch or missing rate."
+                    formula="proxy per channel = clicks × rate; state from the rate-sheet join"
+                    ga4Alias="— (revenue-owned)"
+                    dataSource="affiliate_clicks × affiliate_commission_rates"
+                    action="One retailer dominating is concentration risk — a single network policy change could zero the month."
+                  />
+                </CardTitle>
+                <CardDescription>Clicks priced by channel — state-coloured</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RevenueMixChart ledger={revenueInsights?.channels.ledger ?? []} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Scale className="h-5 w-5 text-emerald-400" />
+                  Proxy vs Actual — Reconciliation
+                  <MetricInfo
+                    metric="Reconciliation gauge"
+                    definition="The proxy bar is what the site promises; the actual bar is what networks paid (imported ledger). Variance inside ±10% reads reconciled; a dashed empty actual bar means no statements were imported this period."
+                    formula="variance = proxy − actual; state = reconciled | over | under | blind"
+                    dataSource="affiliate_clicks × affiliate_commission_rates × affiliate_earnings"
+                    action="Work the queue's 'actuals missing' row before trusting any revenue number in a board pack."
+                  />
+                </CardTitle>
+                <CardDescription>The promise and the payout, side by side</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ReconciliationGauge
+                  proxy={revenueInsights?.money.totals.proxy ?? 0}
+                  actual={revenueInsights?.money.totals.actual ?? 0}
+                  variance={revenueInsights?.money.totals.variance ?? 0}
+                  variancePct={revenueInsights?.money.recon.variancePct ?? 0}
+                  state={revenueInsights?.money.recon.state ?? 'blind'}
+                />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ══ B · FLOW — how the money arrives over time, and from which shelves ══ */}
+          <SectionHeading
+            letter="B"
+            title="Flow — how the money arrives"
+            hint="click cadence by channel · the shelves that earn"
+          />
+
+          <div className="grid xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-brand-primary" />
+                  Click Momentum by Channel
+                  <MetricInfo
+                    metric="Click momentum"
+                    definition="Affiliate clicks per time bucket, stacked by retailer channel. The layers are the channel balance: a flow that lives on one retailer is one network policy change away from zero."
+                    formula="Σ clicks per bucket, split by recorded retailer"
+                    ga4Alias="— (first-party click stream)"
+                    dataSource="affiliate_clicks"
+                    action="Watch for single-channel dominance and for cadence gaps — a week with no clicks is a catalog event, not a network quiet spell."
+                  />
+                </CardTitle>
+                <CardDescription>Channel balance and cadence, per bucket</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ClickMomentumChart momentum={revenueInsights?.flow.momentum ?? []} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5 text-brand-primary" />
+                  Monetization Shelves
+                  <MetricInfo
+                    metric="Monetization tiers"
+                    definition="Every device page seen this period classified by CTR: converter (≥3%), engaged (1–3%), teaser (<1%), dormant (traffic, zero clicks), unsold (no traffic). Dormant shelves are the cheapest wins — the traffic is already paid for."
+                    formula="tier = f(CTR, clicks, views) per device"
+                    dataSource="affiliate_clicks × page_views (/devices/*)"
+                    action="Work dormant first (buy-box placement), then engaged (retailer mix). Converters need protection, not intervention."
+                  />
+                </CardTitle>
+                <CardDescription>Converter → unsold: five shelves, five problems</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <MonetizationThermometer
+                  tiers={revenueInsights?.flow.tiers ?? []}
+                  total={(revenueInsights?.flow.tiers ?? []).reduce((s, t) => s + t.devices, 0)}
+                />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ══ C · CHANNELS — the ledger: priced, mismatched, unpriced, idle ══ */}
+          <SectionHeading
+            letter="C"
+            title="Channels — the ledger"
+            hint="priced vs leaking channels · the earner Pareto"
+          />
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2">
-                <MousePointerClick className="h-5 w-5 text-amber-400" />
-                Affiliate CTR by Device
+                <Store className="h-5 w-5 text-brand-primary" />
+                Retailer Ledger
+                <MetricInfo
+                  metric="Channel ledger"
+                  definition="One row per retailer channel, with its state: priced (rate matches), taxonomy mismatch (recorded name doesn't literally match the rate-sheet key — priced at zero), unpriced (no rate), idle (rate configured, no clicks). Δ = proxy − actual per channel."
+                  formula="state from the literal rate-sheet join; Δ per channel"
+                  dataSource="affiliate_clicks × affiliate_commission_rates × affiliate_earnings"
+                  action="Fix mismatched and unpriced channels first — they are real clicks the proxy cannot see; the queue deep-links to the rate sheet."
+                />
               </CardTitle>
-              <Link href={`/api/admin/export/affiliate-clicks?period=${period}`}>
+              <Link href={`/api/admin/export/revenue-ledger?period=${period}`}>
                 <Button variant="outline" size="sm" className="border-border text-muted-foreground">
                   <Download className="h-4 w-4 mr-1" /> CSV
                 </Button>
               </Link>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-muted-foreground border-b border-border">
-                      <th className="text-left py-2 pr-4 font-medium">Rank</th>
-                      <th className="text-left py-2 pr-4 font-medium">Device</th>
-                      <th className="text-left py-2 pr-4 font-medium">Retailer</th>
-                      <th className="text-right py-2 pr-4 font-medium">Clicks</th>
-                      <th className="text-right py-2 pr-4 font-medium">Views</th>
-                      <th className="text-right py-2 font-medium">CTR</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <AffiliateTable data={affiliateCTR} />
-                  </tbody>
-                </table>
-              </div>
+              <RetailerLedger
+                rows={(revenueInsights?.channels.ledger ?? []).map((ch) => {
+                  const actual = revenueInsights?.money.totals.actual ?? 0
+                  const actualShare = (revenueInsights?.money.totals.proxy ?? 0) > 0 ? ch.proxy / (revenueInsights?.money.totals.proxy ?? 1) : 0
+                  return {
+                    ...ch,
+                    actual: Math.round(actual * actualShare * 100) / 100,
+                    variance: Math.round((ch.proxy - actual * actualShare) * 100) / 100,
+                  }
+                })}
+                idleRates={revenueInsights?.channels.idleRates ?? []}
+              />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Tag className="h-5 w-5 text-brand-primary" />
-                Clicks by Retailer
+                <TrendingUp className="h-5 w-5 text-brand-primary" />
+                The Earners — Proxy Pareto By Device
+                <MetricInfo
+                  metric="Earner Pareto"
+                  definition="Device pages ranked by proxy contribution with a cumulative share column — the 80% line shows how few shelves fund the catalog. A long tail of dormant shelves below the line is the cheap-growth list."
+                  formula="proxy per device = clicks × blended mean rate"
+                  dataSource="affiliate_clicks × page_views (/devices/*)"
+                  action="Protect the top of the table (links, positions, rates); fix the dormant band below it — the traffic is already there."
+                />
               </CardTitle>
+              <CardDescription>Ranked by KES — watch the cumulative column hit 80%</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {clicksByRetailer.map((item) => {
-                  const maxClicks = clicksByRetailer.length > 0 ? clicksByRetailer[0].clicks : 1
-                  const barWidth = Math.round((item.clicks / maxClicks) * 100)
-                  return (
-                    <div key={item.retailer} className="flex items-center gap-3">
-                      <span className="w-24 text-sm text-muted-foreground capitalize">{item.retailer}</span>
-                      <div className="flex-1 bg-foreground/10 rounded-full h-5 overflow-hidden">
-                        <div
-                          className="bg-brand-primary h-full rounded-full flex items-center px-2 text-xs text-white font-medium"
-                          style={{ width: `${Math.max(barWidth, 5)}%` }}
-                        >
-                          {item.clicks.toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-                {clicksByRetailer.length === 0 && (
-                  <p className="text-muted-foreground text-sm">No click data</p>
-                )}
-              </div>
+              <DeviceEarnersTable rows={revenueInsights?.flow.deviceRows ?? []} />
+            </CardContent>
+          </Card>
+
+          {/* ══ D · ACTION — the leak queue + finance operations ═══════ */}
+          <SectionHeading
+            letter="D"
+            title="Action — name the leak, work the order"
+            hint="revenue queue · finance operations"
+          />
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Wrench className="h-5 w-5 text-amber-400" />
+                Revenue Queue
+                <MetricInfo
+                  metric="Revenue fix queue"
+                  definition="One row per leak: dead buy links, rate-key mismatches, unpriced channels, traffic without clicks, weak CTR, missing actuals. Ranked by stake (KES proxy or views at risk), so the ticket order is the payout order."
+                  formula="stake = proxy KES (channel rows) or views (traffic rows); severity ≥100 high, ≥20 medium"
+                  ga4Alias="— (prescriptive, not a GA4 metric)"
+                  dataSource="affiliate_clicks × affiliate_commission_rates × link_health_checks × page_views"
+                  action="Work top-down — every fixed row prices clicks that are already happening, no campaign needed."
+                />
+              </CardTitle>
+              <Link href={`/api/admin/export/revenue-queue?period=${period}`}>
+                <Button variant="outline" size="sm" className="border-border text-muted-foreground">
+                  <Download className="h-4 w-4 mr-1" /> CSV
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              <RevenueFixQueue items={revenueInsights?.action.fixQueue ?? []} />
             </CardContent>
           </Card>
 
@@ -1563,59 +1844,11 @@ export default async function AnalyticsPage({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Scale className="h-5 w-5 text-brand-primary" />
-                Revenue Proxy — Commission-Weighted Clicks
+                Roadmap
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                Estimated commission-weighted clicks (<span className="text-foreground font-medium">{revenueProxy.weightedClicks.toLocaleString()}</span> total)
-                = clicks × each retailer's commission rate (seeded in affiliate_commission_rates). Pairs with real
-                commission under Finance reconciliation (Phase 3).
-              </p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-muted-foreground border-b border-border">
-                      <th className="text-left py-2 pr-4 font-medium">Retailer</th>
-                      <th className="text-right py-2 pr-4 font-medium">Clicks</th>
-                      <th className="text-right py-2 pr-4 font-medium">Rate</th>
-                      <th className="text-right py-2 font-medium">Weighted</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {revenueProxy.byRetailer.map((r) => (
-                      <tr key={r.retailer} className="border-b border-border last:border-0 hover:bg-foreground/5">
-                        <td className="py-2 pr-4 text-foreground capitalize">{r.retailer}</td>
-                        <td className="py-2 pr-4 text-right">{r.clicks.toLocaleString()}</td>
-                        <td className="py-2 pr-4 text-right">{Math.round(r.rate * 100 * 100) / 100}%</td>
-                        <td className="py-2 text-right font-medium">{r.weighted.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                    {revenueProxy.byRetailer.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="py-4 text-center text-muted-foreground">No clicks in period</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Scale className="h-5 w-5 text-emerald-400" />
-                Earnings Reconciliation — Proxy vs Actual (Finance)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <EarningsReconciliationTable data={earningsRecon} />
-              <p className="text-muted-foreground text-xs mt-3">
-                Estimated commission-weighted clicks vs real earnings imported from affiliate networks
-                (Amazon Associates, Jumia, Kilimall). A positive variance means the proxy over-counts
-                — reconcile monthly before VAT/payout export.
-              </p>
+              <RoadmapPanel items={ROADMAP_REVENUE} />
             </CardContent>
           </Card>
 

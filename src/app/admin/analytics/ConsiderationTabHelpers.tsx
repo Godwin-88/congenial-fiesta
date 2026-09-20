@@ -3,7 +3,8 @@ import {
   QUALIFICATION_COLORS,
   type QualificationTier,
 } from '@/lib/analytics/consideration'
-import type { ConsiderationInsights, DeviceInsights, CommunityInsights } from '@/lib/analytics/queries'
+import type { ConsiderationInsights, DeviceInsights, CommunityInsights, RevenueInsights } from '@/lib/analytics/queries'
+import { RECON_LABELS } from '@/lib/analytics/revenue'
 
 type DeviceChip = { label: string; value: string }
 
@@ -118,6 +119,30 @@ export function communityChipsFor(insights: CommunityInsights): CommunityChip[] 
       label: 'Moderation queue',
       value: `${insights.action.fixQueue.length} items`,
     })
+  }
+  return chips
+}
+
+type RevenueChip = { label: string; value: string }
+
+export function revenueChipsFor(insights: RevenueInsights): RevenueChip[] {
+  const chips: RevenueChip[] = [
+    { label: 'Est. proxy', value: `KES ${insights.money.totals.proxy.toLocaleString()}` },
+    { label: 'Clicks', value: insights.money.totals.clicks.toLocaleString() },
+    { label: 'Device CTR', value: `${insights.money.totals.ctr}%` },
+  ]
+  if (insights.channels.ledger.length > 0) {
+    chips.push({
+      label: 'Channels',
+      value: `${insights.channels.ledger.filter((c) => c.state === 'priced').length} priced / ${insights.channels.ledger.filter((c) => c.state !== 'priced' && c.state !== 'idle').length} leaking`,
+    })
+  }
+  chips.push({ label: 'Recon', value: RECON_LABELS[insights.money.recon.state] })
+  if (insights.money.totals.unpricedClicks > 0) {
+    chips.push({ label: 'Unpriced clicks', value: `${insights.money.totals.unpricedClicks} (priced at 0)` })
+  }
+  if (insights.action.fixQueue.length > 0) {
+    chips.push({ label: 'Revenue queue', value: `${insights.action.fixQueue.length} leaks` })
   }
   return chips
 }

@@ -24,6 +24,19 @@ import {
   MODERATION_ISSUE_META,
   trustGrade,
 } from './community'
+import {
+  type MonetizationTier,
+  type ReconState,
+  type ChannelState,
+  type RevenueIssue,
+  MONETIZATION_ORDER,
+  MONETIZATION_LABELS,
+  monetizationTier,
+  reconState,
+  normalizeRetailerKey,
+  revenueSeverity,
+  rpm,
+} from './revenue'
 
 export type {
   IntentAction,
@@ -32,7 +45,9 @@ export type {
   ConsiderationIssue,
 } from './consideration'
 export type { TrustHealth, ModerationIssue } from './community'
+export type { MonetizationTier, ReconState, ChannelState, RevenueIssue } from './revenue'
 export { MODERATION_ISSUE_META } from './community'
+export { REVENUE_ISSUE_META } from './revenue'
 export { INTENT_WEIGHTS, AFFILIATE_CLICK_WEIGHT, SIGNED_IN_BONUS, qualificationTier } from './consideration'
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
@@ -1736,6 +1751,8 @@ export const SCHEDULED_EXPORT_REPORTS = [
   'consideration-queue',
   'community-roster',
   'community-queue',
+  'revenue-ledger',
+  'revenue-queue',
   'explore',
 ]
 
@@ -5038,6 +5055,442 @@ export async function getCommunityInsights(period: string): Promise<CommunityIns
     action: {
       fixQueue,
       stake: totalStake,
+    },
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 11 — Affiliate & Revenue: the money story
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// One aggregator for the whole tab, same discipline as Devices/Compare/
+// Community: A Money (proxy vs actuals) → B Flow (click momentum + device
+// tiers) → C Channels (retailer ledger + earners) → D Action (revenue queue).
+//
+// The story is NOT "how many clicks" (that's the old table) — it is:
+//   1. every click is priced (proxy = clicks × rate, and mismatches price at 0),
+//   2. every retailer is a channel with a health state,
+//   3. the proxy must reconcile with real imported earnings (±10% reads honest),
+//   4. the queue names the leak: unpriced clicks, dead links, unsold traffic.
+
+export interface RevenueChannelRow {
+  retailer: string
+  /** The retailer key as recorded in affiliate_clicks (raw casing). */
+  rawKey: string
+  clicks: number
+  rate: number
+  proxy: number
+  state: ChannelState
+  sharePct: number
+}
+
+export interface RevenueDeviceRow {
+  slug: string
+  name: string
+  brandName: string
+  views: number
+  clicks: number
+  ctr: number
+  proxy: number
+  tier: MonetizationTier
+  status: string
+}
+
+export interface RevenueMomentumBucket {
+  bucket: string
+  total: number
+  /** KES proxy attributed per bucket — the money line under the clicks. */
+  proxy: number
+  byRetailer: Record<string, number>
+}
+
+export interface RevenueFixQueueItem {
+  issue: RevenueIssue
+  label: string
+  action: string
+  detail: string
+  /** KES proxy (channel rows) or views (traffic rows) at stake. */
+  stake: number
+  severity: 'high' | 'medium' | 'low'
+  slug: string | null
+  name: string
+  href: string | null
+  editHref: string | null
+}
+
+export interface RevenueInsights {
+  period: string
+  money: {
+    totals: {
+      clicks: number
+      deviceViews: number
+      ctr: number
+      proxy: number
+      actual: number
+      variance: number
+      rpm: number
+      pricedClicks: number
+      unpricedClicks: number
+    }
+    recon: { state: ReconState; label: string; variancePct: number }
+    /** Proxy KES per bucket, paired with actuals by import day. */
+    momentum: Array<{ bucket: string; proxy: number; actual: number }>
+  }
+  flow: {
+    momentum: RevenueMomentumBucket[]
+    tiers: Array<{ tier: MonetizationTier; label: string; devices: number; sharePct: number; views: number; proxy: number }>
+    deviceRows: RevenueDeviceRow[]
+  }
+  channels: {
+    ledger: RevenueChannelRow[]
+    idleRates: string[]
+  }
+  action: {
+    fixQueue: RevenueFixQueueItem[]
+    stakeTotal: number
+  }
+}
+
+export async function getRevenueInsights(period: string): Promise<RevenueInsights> {
+  const since = sinceISO(period)
+  const dayMs = 86400000
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30
+  const nowMs = Date.now()
+
+  const [clickRes, earningsRes, ratesRes, deviceRes, linkRes] = await Promise.all([
+    supabase
+      .from('affiliate_clicks')
+      .select('device_slug, retailer, created_at')
+      .gte('created_at', since),
+    supabase
+      .from('affiliate_earnings')
+      .select('retailer, period_start, period_end, commission_amount, status, source, imported_at')
+      .gte('imported_at', since),
+    supabase.from('affiliate_commission_rates').select('retailer, rate'),
+    supabase
+      .from('devices')
+      .select('id, slug, name, status, buy_links, brand:brands(slug, name)'),
+    supabase
+      .from('link_health_checks')
+      .select('device_slug, retailer, url, ok, checked_at')
+      .gte('checked_at', since),
+  ])
+
+  // ── Catalog map: name + buy-link inventory per slug (drives device rows and
+  // the no_clicks queue rows).
+  const slugMeta = new Map<string, { name: string; brandName: string; brandSlug: string; status: string; buyLinkCount: number }>()
+  for (const d of deviceRes.data ?? []) {
+    const slug = String(d.slug ?? '')
+    if (!slug) continue
+    const brandRaw = d.brand as { slug?: string; name?: string } | Array<{ slug?: string; name?: string }> | null
+    const brand = Array.isArray(brandRaw) ? brandRaw[0] : brandRaw
+    const links = Array.isArray(d.buy_links)
+      ? (d.buy_links as Array<Record<string, unknown>>).filter((l) => String(l?.url ?? '').startsWith('http'))
+      : []
+    slugMeta.set(slug, {
+      name: String(d.name ?? slug),
+      brandName: String(brand?.name ?? 'Unknown brand'),
+      brandSlug: String(brand?.slug ?? ''),
+      status: String(d.status ?? 'draft'),
+      buyLinkCount: links.length,
+    })
+  }
+
+  // ── Rate sheet, keyed by normalised key; raw keys kept for the taxonomy check.
+  const rateByNormKey = new Map<string, number>()
+  const rawRateKeys = new Set<string>()
+  for (const r of ratesRes.data ?? []) {
+    const key = String(r.retailer ?? '')
+    if (!key) continue
+    rawRateKeys.add(key)
+    rateByNormKey.set(normalizeRetailerKey(key), Number(r.rate ?? 0))
+  }
+
+  // ── Clicks: per retailer (raw key), per device, per day.
+  const clicksByRawRetailer = new Map<string, number>()
+  const clicksByDevice = new Map<string, number>()
+  const clicksByDay = new Map<string, number>()
+  let totalClicks = 0
+  for (const row of clickRes.data ?? []) {
+    const retailer = String(row.retailer ?? 'unknown')
+    const slug = String(row.device_slug ?? '')
+    const day = String(row.created_at ?? '').slice(0, 10)
+    totalClicks++
+    clicksByRawRetailer.set(retailer, (clicksByRawRetailer.get(retailer) ?? 0) + 1)
+    if (slug) clicksByDevice.set(slug, (clicksByDevice.get(slug) ?? 0) + 1)
+    if (day) clicksByDay.set(day, (clicksByDay.get(day) ?? 0) + 1)
+  }
+
+  // ── Device-page views (CTR denominator + RPM + tier classification).
+  const { data: deviceViewRows } = await supabase
+    .from('page_views')
+    .select('path')
+    .gte('created_at', since)
+    .like('path', '/devices/%')
+  const viewsByDevice = new Map<string, number>()
+  for (const row of deviceViewRows ?? []) {
+    const parts = String(row.path ?? '').replace('/devices/', '').split('/').filter(Boolean)
+    const slug = parts[1] ?? parts[0] ?? ''
+    if (slug) viewsByDevice.set(slug, (viewsByDevice.get(slug) ?? 0) + 1)
+  }
+  const deviceViews = Array.from(viewsByDevice.values()).reduce((s, v) => s + v, 0)
+
+  // Blended mean rate — used to estimate per-device proxy when the click's own
+  // retailer rate cannot be attributed (clicks carry no per-click rate).
+  const pricedClicksBase = Array.from(clicksByRawRetailer.entries()).reduce((s, [k, c]) => s + c * (rateByNormKey.get(normalizeRetailerKey(k)) ?? 0), 0)
+  const blendedRate = totalClicks > 0 ? pricedClicksBase / totalClicks : 0
+
+  // ── Channel ledger: one row per raw retailer key seen in clicks, plus idle
+  // rates (configured but clickless). States: priced / tax_mismatch / unpriced.
+  const ledgerUnsorted: RevenueChannelRow[] = []
+  let pricedClicks = 0
+  let unpricedClicks = 0
+  let proxyTotal = 0
+  for (const [rawKey, clicks] of clicksByRawRetailer) {
+    const norm = normalizeRetailerKey(rawKey)
+    const hasLiteralKey = rawRateKeys.has(rawKey)
+    const rate = rateByNormKey.get(norm) ?? 0
+    const proxy = Math.round(clicks * rate * 100) / 100
+    proxyTotal += proxy
+    // Mismatch = a normalised rate exists but the recorded key is not literally
+    // on the sheet (casing/spacing drift).
+    const state: ChannelState = hasLiteralKey ? 'priced' : rate > 0 ? 'tax_mismatch' : 'unpriced'
+    if (rate > 0) pricedClicks += clicks
+    else unpricedClicks += clicks
+    ledgerUnsorted.push({ retailer: rawKey, rawKey, clicks, rate, proxy, state, sharePct: 0 })
+  }
+  const idleRates: string[] = []
+  const seenNormClickKeys = new Set(Array.from(clicksByRawRetailer.keys()).map(normalizeRetailerKey))
+  for (const key of rawRateKeys) {
+    if (!seenNormClickKeys.has(normalizeRetailerKey(key))) idleRates.push(key)
+  }
+  for (const row of ledgerUnsorted) row.sharePct = totalClicks > 0 ? sharePct(row.clicks, totalClicks, 1) : 0
+  const ledger = ledgerUnsorted.sort((a, b) => b.clicks - a.clicks)
+
+  // ── Momentum: proxy per bucket (daily at 7d, weekly otherwise) from the
+  // click stream; actuals booked by import day where statements exist.
+  const bucketSize = days === 7 ? 1 : 7
+  const actualByDay = new Map<string, number>()
+  let actualTotal = 0
+  for (const row of earningsRes.data ?? []) {
+    const amount = Number(row.commission_amount ?? 0)
+    actualTotal += amount
+    const day = String(row.imported_at ?? '').slice(0, 10)
+    if (day) actualByDay.set(day, (actualByDay.get(day) ?? 0) + amount)
+  }
+  actualTotal = Math.round(actualTotal * 100) / 100
+
+  const momentum: RevenueMomentumBucket[] = []
+  const momentumSimple: Array<{ bucket: string; proxy: number; actual: number }> = []
+  for (let start = nowMs - (days - 1) * dayMs; start <= nowMs; start += bucketSize * dayMs) {
+    const bucketStart = new Date(start)
+    const isoStart = bucketStart.toISOString().slice(0, 10)
+    const isoEnd = new Date(start + (bucketSize - 1) * dayMs).toISOString().slice(0, 10)
+    const row: RevenueMomentumBucket = {
+      bucket: `${bucketStart.getMonth() + 1}/${bucketStart.getDate()}`,
+      total: 0,
+      proxy: 0,
+      byRetailer: {},
+    }
+    let actualSum = 0
+    for (const [day, count] of clicksByDay) {
+      if (day >= isoStart && day <= isoEnd) {
+        row.total += count
+        // Attribute the bucket's clicks per retailer proportionally to the
+        // period's retailer mix (cheap, honest enough at this scale).
+        for (const [retailer, rc] of clicksByRawRetailer) {
+          row.byRetailer[retailer] = (row.byRetailer[retailer] ?? 0) + Math.round((count * rc) / totalClicks)
+        }
+      }
+    }
+    for (const [retailer, rc] of Object.entries(row.byRetailer)) {
+      row.proxy += rc * (rateByNormKey.get(normalizeRetailerKey(retailer)) ?? 0)
+    }
+    row.proxy = Math.round(row.proxy * 100) / 100
+    momentum.push(row)
+    for (const [day, amount] of actualByDay) {
+      if (day >= isoStart && day <= isoEnd) actualSum += amount
+    }
+    momentumSimple.push({ bucket: row.bucket, proxy: row.proxy, actual: Math.round(actualSum * 100) / 100 })
+  }
+
+  // ── Device rows: every slug with views or clicks in the period, tiered by CTR.
+  const deviceSlugs = new Set<string>([...clicksByDevice.keys(), ...viewsByDevice.keys()])
+  const tierCounts = new Map<MonetizationTier, { devices: number; views: number; proxy: number }>()
+  for (const t of MONETIZATION_ORDER) tierCounts.set(t, { devices: 0, views: 0, proxy: 0 })
+  const deviceRows: RevenueDeviceRow[] = []
+  for (const slug of deviceSlugs) {
+    const views = viewsByDevice.get(slug) ?? 0
+    const clicks = clicksByDevice.get(slug) ?? 0
+    const ctr = views > 0 ? Math.round((clicks / views) * 10000) / 100 : 0
+    const meta = slugMeta.get(slug)
+    const proxy = Math.round(clicks * blendedRate * 100) / 100
+    const tier = monetizationTier(ctr, views, clicks)
+    const bucket = tierCounts.get(tier)
+    if (bucket) {
+      bucket.devices++
+      bucket.views += views
+      bucket.proxy += proxy
+    }
+    deviceRows.push({
+      slug,
+      name: meta?.name ?? slug.replace(/[-_]/g, ' '),
+      brandName: meta?.brandName ?? 'Unknown brand',
+      views,
+      clicks,
+      ctr,
+      proxy,
+      tier,
+      status: meta?.status ?? 'unknown',
+    })
+  }
+  deviceRows.sort((a, b) => b.proxy - a.proxy || b.clicks - a.clicks || b.views - a.views)
+
+  const tiers = MONETIZATION_ORDER.map((tier) => {
+    const b = tierCounts.get(tier) ?? { devices: 0, views: 0, proxy: 0 }
+    return {
+      tier,
+      label: MONETIZATION_LABELS[tier],
+      devices: b.devices,
+      sharePct: deviceSlugs.size > 0 ? sharePct(b.devices, deviceSlugs.size, 1) : 0,
+      views: b.views,
+      proxy: Math.round(b.proxy * 100) / 100,
+    }
+  })
+
+  // ── Reconciliation (state from the shared vocab; ±10% reads honest).
+  const variance = Math.round((proxyTotal - actualTotal) * 100) / 100
+  const state = reconState(proxyTotal, actualTotal)
+  const recon = {
+    state,
+    label: state,
+    variancePct: proxyTotal > 0 ? Math.round((variance / proxyTotal) * 10000) / 100 : 0,
+  }
+  const ctrTotal = deviceViews > 0 ? Math.round((totalClicks / deviceViews) * 10000) / 100 : 0
+
+  // ── Fix queue: name the leak, rank by stake (KES proxy or views).
+  const fixQueue: RevenueFixQueueItem[] = []
+  const pushIssue = (item: RevenueFixQueueItem) => {
+    item.severity = revenueSeverity(item.stake)
+    fixQueue.push(item)
+  }
+  const deviceHref = (slug: string) => {
+    const meta = slugMeta.get(slug)
+    return meta ? `/devices/${meta.brandSlug || 'unknown'}/${slug}` : null
+  }
+
+  // 1) Dead links — a dead link discards the click the page just earned.
+  for (const row of linkRes.data ?? []) {
+    if (row.ok) continue
+    const slug = String(row.device_slug ?? '')
+    const views = viewsByDevice.get(slug) ?? 0
+    const meta = slugMeta.get(slug)
+    pushIssue({
+      issue: 'dead_link',
+      label: 'Dead buy link',
+      action: 'Replace the flagged URL — a dead link discards the click the page just earned.',
+      detail: `${row.retailer} link on ${meta?.name ?? slug} failed its last health check.`,
+      stake: Math.max(views, 1),
+      severity: 'low',
+      slug: slug || null,
+      name: meta?.name ?? slug,
+      href: slug ? deviceHref(slug) : null,
+      editHref: slug ? `/admin/devices?search=${encodeURIComponent(slug)}` : null,
+    })
+  }
+
+  // 2) Taxonomy mismatches + unpriced channels — real clicks the proxy prices at zero.
+  for (const ch of ledger) {
+    if (ch.state === 'priced' || ch.state === 'idle') continue
+    const isMismatch = ch.state === 'tax_mismatch'
+    pushIssue({
+      issue: isMismatch ? 'tax_mismatch' : 'unpriced_clicks',
+      label: isMismatch ? 'Rate key mismatch' : 'Unpriced clicks',
+      action: isMismatch
+        ? 'Normalise the recorded retailer name to the rate-sheet key — the proxy prices these clicks at zero today.'
+        : 'Add a commission rate for this retailer — every click it receives is invisible to the proxy.',
+      detail: `${ch.clicks} click${ch.clicks === 1 ? '' : 's'} recorded as "${ch.rawKey}" with no literally-matching rate-sheet key.`,
+      stake: ch.clicks,
+      severity: 'low',
+      slug: null,
+      name: ch.rawKey,
+      href: null,
+      editHref: '/admin/affiliate',
+    })
+  }
+
+  // 3) Per-device flow problems, ranked by views at risk.
+  for (const row of deviceRows) {
+    const buyLinks = slugMeta.get(row.slug)?.buyLinkCount ?? 0
+    if (row.tier === 'dormant' && row.views > 0 && row.status === 'published') {
+      pushIssue({
+        issue: 'no_clicks',
+        label: 'Traffic without clicks',
+        action: 'Check buy-box placement and link count on this device — views are arriving and leaving without a click.',
+        detail: `${row.views.toLocaleString()} views, zero clicks this period${buyLinks === 0 ? ' · no live buy links configured' : ''}.`,
+        stake: row.views,
+        severity: 'low',
+        slug: row.slug,
+        name: row.name,
+        href: deviceHref(row.slug),
+        editHref: `/admin/devices?search=${encodeURIComponent(row.slug)}`,
+      })
+    } else if (row.tier === 'teaser' && row.views >= 20) {
+      pushIssue({
+        issue: 'low_ctr',
+        label: 'Weak CTR',
+        action: 'Move the buy box higher or swap the lead retailer — the page earns attention but not intent.',
+        detail: `${row.clicks} clicks from ${row.views.toLocaleString()} views (${row.ctr}% CTR).`,
+        stake: row.views,
+        severity: 'low',
+        slug: row.slug,
+        name: row.name,
+        href: deviceHref(row.slug),
+        editHref: `/admin/devices?search=${encodeURIComponent(row.slug)}`,
+      })
+    }
+  }
+
+  // 4) Blind reconciliation — actuals missing while the proxy is real.
+  if (state === 'blind' && proxyTotal > 0) {
+    pushIssue({
+      issue: 'unimported_actuals',
+      label: 'Actuals missing',
+      action: 'Import the network statement — proxy without actuals cannot be reconciled.',
+      detail: `The proxy shows KES ${proxyTotal.toLocaleString()} this period but no earnings ledger rows were imported.`,
+      stake: Math.round(proxyTotal),
+      severity: revenueSeverity(Math.round(proxyTotal)),
+      slug: null,
+      name: 'Earnings ledger',
+      href: null,
+      editHref: '/admin/analytics?tab=affiliate',
+    })
+  }
+
+  fixQueue.sort((a, b) => b.stake - a.stake)
+
+  return {
+    period,
+    money: {
+      totals: {
+        clicks: totalClicks,
+        deviceViews,
+        ctr: ctrTotal,
+        proxy: Math.round(proxyTotal * 100) / 100,
+        actual: actualTotal,
+        variance,
+        rpm: rpm(proxyTotal, deviceViews),
+        pricedClicks,
+        unpricedClicks,
+      },
+      recon,
+      momentum: momentumSimple,
+    },
+    flow: { momentum, tiers, deviceRows },
+    channels: { ledger, idleRates },
+    action: {
+      fixQueue: fixQueue.slice(0, 20),
+      stakeTotal: Math.round(fixQueue.reduce((s, i) => s + i.stake, 0) * 100) / 100,
     },
   }
 }

@@ -129,6 +129,7 @@ These are *our* implementation's contribution — recorded **here** as "proposed
 - **Phase 8 (Devices & Catalog intelligence) — ✅ LIVE:** the Devices tab rebuilt as a catalog-revenue story — `getDeviceInsights(period)` joins the catalog to the audience (coverage → demand → leakage → action) with no new instrumentation, no migration and no new cron; new visuals + a prescriptive fix queue; two new CSV reports + a JSON endpoint (see §7.4).
 - **Phase 9 (Compare & Consideration intelligence) — ✅ LIVE:** the Compare tab rebuilt as the intent story — `getConsiderationInsights(period)` joins the intent beacon to traffic + catalog (funnel → mix → audience → pairs → action); shared qualification model (hot/warm/cold MQL tiers) in `src/lib/analytics/consideration.ts`; six purpose-built visuals + a prescriptive consideration queue; two new CSV reports + a JSON endpoint + two new Explore surfaces (`intent_score` metric · `qualification_tier` dimension) — see §7.5.
 - **Phase 10 (Community & Trust intelligence) — ✅ LIVE:** the Community tab rebuilt as the social-proof story — `getCommunityInsights(period)` joins ratings + comments + votes + watchers to traffic (Trust → Voice → People → Action); shared trust model (healthy/thin/stale/silent bands, `trustGrade()`, contributor grades) in `src/lib/analytics/community.ts`; five purpose-built visuals + a prescriptive community queue with issue codes; two new CSV reports + a JSON endpoint — see §7.6.
+- **Phase 11 (Affiliate & Revenue intelligence) — ✅ LIVE:** the Affiliate tab rebuilt as the money story — `getRevenueInsights(period)` joins the click stream to the rate sheet + earnings ledger + link health (Money → Flow → Channels → Action); shared revenue model (monetization tiers converter→unsold, reconciliation states priced/over/under/blind, channel states incl. taxonomy mismatch) in `src/lib/analytics/revenue.ts`; seven purpose-built visuals + a prescriptive revenue queue; two new CSV reports + a JSON endpoint — see §7.7.
 
 
 ### 5.3 KPI dictionary skeleton (every KPI ships with full metadata — ℹ glossary)
@@ -419,6 +420,61 @@ and `community-queue` registered in `generateReportCsv` + `REPORT_LABELS` (expor
   demand.
 - `comments.reported` flags queue rows but nothing is auto-hidden — moderation is a human call, surfaced at the
   top of the queue.
+
+### 7.7 Affiliate & Revenue tab — the money story (Phase 11, ✅ LIVE)
+
+The Affiliate tab reframes "clicks by device" into a **pricing-and-reconciliation story**: every click is priced
+(proxy = clicks × rate), every retailer is a channel with a health state, and the proxy must reconcile with real
+imported earnings before any number reaches a board pack. The tab runs on `getRevenueInsights(period)` in the
+same four-act shape as Devices/Compare/Community: **A Money → B Flow → C Channels → D Action**. Vocab lives in
+`src/lib/analytics/revenue.ts` (dependency-free, shared server+client), mirroring `deviceOutcome.ts` /
+`consideration.ts` / `community.ts`.
+
+**The pricing model (channel states, not just totals).** The rate sheet (`affiliate_commission_rates`) keys are
+joined to the click stream's recorded retailer names **literally**, then normally:
+
+| State | Definition | Read as |
+|---|---|---|
+| `priced` | clicks flow and the recorded key literally matches the rate sheet | the channel earns |
+| `tax_mismatch` | a normalised rate exists but the recorded key differs (casing/spacing) — e.g. clicks recorded as `Amazon` vs sheet key `amazon` | real clicks priced at **zero** by the proxy |
+| `unpriced` | no rate for this retailer at all | revenue the proxy cannot see |
+| `idle` | a rate is configured but no clicks in the period | catalog stopped linking, or keys drifted |
+
+**Monetization tiers (per device, period CTR):** `converter` ≥3% · `engaged` 1–3% · `teaser` <1% (clicks exist) ·
+`dormant` (views, zero clicks — the cheapest wins) · `unsold` (no views — a demand problem, not a revenue one).
+
+**Reconciliation states:** `reconciled` (|variance| ≤ **±10%** of proxy) · `overcount` (proxy > actual — optimistic
+rates) · `undercount` (proxy < actual — under-priced sheet) · `blind` (no statements imported). RPM
+(`proxy ÷ device views × 1000`) is the traffic-independent earning rate; track it, not the raw proxy.
+
+**Issue codes (Revenue queue)** — `dead_link` (failed health check discards earned clicks) · `tax_mismatch` ·
+`unpriced_clicks` · `no_clicks` (published device, traffic, zero clicks) · `low_ctr` (teaser tier on ≥20 views) ·
+`unimported_actuals` (proxy with a blind ledger). Ranking is **stake = KES proxy at risk (channel rows) or views
+at risk (traffic rows)**; severity high ≥100, medium ≥20, capped 20 rows — the ticket order is the payout order.
+
+**Acts.** A Money: 4-KPI strip (proxy · device CTR · RPM · recon variance) + `RevenueMixChart` (per-channel KES
+bar over thin click-volume line) + `ReconciliationGauge` (proxy vs actual paired bars; a dashed empty actual bar
+is absence you can see). B Flow: `ClickMomentumChart` (client, recharts — clicks per bucket stacked by channel)
++ `MonetizationThermometer` (five shelves). C Channels: `RetailerLedger` (per-channel Δ vs actual + idle rates)
++ `DeviceEarnersTable` (proxy Pareto with cumulative 80% line). D Action: `RevenueFixQueue` + CSV buttons +
+roadmap; `EarningsImportCard` and `AffiliateNetworksPanel` stay as the tab's finance operations.
+
+**Endpoints & registration.** JSON: `GET /api/admin/analytics/revenue?period=7d|30d|90d&view=full|summary|money|flow|channels|queue`
+(`meta.definitions` documents every formula, mirroring the devices/compare/community contracts). CSVs:
+`revenue-ledger` and `revenue-queue` registered in `generateReportCsv` + `REPORT_LABELS` (export.ts) and
+`SCHEDULED_EXPORT_REPORTS` (queries.ts).
+
+**Known reads / caveats (all surfaced in the UI):**
+
+- Per-device proxy uses the **blended mean rate** (clicks carry no per-click retailer attribution beyond the
+  recorded channel); per-channel proxy is exact. The earners caption says so.
+- Live data is tiny (16 clicks, one device, zero imported earnings) — recon reads `blind` and the queue opens
+  with the mismatch/unpriced rows, which is the true state of the ledger, not a bug.
+- Actuals are joined by `imported_at` (statement import day), not the statement's own period — monthly statements
+  land with a lag; the momentum pairing is import-day-honest, not period-matched.
+- Rate thresholds (±10% recon, 3%/1% CTR tiers, 100/20 stake severity) live in `revenue.ts` so UI and aggregator
+  cannot drift.
+
 
 ## 8. Open Questions (for architecture review)
 

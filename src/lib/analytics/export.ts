@@ -13,6 +13,7 @@ import {
   getDeviceInsights,
   getConsiderationInsights,
   getCommunityInsights,
+  getRevenueInsights,
 } from './queries'
 
 export const REPORT_LABELS: Record<string, string> = {
@@ -28,6 +29,8 @@ export const REPORT_LABELS: Record<string, string> = {
   'consideration-queue': 'Consideration Queue',
   'community-roster': 'Community Contributor Roster',
   'community-queue': 'Community Queue (Trust Fixes)',
+  'revenue-ledger': 'Revenue Channel Ledger',
+  'revenue-queue': 'Revenue Queue (Pricing Leaks)',
   explore: 'Explore',
 }
 
@@ -278,6 +281,42 @@ export async function generateReportCsv(
           })),
         ),
         filename: `community-queue-${period}-${date}.csv`,
+      }
+    }
+    case 'revenue-ledger': {
+      const insights = await getRevenueInsights(period)
+      return {
+        csv: toCSV(
+          insights.channels.ledger.map((ch, i) => ({
+            rank: i + 1,
+            retailer: ch.retailer,
+            channel_state: ch.state,
+            clicks: ch.clicks,
+            click_share_pct: ch.sharePct,
+            commission_rate: ch.rate,
+            proxy_kes: ch.proxy,
+          })),
+        ),
+        filename: `revenue-ledger-${period}-${date}.csv`,
+      }
+    }
+    case 'revenue-queue': {
+      const insights = await getRevenueInsights(period)
+      return {
+        csv: toCSV(
+          insights.action.fixQueue.map((item, i) => ({
+            rank: i + 1,
+            priority: item.severity,
+            issue: item.issue,
+            device_slug: item.slug ?? '',
+            target: item.name,
+            at_stake: item.stake,
+            detail: item.detail,
+            action: item.action,
+            href: item.href,
+          })),
+        ),
+        filename: `revenue-queue-${period}-${date}.csv`,
       }
     }
     case 'explore': {
