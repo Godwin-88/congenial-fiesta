@@ -177,6 +177,14 @@ export async function POST(request: NextRequest) {
       specs_network: body.specs_network ?? {},
     })
 
+    // Score precedence (§48): the admin's Fweezy Score (5 sub-scores weighted
+    // by site_settings) is authoritative — the agent may fill scores_overall
+    // only when the admin has not scored the device.
+    const adminScored = [
+      body.score_display, body.score_performance, body.score_camera,
+      body.score_battery, body.score_value,
+    ].some((v) => v != null)
+
     const payload: Record<string, unknown> = {
       name: body.name.trim(),
       slug: body.slug.trim(),
@@ -202,6 +210,7 @@ export async function POST(request: NextRequest) {
       score_battery: body.score_battery ?? null,
       score_value: body.score_value ?? null,
       scores_overall: scoreOverall,
+      score_source: adminScored ? 'admin' : 'engine',
       verdict_pros: body.verdict_pros ?? [],
       verdict_cons: body.verdict_cons ?? [],
       verdict_bottom_line: body.verdict_bottom_line?.trim() ?? null,

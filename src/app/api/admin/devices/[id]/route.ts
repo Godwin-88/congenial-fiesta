@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth, getAdminClient } from '@/lib/admin/require-admin'
 import { isAdminRole } from '@/lib/admin/roles'
 import { recordDeviceChanges, flagManualOverrides, maybeRecalculateRanking, maybeRefreshBenchmarksOnPublish } from '@/lib/devices/audit'
+import { recalculateDevice } from '@/lib/ranking/engine'
 import { canonicalizeSpecSections } from '@/lib/devices/canonical-write'
 
 /** Spec sections the deterministic ranking engine reads (§30). */
@@ -200,9 +201,28 @@ export async function PATCH(
     if (body.score_camera !== undefined) payload.score_camera = body.score_camera ?? null
     if (body.score_battery !== undefined) payload.score_battery = body.score_battery ?? null
     if (body.score_value !== undefined) payload.score_value = body.score_value ?? null
-    // Only fall back to the legacy weighted score when the engine will not run
-    // (no ranking-relevant spec change in this request).
-    if (!hasSpecChanges) payload.scores_overall = scoreOverall
+    // ── Score precedence (§48): the admin's Fweezy Score supersedes the
+    // agent's computation in any event. ─────────────────────────────────────
+    const scoreFieldsSent = [
+      'score_display', 'score_performance', 'score_camera', 'score_battery', 'score_value',
+    ].some((k) => (body as Record<string, unknown>)[k] !== undefined)
+    const adminScored = [
+      body.score_display, body.score_performance, body.score_camera,
+      body.score_battery, body.score_value,
+    ].some((v) => v != null)
+    if (adminScored) {
+      // Admin owns the score: write the weighted overall and mark it so the
+      // engine (recalculateDevice) never overwrites scores_overall.
+      payload.score_source = 'admin'
+      payload.scores_overall = scoreOverall
+    } else if (scoreFieldsSent) {
+      // Admin cleared all five sub-scores — hand the score back to the agent.
+      payload.score_source = 'engine'
+      payload.scores_overall = null
+    }
+    // No score fields in the request (specs-only patch): scores_overall and
+    // score_source stay untouched; the engine may mirror only if the score is
+    // not admin-owned (guarded inside recalculateDevice).
     if (body.verdict_pros !== undefined) payload.verdict_pros = body.verdict_pros ?? []
     if (body.verdict_cons !== undefined) payload.verdict_cons = body.verdict_cons ?? []
     if (body.verdict_bottom_line !== undefined) payload.verdict_bottom_line = body.verdict_bottom_line?.trim() ?? null
@@ -270,6 +290,12 @@ export async function PATCH(
           before as Record<string, unknown>,
           payload,
         )
+        // Admin handed the score back to the agent (cleared all sub-scores):
+        // recompute immediately so the engine number reappears without waiting
+        // for the next spec change.
+        if (scoreFieldsSent && !adminScored) {
+          await recalculateDevice(supabase, parseInt(id))
+        }
         // Publishing can raise a global best → refresh + recalc everyone (§31).
         const bench = await maybeRefreshBenchmarksOnPublish(
           supabase,

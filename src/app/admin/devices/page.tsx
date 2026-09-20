@@ -12,6 +12,7 @@ type Device = {
   release_year: number | null
   major_category: string | null
   scores_overall: number | null
+  score_source: 'admin' | 'engine' | null
   status: string
   images?: { url: string; alt?: string | null; isPrimary?: boolean }[] | null
   brand?: { name: string; logo_url: string | null } | null
@@ -290,8 +291,12 @@ export default function DevicesPage() {
                   <td className="px-4 py-3 text-gray-400 capitalize">{device.major_category ?? '—'}</td>
                   <td className="px-4 py-3">
                     {device.scores_overall ? (
-                      <span className={`inline-flex items-center justify-center rounded-full border-2 font-bold text-sm px-2 py-0.5 ${scoreBadgeColor(device.scores_overall)}`}>
+                      <span
+                        title={device.score_source === 'admin' ? 'Manual Fweezy Score — the agent never overwrites it' : device.score_source === 'engine' ? 'Auto-computed by the agent' : undefined}
+                        className={`inline-flex items-center justify-center rounded-full border-2 font-bold text-sm px-2 py-0.5 ${scoreBadgeColor(device.scores_overall)}`}
+                      >
                         {device.scores_overall}
+                        {device.score_source === 'admin' && <span className="ml-1 text-[10px] leading-none">●</span>}
                       </span>
                     ) : (
                       <span className="text-gray-600">—</span>

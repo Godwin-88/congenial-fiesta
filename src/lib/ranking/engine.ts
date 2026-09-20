@@ -211,6 +211,10 @@ async function resolveChipsetBenchmarks(
  * into devices.scores_overall (the number the public site reads). Draft
  * devices CAN have an internal score for admin review (phone spec §31) —
  * public visibility is governed by RLS on device_rankings (published only).
+ *
+ * Precedence (§48): the ADMIN's Fweezy Score supersedes the agent's in any
+ * event. When devices.score_source = 'admin' the engine still writes its
+ * audit trail into device_rankings, but never touches scores_overall.
  */
 export async function recalculateDevice(
   supabase: SupabaseClient,
@@ -219,7 +223,7 @@ export async function recalculateDevice(
   const { data: device } = await supabase
     .from('devices')
     .select(
-      'id, specs_design, specs_display, specs_processor, specs_memory, specs_camera, specs_battery',
+      'id, score_source, specs_design, specs_display, specs_processor, specs_memory, specs_camera, specs_battery',
     )
     .eq('id', deviceId)
     .maybeSingle()
@@ -265,15 +269,56 @@ export async function recalculateDevice(
     { onConflict: 'device_id,scoring_version,benchmark_version' },
   )
 
-  await supabase
-    .from('devices')
-    .update({
-      scores_overall: Math.round(breakdown.total * 10) / 10,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', deviceId)
+  // Mirror into scores_overall ONLY when the admin has not claimed the score.
+  if ((device as Record<string, unknown>).score_source !== 'admin') {
+    await supabase
+      .from('devices')
+      .update({
+        scores_overall: Math.round(breakdown.total * 10) / 10,
+        score_source: 'engine',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', deviceId)
+  }
 
   return breakdown
+}
+
+/**
+ * Compute (never persist) the ranking for arbitrary spec sections — the live
+ * preview behind the admin forms. Label-keyed sections are canonicalized
+ * exactly like the write path, so what the admin sees in the preview is what
+ * the engine would compute on save.
+ */
+export async function previewRanking(
+  supabase: SupabaseClient,
+  specSections: Record<string, unknown>,
+): Promise<{ breakdown: RankingBreakdown; benchmarks: GlobalBenchmarks } | null> {
+  const { canonicalizeSpecSections } = await import('@/lib/devices/canonical-write')
+  const { sections } = canonicalizeSpecSections(specSections)
+  const device = {
+    specs_design: sections.specs_design ?? null,
+    specs_display: sections.specs_display ?? null,
+    specs_processor: sections.specs_processor ?? null,
+    specs_memory: sections.specs_memory ?? null,
+    specs_camera: sections.specs_camera ?? null,
+    specs_battery: sections.specs_battery ?? null,
+  } as unknown as DeviceSpecData
+
+  const { benchmarks } = await loadChipsetForDevice(supabase, device)
+  const best = await loadGlobalBenchmarks(supabase)
+  const breakdown = computeRanking({
+    device,
+    chipsetBenchmarks: benchmarks,
+    best: {
+      single_core: best.single_core,
+      multi_core: best.multi_core,
+      gpu: best.gpu,
+      sensor_area_mm2: best.sensor_area_mm2,
+      aperture: best.aperture,
+    },
+  })
+  return { breakdown, benchmarks: best }
 }
 
 /**

@@ -9,6 +9,7 @@ import UnsavedChangesModal from '@/components/ui/UnsavedChangesModal'
 import BrandSelect from '@/components/admin/BrandSelect'
 import { CameraSpecSection } from '@/components/admin/CameraSpecSection'
 import { CameraSpec, emptyCamera, cameraHasContent, normalizeCamera, cameraSpecToCanonical } from '@/lib/camera-spec'
+import useScoreWeights from '@/hooks/useScoreWeights'
 import { MAJOR_CATEGORIES, type MajorCategory, type DeviceType } from '@/types/cms'
 import { verdictContent } from '@/lib/verdict-content'
 import { applyDevicePrefill } from '@/lib/chat/prefill-apply'
@@ -115,10 +116,17 @@ export default function EditDevicePage() {
 
   // Scores
   const [scoreDisplay, setScoreDisplay] = useState('')
+  // Score precedence (§48): 'admin' = the manual Fweezy Score below is
+  // authoritative (the agent never overwrites it); 'engine' = the agent
+  // computed it; null = not scored yet.
+  const [scoreSource, setScoreSource] = useState<string | null>(null)
   const [scorePerformance, setScorePerformance] = useState('')
   const [scoreCamera, setScoreCamera] = useState('')
   const [scoreBattery, setScoreBattery] = useState('')
   const [scoreValue, setScoreValue] = useState('')
+  // Live manual-score weights — same site_settings rows the API stores with,
+  // so the Overall Score above matches what the server saves (§48).
+  const scoreWeights = useScoreWeights()
 
   // Verdict
   const [verdictPros, setVerdictPros] = useState<string[]>([])
@@ -232,6 +240,7 @@ export default function EditDevicePage() {
         setAvailability(device.availability ?? '')
         setImages(device.images ?? [])
         setScoreDisplay(device.score_display ?? '')
+        setScoreSource(device.score_source ?? null)
         setScorePerformance(device.score_performance ?? '')
         setScoreCamera(device.score_camera ?? '')
         setScoreBattery(device.score_battery ?? '')
@@ -352,9 +361,12 @@ export default function EditDevicePage() {
     const c = parseFloat(scoreCamera) || 0
     const b = parseFloat(scoreBattery) || 0
     const v = parseFloat(scoreValue) || 0
-    const overall = (d * 0.20 + p * 0.25 + c * 0.25 + b * 0.15 + v * 0.15) * 10
+    const overall = (
+      d * scoreWeights.display + p * scoreWeights.performance +
+      c * scoreWeights.camera + b * scoreWeights.battery + v * scoreWeights.value
+    ) * 10
     return Math.round(overall * 10) / 10
-  }, [scoreDisplay, scorePerformance, scoreCamera, scoreBattery, scoreValue])
+  }, [scoreDisplay, scorePerformance, scoreCamera, scoreBattery, scoreValue, scoreWeights])
 
   const addArrayField = (setter: React.Dispatch<React.SetStateAction<string[]>>) => {
     setter(prev => [...prev, ''])
@@ -569,9 +581,25 @@ export default function EditDevicePage() {
           </CollapsibleSection>
 
           {/* Deterministic ranking (§30, §36): the public site shows one number,
-              administrators audit every component here. */}
-          <CollapsibleSection title="FweezyTech Score (ranking breakdown)">
-            <RankingBreakdownPanel deviceId={parseInt(id)} />
+              administrators audit every component here. Live preview — reflects
+              the CURRENT (unsaved) form data; the engine computes it exactly
+              like this on save. The manual Fweezy Score above supersedes it
+              (§48). */}
+          <CollapsibleSection title="FweezyTech Score (agent computation — live preview)">
+            <RankingBreakdownPanel
+              deviceId={parseInt(id)}
+              specPreview={{
+                specs_design: specsDesign,
+                specs_display: specsDisplay,
+                specs_processor: specsProcessor,
+                specs_memory: specsMemory,
+                specs_camera: cameraSpecToCanonical(specsCamera),
+                specs_battery: specsBattery,
+                specs_connectivity: specsConnectivity,
+                specs_network: specsNetwork,
+                specs_software: specsSoftware,
+              }}
+            />
           </CollapsibleSection>
 
           {/* Provenance (§17, §18, §24, §25): which source supplied each field,
@@ -754,6 +782,15 @@ export default function EditDevicePage() {
               <span className="text-xs text-gray-500">Overall Score</span>
               <p className={`text-3xl font-bold ${overallScore >= 80 ? 'text-score-high' : overallScore >= 60 ? 'text-score-mid' : 'text-score-low'}`}>
                 {overallScore || '—'}
+              </p>
+              <p className="mt-1 text-[11px]">
+                {scoreSource === 'admin' ? (
+                  <span className="text-score-high">Manual score — the agent will never overwrite it.</span>
+                ) : scoreSource === 'engine' ? (
+                  <span className="text-amber-400">Auto-computed by the agent — edit any slider above to take ownership.</span>
+                ) : (
+                  <span className="text-gray-500">Not scored yet — leave empty to let the agent score it, or fill the sliders to take ownership.</span>
+                )}
               </p>
             </div>
           </CollapsibleSection>

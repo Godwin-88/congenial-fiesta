@@ -3,9 +3,18 @@
 // ============================================================================
 // The public site shows ONE number (Ranking §36). Administrators need the full
 // reasoning: each component, its inputs, and the dynamic global best it was
-// measured against. This panel fetches that breakdown on demand.
+// measured against.
+//
+// Two modes:
+//  • deviceId    — the persisted device's breakdown (GET breakdown/:id, with a
+//    manual "Recalculate from specs" button).
+//  • specPreview — LIVE preview of the agent's computation from the CURRENT
+//    (unsaved) form data (POST /api/admin/ranking/preview, debounced). Used by
+//    the create/edit forms so the computed score is visible while typing, next
+//    to the manual Fweezy Score sliders. The admin's score supersedes the
+//    agent's (§48) — this panel is the audit view of what the agent WOULD do.
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Loader2, RefreshCw } from 'lucide-react'
 
 interface ComponentBlock {
@@ -32,7 +41,7 @@ interface BreakdownRecord {
 }
 
 interface BreakdownResponse {
-  device: {
+  device?: {
     id: number
     name: string
     slug: string
@@ -57,14 +66,22 @@ const BENCHMARK_LABELS: Record<string, string> = {
   best_wireless_w: 'Best wireless charging (W)',
 }
 
-export default function RankingBreakdownPanel({ deviceId }: { deviceId: number }) {
+export default function RankingBreakdownPanel({
+  deviceId,
+  specPreview,
+}: {
+  deviceId?: number
+  specPreview?: Record<string, unknown> | null
+}) {
   const [data, setData] = useState<BreakdownResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [recalculating, setRecalculating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const previewMode = specPreview != null
 
   const load = useCallback(
     async (recalculate: boolean) => {
+      if (!deviceId) return
       if (recalculate) setRecalculating(true)
       else setLoading(true)
       setError(null)
@@ -87,6 +104,39 @@ export default function RankingBreakdownPanel({ deviceId }: { deviceId: number }
     },
     [deviceId],
   )
+
+  // Persisted-device mode: load once on mount.
+  useEffect(() => {
+    if (!previewMode && deviceId) void load(false)
+  }, [previewMode, deviceId, load])
+
+  // Preview mode: debounced POST of the unsaved form state — the exact
+  // computation the engine would run on save (same canonical write gate).
+  useEffect(() => {
+    if (!previewMode) return
+    const timer = setTimeout(async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetch('/api/admin/ranking/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(specPreview),
+        })
+        const body = await res.json()
+        if (!res.ok) {
+          setError(body.error ?? 'Could not compute the preview.')
+          return
+        }
+        setData(body)
+      } catch {
+        setError('Could not compute the preview.')
+      } finally {
+        setLoading(false)
+      }
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [previewMode, specPreview])
 
   const breakdown = data?.breakdown ?? null
 
@@ -113,24 +163,32 @@ export default function RankingBreakdownPanel({ deviceId }: { deviceId: number }
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => load(false)}
-          disabled={loading || recalculating}
-          className="inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium bg-muted text-white border border-border hover:border-brand-primary disabled:opacity-50"
-        >
-          {loading ? <Loader2 size={14} className="animate-spin" /> : null}
-          Show breakdown
-        </button>
-        <button
-          type="button"
-          onClick={() => load(true)}
-          disabled={loading || recalculating}
-          className="inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium bg-brand-primary text-white hover:bg-blue-600 disabled:opacity-50"
-        >
-          {recalculating ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-          Recalculate from specs
-        </button>
+        {previewMode ? (
+          <span className="text-[11px] text-gray-500">
+            Live preview of the agent's computation from the current (unsaved) form data — recomputed as you type.
+          </span>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => load(false)}
+              disabled={loading || recalculating}
+              className="inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium bg-muted text-white border border-border hover:border-brand-primary disabled:opacity-50"
+            >
+              {loading ? <Loader2 size={14} className="animate-spin" /> : null}
+              Show breakdown
+            </button>
+            <button
+              type="button"
+              onClick={() => load(true)}
+              disabled={loading || recalculating}
+              className="inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium bg-brand-primary text-white hover:bg-blue-600 disabled:opacity-50"
+            >
+              {recalculating ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Recalculate from specs
+            </button>
+          </>
+        )}
         {data?.formula && (
           <span className="text-[11px] text-gray-500">
             {data.formula.version} · benchmarks {data.formula.benchmarkVersion}
@@ -144,7 +202,9 @@ export default function RankingBreakdownPanel({ deviceId }: { deviceId: number }
         <>
           <div className="rounded border border-border p-3">
             <p className="text-xs text-gray-500 uppercase tracking-wide">
-              FweezyTech Score (final, deterministic)
+              {previewMode
+                ? 'FweezyTech Score (agent computation — live preview)'
+                : 'FweezyTech Score (final, deterministic)'}
             </p>
             <p className="text-2xl text-white font-medium">
               {breakdown ? `${Math.round(breakdown.total * 10) / 10} / 100` : '—'}

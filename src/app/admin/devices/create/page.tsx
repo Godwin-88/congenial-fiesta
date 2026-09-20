@@ -10,8 +10,12 @@ import { CameraSpecSection } from '@/components/admin/CameraSpecSection'
 import { CameraSpec, emptyCamera, cameraHasContent, cameraSpecToCanonical } from '@/lib/camera-spec'
 import { MAJOR_CATEGORIES, type MajorCategory, type DeviceType } from '@/types/cms'
 import { verdictContent } from '@/lib/verdict-content'
+// Live manual-score weights — same rows the API reads, so the form's Overall
+// Score matches what the server stores (single source of truth, §48).
+import useScoreWeights from '@/hooks/useScoreWeights'
 import { applyDevicePrefill } from '@/lib/chat/prefill-apply'
 import SpecImportPanel from '@/components/admin/SpecImportPanel'
+import RankingBreakdownPanel from '@/components/admin/RankingBreakdownPanel'
 import { specsToDevicePrefill } from '@/lib/devices/form-mapping'
 import type { DeviceSpecs } from '@/lib/devices/spec-schema'
 import type { ImportPreview, SpecSnapshot } from '@/lib/devices/import-agent'
@@ -148,6 +152,9 @@ export default function CreateDevicePage() {
   const [scoreCamera, setScoreCamera] = useState('')
   const [scoreBattery, setScoreBattery] = useState('')
   const [scoreValue, setScoreValue] = useState('')
+  // Live manual-score weights — same site_settings rows the API stores with,
+  // so the Overall Score above matches what the server saves (§48).
+  const scoreWeights = useScoreWeights()
 
   // Verdict
   const [verdictPros, setVerdictPros] = useState<string[]>([])
@@ -448,9 +455,12 @@ export default function CreateDevicePage() {
     const c = parseFloat(scoreCamera) || 0
     const b = parseFloat(scoreBattery) || 0
     const v = parseFloat(scoreValue) || 0
-    const overall = (d * 0.20 + p * 0.25 + c * 0.25 + b * 0.15 + v * 0.15) * 10
+    const overall = (
+      d * scoreWeights.display + p * scoreWeights.performance +
+      c * scoreWeights.camera + b * scoreWeights.battery + v * scoreWeights.value
+    ) * 10
     return Math.round(overall * 10) / 10
-  }, [scoreDisplay, scorePerformance, scoreCamera, scoreBattery, scoreValue])
+  }, [scoreDisplay, scorePerformance, scoreCamera, scoreBattery, scoreValue, scoreWeights])
 
   const addArrayField = (setter: React.Dispatch<React.SetStateAction<string[]>>) => {
     setter(prev => [...prev, ''])
@@ -862,7 +872,29 @@ export default function CreateDevicePage() {
               <p className={`text-3xl font-bold ${overallScore >= 80 ? 'text-score-high' : overallScore >= 60 ? 'text-score-mid' : 'text-score-low'}`}>
                 {overallScore || '—'}
               </p>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Your manual Fweezy Score always supersedes the agent's computation. Leave all five empty to let the agent score the device automatically.
+              </p>
             </div>
+          </CollapsibleSection>
+
+          {/* FweezyTech Score — the agent's deterministic computation, live from
+              the current (unsaved) form data. §36 audit view; the manual score
+              above takes precedence on save (§48). */}
+          <CollapsibleSection title="FweezyTech Score (agent computation — live preview)">
+            <RankingBreakdownPanel
+              specPreview={{
+                specs_design: specsDesign,
+                specs_display: specsDisplay,
+                specs_processor: specsProcessor,
+                specs_memory: specsMemory,
+                specs_camera: cameraSpecToCanonical(specsCamera),
+                specs_battery: specsBattery,
+                specs_connectivity: specsConnectivity,
+                specs_network: specsNetwork,
+                specs_software: specsSoftware,
+              }}
+            />
           </CollapsibleSection>
 
           {/* Verdict */}
