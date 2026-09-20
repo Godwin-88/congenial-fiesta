@@ -3,32 +3,44 @@ import {
   getTotalPageViews,
   getPageViewsOverTime, getTopPages, getTrafficSources, getDeviceTypeBreakdown,
   getTopAffiliatePages, getAffiliateCTR, getClicksByRetailer, getTopSearchQueries, getFunnelMetrics,
-  getZeroReport, getTopDevices, getTopBrands, getTopContentPages, type ContentSection,
+  getZeroReport, getTopDevices, getTopContentPages, type ContentSection,
   getAudienceMetrics, getConsiderationMetrics, getCampaignMetrics, getTrustMetrics,
   getRevenueProxy, getSearchQuality,
   getQualifiedLeads, getEarningsReconciliation, getLinkHealthSummary,
   getAlertRules, computeAlertKpiValues, listAlertEvents,
   getRetentionStatus, listRetentionLog,
-  runExploreQuery, listScheduledExports, getTrafficInsights, getContentInsights,
+  runExploreQuery, listScheduledExports, getTrafficInsights, getContentInsights, getDeviceInsights,
+  getConsiderationInsights,
 } from '@/lib/analytics/queries'
 import { ROLE_ALLOWED, type TabId } from '@/lib/analytics/tabs'
 import { getAdminUser } from '@/lib/admin/require-admin'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
+  AlertTriangle,
+  Boxes,
   Download,
   FileDown,
+  Gauge,
   Handshake,
   Heart,
+  Layers,
+  Link2Off,
   Megaphone,
   MousePointerClick,
   Plug,
+  Route,
   Scale,
   Search,
   Shield,
+  ShieldAlert,
   Smartphone,
+  Store,
   Tag,
   Target,
+  TrendingUp,
+  Wallet,
+  Wrench,
   BarChart3,
 } from 'lucide-react'
 import PageViewsChart from './PageViewsChart'
@@ -51,8 +63,26 @@ import { countryName, flagEmoji, formatHoverDate, titleCase } from './chartForma
 import AffiliateTable from './AffiliateTable'
 import FunnelStrip from './FunnelStrip'
 import ZeroReportTable from './ZeroReportTable'
-import TopDevicesTable from './TopDevicesTable'
-import TopBrandsTable from './TopBrandsTable'
+import SectionHeading from './SectionHeading'
+import BuyLinkFillGauge from './BuyLinkFillGauge'
+import CatalogReadinessChecklist from './CatalogReadinessChecklist'
+import RetailerCoverageMatrix from './RetailerCoverageMatrix'
+import RetailerTaxonomyTable from './RetailerTaxonomyTable'
+import CatalogConcentrationChart from './CatalogConcentrationChart'
+import DeviceDemandHeatmap from './DeviceDemandHeatmap'
+import DeviceDemandFlowChart from './DeviceDemandFlowChart'
+import DeviceOutcomeSplit from './DeviceOutcomeSplit'
+import DemandBreakdownTables from './DemandBreakdownTables'
+import CatalogFixQueue from './CatalogFixQueue'
+import OrphanDemandTable from './OrphanDemandTable'
+import CatalogPerformanceTable from './CatalogPerformanceTable'
+import ConsiderationFunnelGauge from './ConsiderationFunnelGauge'
+import IntentMomentumChart from './IntentMomentumChart'
+import QualificationThermometer from './QualificationThermometer'
+import ComparePairChord from './ComparePairChord'
+import ConsiderationDepthTable from './ConsiderationDepthTable'
+import ConsiderationFixQueue from './ConsiderationFixQueue'
+import { deviceChipsFor, considerationChipsFor, tierBadgeClass, tierLabel, TierDot } from './ConsiderationTabHelpers'
 import RoadmapPanel, { type RoadmapItem } from './RoadmapPanel'
 import QualifiedLeadsTable from './QualifiedLeadsTable'
 import EarningsReconciliationTable from './EarningsReconciliationTable'
@@ -231,8 +261,8 @@ export default async function AnalyticsPage({
 }) {
   const { period: rawPeriod, tab: rawTab, metric: rawMetric, dimension: rawDimension } = await searchParams
   const period = ['7d', '30d', '90d'].includes(rawPeriod ?? '') ? (rawPeriod as string) : '30d'
-  const exploreMetric = ['views', 'unique_visitors', 'clicks', 'revenue_proxy', 'saves', 'add_to_compare', 'watches', 'related_clicks'].includes(rawMetric ?? '') ? (rawMetric as string) : 'views'
-  const exploreDimension = ['date', 'path', 'device', 'retailer', 'source_medium', 'section', 'action'].includes(rawDimension ?? '') ? (rawDimension as string) : 'path'
+  const exploreMetric = ['views', 'unique_visitors', 'clicks', 'revenue_proxy', 'saves', 'add_to_compare', 'watches', 'related_clicks', 'intent_score'].includes(rawMetric ?? '') ? (rawMetric as string) : 'views'
+  const exploreDimension = ['date', 'path', 'device', 'price_tier', 'category', 'retailer', 'source_medium', 'section', 'action', 'qualification_tier'].includes(rawDimension ?? '') ? (rawDimension as string) : 'path'
 
   // Role-scoped surfaces — enforced here, so the tab bar only ever shows what the role may see
   const adminUser = await getAdminUser()
@@ -243,7 +273,7 @@ export default async function AnalyticsPage({
   const [
     totalViews,
  viewsOverTime, topPages, trafficSources, deviceTypes, topAffiliate, affiliateCTR, clicksByRetailer,
- searchQueries, funnel, zeroReport, topDevices, topBrands, topContentPages,
+ searchQueries, funnel, zeroReport, topDevices, topContentPages,
     audience, consideration, campaignRows, trust, revenueProxy, searchQuality,
     qualifiedLeads, earningsRecon, linkHealth,
   ] = await Promise.all([
@@ -259,7 +289,6 @@ export default async function AnalyticsPage({
     getFunnelMetrics(period),
     getZeroReport(period, 10),
     getTopDevices(period, 20),
-    getTopBrands(period, 15),
     getTopContentPages(period, 150),
     getAudienceMetrics(period),
     getConsiderationMetrics(period),
@@ -368,6 +397,22 @@ export default async function AnalyticsPage({
     const sectionRows = topContentPages.filter((p) => p.section === section)
     contentBySection.set(section, sectionRows.slice(0, 5))
   }
+
+  // Devices & Catalog analytics join the catalog itself to the audience, so the
+  // whole tab hangs off one aggregator (same discipline as Traffic/Content).
+  let deviceInsights: Awaited<ReturnType<typeof getDeviceInsights>> | null = null
+  if (activeTab === 'devices' && allowedTabs.includes('devices')) {
+    deviceInsights = await getDeviceInsights(period)
+  }
+  const deviceChips = deviceInsights ? deviceChipsFor(deviceInsights) : []
+
+  // Compare & Consideration analytics join intent to traffic + catalog, so the
+  // whole tab hangs off one aggregator (same discipline as Devices).
+  let considerationInsights: Awaited<ReturnType<typeof getConsiderationInsights>> | null = null
+  if (activeTab === 'compare' && allowedTabs.includes('compare')) {
+    considerationInsights = await getConsiderationInsights(period)
+  }
+  const compareChips = considerationInsights ? considerationChipsFor(considerationInsights) : []
 
   const csvLinks = [
     { href: `/api/admin/export/top-pages?period=${period}`, label: 'Top Pages CSV' },
@@ -916,37 +961,312 @@ export default async function AnalyticsPage({
 
       {activeTab === 'devices' && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Smartphone className="h-5 w-5 text-brand-primary" />
-                Top Devices by Page Views (with affiliate CTR)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <TopDevicesTable data={topDevices} />
-            </CardContent>
-          </Card>
+          {/* ── Insight banner ─────────────────────────────────────── */}
+          {deviceInsights && (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {deviceChips.map((chip) => (
+                  <span
+                    key={chip.label}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs"
+                  >
+                    <span className="text-muted-foreground">{chip.label}:</span>
+                    <span className="font-semibold text-foreground">{chip.value}</span>
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Data sources:{' '}
+                <span className="font-medium text-foreground">
+                  devices · brands · device_types · page_views · affiliate_clicks · interactions · link_health_checks ·
+                  affiliate_commission_rates
+                </span>
+                <span className="ml-1">
+                  — catalog-aware: every visual joins the catalog you maintain to the audience you already record, so the
+                  tab reads as coverage → demand → leakage → action.
+                </span>
+              </p>
+            </div>
+          )}
+
+          {/* ══ A · COVERAGE — can this catalog earn at all? ══════════ */}
+          <SectionHeading
+            letter="A"
+            title="Coverage — can this catalog earn at all?"
+            hint="kpi_buy_fill · catalog readiness"
+          />
+          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Buy-Link Fill Rate</CardTitle>
+                <MetricInfo
+                  metric="Buy-link fill rate (kpi_buy_fill)"
+                  definition="Share of published devices that carry at least one valid retailer buy link. A published page without a buy link can never earn, no matter how much traffic it attracts."
+                  formula="count(published devices with ≥1 buy link) / count(published devices)"
+                  ga4Alias="— (catalog KPI, not in GA4)"
+                  dataSource="devices.buy_links (published rows)"
+                  action="Target ≥80%. Every listed device without a link is a page you are hosting and promoting for free."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">
+                  {(deviceInsights?.catalog.fillRatePct ?? 0).toFixed(0)}%
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {deviceInsights?.catalog.withBuyLink ?? 0} of {deviceInsights?.catalog.published ?? 0} published ·{' '}
+                  {deviceInsights?.catalog.withoutBuyLink ?? 0} missing
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Monetised View Share</CardTitle>
+                <MetricInfo
+                  metric="Monetised view share"
+                  definition="Of every device-page view in the period, the share that landed on a published page with a working buy link — a view that could actually convert."
+                  formula="views(monetised pages) / views(all device pages)"
+                  ga4Alias="— (catalog-aware, not in GA4)"
+                  dataSource="page_views × devices (status + buy_links)"
+                  action="Raising this is a content-ops job, not a traffic job: it moves when you fix the pages you already rank for."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">{deviceInsights?.leakage.monetisedSharePct ?? 0}%</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {deviceInsights?.leakage.monetisedViews.toLocaleString() ?? 0} of{' '}
+                  {deviceInsights?.demand.totals.deviceViews.toLocaleString() ?? 0} device views
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Catalog Reach</CardTitle>
+                <MetricInfo
+                  metric="Catalog reach (visited vs total)"
+                  definition="How much of the catalog was actually seen in the period: devices that earned at least one view, against every device in the catalog including drafts."
+                  formula="count(devices with ≥1 view) / count(all devices)"
+                  dataSource="devices × page_views"
+                  action="A low reach with a high publish count means the catalog is being written but not linked or indexed."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">
+                  {deviceInsights?.demand.totals.devicesWithViews ?? 0}
+                  <span className="text-base font-normal text-muted-foreground">
+                    /{deviceInsights?.demand.deviceRows.length ?? 0}
+                  </span>
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {deviceInsights?.demand.totals.publishedWithoutViews ?? 0} published pages got zero views
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Wasted Views</CardTitle>
+                <MetricInfo
+                  metric="Wasted (ghost) views"
+                  definition="Device-page views that could not earn anything: the page was unpublished (so it 404'd) or the slug matched no catalog row at all."
+                  formula="views(unpublished) + views(stale slugs)"
+                  dataSource="page_views × devices.status"
+                  action="The cheapest wins on the site — the traffic already exists, only the catalog entry is missing."
+                />
+              </CardHeader>
+              <CardContent>
+                <p
+                  className={`text-3xl font-bold ${
+                    (deviceInsights?.leakage.wastedViews ?? 0) > 0 ? 'text-amber-400' : 'text-foreground'
+                  }`}
+                >
+                  {(deviceInsights?.leakage.wastedViews ?? 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {deviceInsights?.leakage.wastedPct ?? 0}% of device views ·{' '}
+                  {deviceInsights?.leakage.orphanPaths.length ?? 0} dead paths
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+          {/* ── Coverage instruments ──────────────────────────────── */}
+          <div className="grid xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Gauge className="h-5 w-5 text-brand-primary" />
+                  Buy-Link Fill Instrument
+                  <MetricInfo
+                    metric="kpi_buy_fill instrument"
+                    definition="The fill rate as a gauge against an 80% operating target, with the distribution of links per published device underneath. One link is the floor; 2–3 lets the buy box show competing prices."
+                    formula="covered / published vs 80% target · histogram of links per device"
+                    dataSource="devices.buy_links"
+                    action="Work the 'No link' bucket first (it is ranked in the fix queue below), then give single-link devices a second retailer for price competition."
+                  />
+                </CardTitle>
+                <CardDescription>How many published pages can actually take money today</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <BuyLinkFillGauge
+                  fillRatePct={deviceInsights?.catalog.fillRatePct ?? 0}
+                  published={deviceInsights?.catalog.published ?? 0}
+                  withBuyLink={deviceInsights?.catalog.withBuyLink ?? 0}
+                  withoutBuyLink={deviceInsights?.catalog.withoutBuyLink ?? 0}
+                  buckets={deviceInsights?.catalog.linkCountBuckets ?? []}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-brand-primary" />
+                  Catalog Readiness
+                  <MetricInfo
+                    metric="Catalog readiness"
+                    definition="Coverage of the six attributes a device page needs to do its job — findable (SEO title), trustworthy (images, verdict, score) and clickable (price, buy link)."
+                    formula="covered published devices / published devices, per attribute"
+                    ga4Alias="— (catalog completeness)"
+                    dataSource="devices (seo_title · images · verdict_pros · scores_overall · price_kes · buy_links)"
+                    action="The weakest bar is the single highest-leverage catalog task this period — fix it before adding new devices."
+                  />
+                </CardTitle>
+                <CardDescription>Attribute coverage across every published device</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CatalogReadinessChecklist rows={deviceInsights?.catalog.readiness ?? []} />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ── Distribution plane ─────────────────────────────────── */}
+          <div className="grid xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Store className="h-5 w-5 text-brand-primary" />
+                  Retailer × Price-Tier Coverage
+                  <MetricInfo
+                    metric="Distribution coverage matrix"
+                    definition="For every retailer, how many published devices it can sell in each price tier. A blank cell is unmet demand: that tier has traffic but no buy path through that retailer."
+                    formula="count(published devices with a buy link for retailer, per price tier)"
+                    dataSource="devices.buy_links × devices.price_tier"
+                    action="Read the blank columns first — a whole tier with no coverage is a partnership conversation, not a page edit."
+                  />
+                </CardTitle>
+                <CardDescription>Where the catalog can be bought, by price band</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RetailerCoverageMatrix
+                  tiers={deviceInsights?.distribution.retailerTierMatrix.tiers ?? []}
+                  tierLabels={deviceInsights?.distribution.retailerTierMatrix.tierLabels ?? []}
+                  rows={deviceInsights?.distribution.retailerTierMatrix.rows ?? []}
+                  maxCell={deviceInsights?.distribution.retailerTierMatrix.maxCell ?? 1}
+                  published={deviceInsights?.catalog.published ?? 0}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldAlert className="h-5 w-5 text-amber-400" />
+                  Retailer Taxonomy — Do The Registries Agree?
+                  <MetricInfo
+                    metric="Retailer taxonomy health"
+                    definition="A click only becomes commission when three registries use the same retailer key: the catalog buy link, the click log and the commission rate sheet. The buy box additionally only renders five known keys."
+                    formula="presence + case-match across catalog · affiliate_clicks · affiliate_commission_rates · buy-box keys"
+                    dataSource="devices.buy_links · affiliate_clicks · affiliate_commission_rates"
+                    action="Fix mismatched keys before trusting any per-retailer revenue number — a case mismatch silently prices clicks at zero."
+                  />
+                </CardTitle>
+                <CardDescription>The silent failure mode behind per-retailer revenue</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RetailerTaxonomyTable rows={deviceInsights?.distribution.retailerTaxonomy ?? []} />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ══ B · DEMAND — which assets pull their weight? ═══════════ */}
+          <SectionHeading
+            letter="B"
+            title="Demand — which assets pull their weight?"
+            hint="views · clicks · intent, sliced by the catalog's own dimensions"
+          />
 
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Tag className="h-5 w-5 text-brand-primary" />
-                Top Brands
+                <TrendingUp className="h-5 w-5 text-brand-primary" />
+                Catalog Concentration — The Head And The Long Tail
+                <MetricInfo
+                  metric="Catalog concentration (Pareto)"
+                  definition="Views per device ranked highest-first, with the running share on the second axis. Shows how few pages carry the catalog, and how much of it earns nothing."
+                  formula="ranked views + cumulative share · rank where cumulative share crosses 80%"
+                  ga4Alias="pageviews by page path"
+                  dataSource="page_views (/devices/*) · devices"
+                  action="Everything after the 80% rank is the tail: link it from the head, merge near-duplicates, or prune the pages no one ever reads."
+                />
               </CardTitle>
+              <CardDescription>
+                How many pages carry the catalog — and what the tail is worth ignoring
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <TopBrandsTable data={topBrands} />
+              <CatalogConcentrationChart
+                data={deviceInsights?.demand.concentration ?? []}
+                paretoIndex={deviceInsights?.demand.paretoIndex ?? null}
+                top10SharePct={deviceInsights?.demand.top10SharePct ?? 0}
+                totalViews={deviceInsights?.demand.totals.deviceViews ?? 0}
+              />
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MousePointerClick className="h-5 w-5 text-amber-400" />
-                Top Affiliate Pages（ by retailer）
-              </CardTitle>
-            </CardHeader>
+          <div className="grid xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-brand-primary" />
+                  Demand Rhythm By Price Tier
+                  <MetricInfo
+                    metric="Demand rhythm (tier × time)"
+                    definition="Device-page views per time bucket, split by price tier. Same recipe as the Content tab's section momentum, keyed to the catalog's price ladder instead of content sections."
+                    formula="Σ views per (bucket × price_tier)"
+                    dataSource="page_views × devices.price_tier"
+                    action="A tier that only lights up in one week is a payday or launch effect — time the next review drop and stock conversation to it."
+                  />
+                </CardTitle>
+                <CardDescription>Where attention moves across the price ladder</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <DeviceDemandHeatmap
+                  buckets={(deviceInsights?.demand.heatmap ?? []).map((h) => h.bucket)}
+                  tiers={deviceInsights?.demand.heatmapTiers ?? []}
+                  tierLabels={deviceInsights?.demand.heatmapTierLabels ?? []}
+                  matrix={deviceInsights?.demand.heatmap ?? []}
+                  maxCell={Math.max(1, ...(deviceInsights?.demand.heatmap ?? []).flatMap((h) => Object.values(h.tiers)))}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MousePointerClick className="h-5 w-5 text-amber-400" />
+                  Affiliate Clicks By Device &amp; Retailer
+                  <MetricInfo
+                    metric="Affiliate clicks per device × retailer"
+                    definition="The raw click log every conversion is built on: which device page sent which retailer the most clicks in the period."
+                    formula="count(affiliate_clicks) grouped by device_slug, retailer"
+                    ga4Alias="outbound clicks"
+                    dataSource="affiliate_clicks"
+                    action="A device with clicks on a retailer you have no commission rate for is mispriced revenue — cross-check the taxonomy table above."
+                  />
+                </CardTitle>
+                <CardDescription>Who actually clicks, and where they are sent</CardDescription>
+              </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -978,19 +1298,180 @@ export default async function AnalyticsPage({
             </CardContent>
           </Card>
 
+          </div>
+
+          {/* ══ C · LEAKAGE — where does demand hit a dead end? ════════ */}
+          <SectionHeading
+            letter="C"
+            title="Leakage — where does demand hit a dead end?"
+            hint="ghost demand · 404 paths · link health"
+          />
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Tag className="h-5 w-5 text-emerald-400" />
-                Buy-Link Health — Distribution Governance
+                <Route className="h-5 w-5 text-brand-primary" />
+                Ghost Demand — Brand To Reality
+                <MetricInfo
+                  metric="Ghost demand flow"
+                  definition="Every device-page view, traced from the brand it was looking for to what the page actually delivered: a monetised page, a live page with no buy link, an unpublished row, or a slug that no longer exists."
+                  formula="views(brand) → views(outcome), where outcome = status + buy_links + catalog match"
+                  dataSource="page_views × devices (status · buy_links · brand)"
+                  action="Follow any widening amber or red ribbon back to the brand on the left — that brand has demand arriving and nothing to sell it."
+                />
               </CardTitle>
+              <CardDescription>
+                Ribbon width = views · colour = whether that view could ever have earned
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <LinkHealthTable summary={linkHealth.summary} brokenLinks={linkHealth.brokenLinks} />
-              <p className="text-muted-foreground text-xs mt-3">
-                Fed by the daily link-health cron (HEAD-checks every outbound buy link). Broken links
-                leak revenue — fix them to keep the buy funnel healthy.
-              </p>
+              <DeviceDemandFlowChart
+                data={deviceInsights?.leakage.flow ?? { nodes: [], links: [] }}
+                outcomes={deviceInsights?.leakage.outcomes ?? []}
+              />
+              <div className="mt-6 border-t border-border pt-5">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Outcome split — where the period&apos;s device views ended up
+                </p>
+                <DeviceOutcomeSplit
+                  outcomes={deviceInsights?.leakage.outcomes ?? []}
+                  totalViews={deviceInsights?.demand.totals.deviceViews ?? 0}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* __DEVICES_TAB_HEALTH__ */}
+
+          <div className="grid xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Link2Off className="h-5 w-5 text-amber-400" />
+                  Dead Device Paths
+                  <MetricInfo
+                    metric="Dead device paths (orphan demand)"
+                    definition="Device-page paths that matched no catalog row at all in the period. The visitor asked for a device and got a 404 — no catalog edit can fix these, only a redirect or a new page."
+                    formula="count(views where /devices/{brand}/{slug} has no matching devices.slug)"
+                    dataSource="page_views (/devices/*) left-joined to devices"
+                    action="Redirect the loudest paths to the current slug; a path that keeps attracting traffic with no product behind it is a page idea."
+                  />
+                </CardTitle>
+                <CardDescription>Traffic that arrived and found nothing</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <OrphanDemandTable
+                  paths={deviceInsights?.leakage.orphanPaths ?? []}
+                  totalViews={deviceInsights?.demand.totals.deviceViews ?? 0}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-emerald-400" />
+                  Buy-Link Health — Distribution Governance
+                  <MetricInfo
+                    metric="Buy-link health census"
+                    definition="The daily cron HEAD-checks every outbound buy link. Three numbers matter: how many live URLs it has verified, how many live buy links it has never seen, and how many URLs it still checks that the catalog has dropped."
+                    formula="distinct(link_health_checks.url) matched against live devices.buy_links[].url"
+                    dataSource="link_health_checks · devices.buy_links"
+                    action="Broken links lose the click they just earned; unchecked live links are blind spots the cron has not covered yet."
+                  />
+                </CardTitle>
+                <CardDescription>
+                  Checked{' '}
+                  <span className="font-semibold text-foreground">
+                    {deviceInsights?.distribution.linkHealth.checked ?? 0}
+                  </span>{' '}
+                  · broken{' '}
+                  <span className="font-semibold text-amber-400">
+                    {deviceInsights?.distribution.linkHealth.broken ?? 0}
+                  </span>{' '}
+                  · never checked{' '}
+                  <span className="font-semibold text-foreground">
+                    {deviceInsights?.distribution.linkHealth.uncheckedLive ?? 0}
+                  </span>{' '}
+                  · orphan checks{' '}
+                  <span className="font-semibold text-muted-foreground">
+                    {deviceInsights?.distribution.linkHealth.orphanChecks ?? 0}
+                  </span>
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <LinkHealthTable summary={linkHealth.summary} brokenLinks={linkHealth.brokenLinks} />
+                <p className="text-muted-foreground text-xs mt-3">
+                  Fed by the daily link-health cron (HEAD-checks every outbound buy link)
+                  {deviceInsights?.distribution.linkHealth.lastCheckedAt
+                    ? ` · last run ${formatHoverDate(deviceInsights.distribution.linkHealth.lastCheckedAt.slice(0, 10))}`
+                    : ''}
+                  . Broken links leak revenue — every one is already queued in the fix queue below.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ══ D · ACTION — what to fix, in revenue order ════════════ */}
+          <SectionHeading
+            letter="D"
+            title="Action — what to fix, ranked by views at risk"
+            hint="the loop from analytics back into the catalog"
+          />
+
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Wrench className="h-5 w-5 text-amber-400" />
+                  Catalog Fix Queue
+                  <MetricInfo
+                    metric="Catalog fix queue"
+                    definition="One row per (device, issue) with the views currently at risk, so the ticket order is the revenue order. Issues come from the catalog's own state plus the link-health cron — every row names the exact catalog edit."
+                    formula="issues from status · buy_links · priceDate · link_health_checks, ranked by views at risk"
+                    ga4Alias="— (prescriptive, not a GA4 metric)"
+                    dataSource="devices · page_views · link_health_checks"
+                    action="Work top-down: each fixed row moves views from 'wasted' to 'monetised' without a single extra visitor."
+                  />
+                </CardTitle>
+                <CardDescription>Prescriptive, prioritised, deep-linked into the device editor</CardDescription>
+              </div>
+              <Link href={`/api/admin/export/catalog-gaps?period=${period}`}>
+                <Button variant="outline" size="sm" className="border-border text-muted-foreground">
+                  <Download className="h-4 w-4 mr-1" /> CSV
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              <CatalogFixQueue items={deviceInsights?.leakage.fixQueue ?? []} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Wallet className="h-5 w-5 text-brand-primary" />
+                  Catalog Performance Grid
+                  <MetricInfo
+                    metric="Catalog performance grid"
+                    definition="Every catalog row with its audience, conversion and monetisation state in one sortable view — the long-tail workbench behind the concentration chart."
+                    formula="views · clicks (CTR) · buy links · save/compare/watch intent per device"
+                    ga4Alias="pageviews + outbound clicks by path"
+                    dataSource="devices × page_views × affiliate_clicks × interactions"
+                    action="Sort by intent descending with 0 links to find pages your audience is already saving but cannot buy — the fastest wins in the catalog."
+                  />
+                </CardTitle>
+                <CardDescription>Search, filter by outcome, sort any column</CardDescription>
+              </div>
+              <Link href={`/api/admin/export/device-catalog?period=${period}`}>
+                <Button variant="outline" size="sm" className="border-border text-muted-foreground">
+                  <Download className="h-4 w-4 mr-1" /> CSV
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              <CatalogPerformanceTable rows={deviceInsights?.demand.deviceRows ?? []} />
             </CardContent>
           </Card>
         </div>
@@ -1226,96 +1707,458 @@ export default async function AnalyticsPage({
 
       {activeTab === 'compare' && (
         <div className="space-y-6">
+          {/* ── Insight banner ─────────────────────────────────────── */}
+          {considerationInsights && (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {compareChips.map((chip) => (
+                  <span
+                    key={chip.label}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs"
+                  >
+                    <span className="text-muted-foreground">{chip.label}:</span>
+                    <span className="font-semibold text-foreground">{chip.value}</span>
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Data sources:{' '}
+                <span className="font-medium text-foreground">
+                  interactions · page_views · affiliate_clicks · devices · brands
+                </span>
+                <span className="ml-1">
+                  — intent-aware: every visual joins the first-party intent beacon to the traffic it rode in on, so the
+                  tab reads as funnel → mix → audience → pairs → action.
+                </span>
+              </p>
+            </div>
+          )}
+
+          {/* ══ A · FUNNEL — how many browsers become buyers? ═════════ */}
+          <SectionHeading
+            letter="A"
+            title="Funnel — how many browsers become buyers?"
+            hint="browsers · savers · comparers · buy clickers"
+          />
+          {/* __COMPARE_KPIS__ */}
+          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Intent Events</CardTitle>
+                <MetricInfo
+                  metric="Intent events"
+                  definition="Every save · compare · watch · related-click the first-party beacon recorded in the period. This is the raw material the whole tab is built from."
+                  formula="count(interactions.action in [save, add_to_compare, watch, related_click])"
+                  ga4Alias="events"
+                  dataSource="interactions"
+                  action="If this is thin, the tab's job is instrumentation first: check which surfaces fire the beacon before trusting any ratio."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">
+                  {(considerationInsights?.mix.totals.events ?? 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {considerationInsights?.mix.totals.activeVisitors ?? 0} active visitors ·{' '}
+                  {considerationInsights?.mix.totals.signedInVisitors ?? 0} signed in
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Comparison Runs</CardTitle>
+                <MetricInfo
+                  metric="Comparison runs"
+                  definition="Completed /compare page renders carrying two or more device slugs — the deepest intent signal on the site, one step above the buy click."
+                  formula="count(page_views.path like /compare% with ≥2 devices)"
+                  ga4Alias="pageviews on /compare"
+                  dataSource="page_views"
+                  action="Rivalries with real runs deserve editorial love: an H2H review, a video, or a price-drop alert naming both devices."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">
+                  {(considerationInsights?.demand.totalPairRuns ?? 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {(considerationInsights?.demand.topPairs.length ?? 0)} live rivalries ·{' '}
+                  {considerationInsights?.mix.totals.comparePageViews ?? 0} /compare views
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* __COMPARE_KPIS_2__ */}
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Hot + Warm Audience</CardTitle>
+                <MetricInfo
+                  metric="Hot + warm audience"
+                  definition="Scored visitors at 4+: warm (4–7, one nudge from purchase) and hot (8+, purchase-ready). This is the MQL-equivalent pool the plan asks for."
+                  formula="count(visitors with compare×3 + save×2 + watch + related + click×2 + signed-in×2 ≥ 4)"
+                  ga4Alias="— (first-party audience, not in GA4)"
+                  dataSource="interactions × affiliate_clicks"
+                  action="Export hot for retargeting/CRM and warm for price-drop and new-review alerts — reach without this list is spray."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">
+                  {(
+                    (considerationInsights?.audience.totals.hot ?? 0) +
+                    (considerationInsights?.audience.totals.warm ?? 0)
+                  ).toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {considerationInsights?.audience.totals.hot ?? 0} hot ·{' '}
+                  {considerationInsights?.audience.totals.warm ?? 0} warm · avg score{' '}
+                  {considerationInsights?.audience.totals.avgScore ?? 0}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Browser → Buyer</CardTitle>
+                <MetricInfo
+                  metric="Browser → buyer conversion"
+                  definition="End-to-end consideration: distinct device-page browsers who clicked any buy link in the period. Identity is the first-party FP-id, so this bridges anonymous browsing to purchase intent."
+                  formula="distinct buy-click visitors / distinct device-page browsers"
+                  dataSource="page_views.fp_id × affiliate_clicks.fp_id"
+                  action="This is the tab's north star. It moves when shortlisted devices get buy links — see the consideration queue."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">
+                  {considerationInsights?.funnel.browserToBuyerPct ?? 0}%
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {(considerationInsights?.funnel.buyClickers ?? 0).toLocaleString()} clickers of{' '}
+                  {(considerationInsights?.funnel.browsers ?? 0).toLocaleString()} browsers
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Scale className="h-5 w-5 text-brand-primary" />
                 Consideration Funnel
+                <MetricInfo
+                  metric="Consideration funnel"
+                  definition="Distinct visitors per stage, top-down: browsers (device-page views), savers, comparers, buy clickers. A visitor in two stages counts in both — the story is the shrinkage between bars."
+                  formula="distinct fp_id per stage · step % = stage / previous stage"
+                  dataSource="page_views · interactions · affiliate_clicks (fp_id)"
+                  action="The fastest-shrinking bar is the quarter's project: a collapsing save→compare bar means the compare entry points are broken or invisible."
+                />
               </CardTitle>
+              <CardDescription>Distinct visitors per stage — the shrinkage is the story</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid md:grid-cols-4 gap-4">
-                <div className="rounded-xl border border-border bg-card p-4">
-                  <p className="text-2xl font-bold text-foreground">{consideration.saves.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">Saved items</p>
+              <ConsiderationFunnelGauge
+                stages={considerationInsights?.funnel.stages ?? []}
+                browserToBuyerPct={considerationInsights?.funnel.browserToBuyerPct ?? 0}
+              />
+            </CardContent>
+          </Card>
+
+          {/* ══ B · MIX — where does intent concentrate? ══════════════ */}
+          <SectionHeading
+            letter="B"
+            title="Mix — where does intent concentrate?"
+            hint="action × content type × momentum"
+          />
+          {/* __COMPARE_MIX__ */}
+          <div className="grid xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-brand-primary" />
+                  Intent Momentum By Action
+                  <MetricInfo
+                    metric="Intent momentum"
+                    definition="Intent events per time bucket, split by action (compare · save · watch · related). Same recipe as the Devices tab's demand-rhythm heatmap, keyed to behaviour instead of price tier."
+                    formula="Σ intent events per (bucket × action)"
+                    dataSource="interactions"
+                    action="A compare row that only lights up on one date is a single viral page, not a habit — find it and replicate the entry point."
+                  />
+                </CardTitle>
+                <CardDescription>Which behaviour is accelerating, which is flat-lining</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <IntentMomentumChart
+                  momentum={considerationInsights?.mix.momentum ?? []}
+                  maxCell={Math.max(
+                    1,
+                    ...(considerationInsights?.mix.momentum ?? []).flatMap((m) => [
+                      m.save,
+                      m.add_to_compare,
+                      m.watch,
+                      m.related_click,
+                    ]),
+                  )}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-brand-primary" />
+                  Intent By Action &amp; Content Type
+                  <MetricInfo
+                    metric="Intent mix"
+                    definition="Where the period's intent events sit: which action dominates, how many distinct visitors and devices each action touches, and which content types earn the intent."
+                    formula="events · distinct visitors · distinct devices per action; events per content_type"
+                    dataSource="interactions"
+                    action="A dominant action is the behaviour to design around; a content type with zero intent is a surface that never converts attention."
+                  />
+                </CardTitle>
+                <CardDescription>The shape of this period&apos;s intent</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {(considerationInsights?.mix.byAction ?? []).map((row) => {
+                    const maxEvents = Math.max(1, ...(considerationInsights?.mix.byAction ?? []).map((r) => r.events))
+                    return (
+                      <div key={row.action}>
+                        <div className="flex items-baseline justify-between gap-3 text-xs">
+                          <span className="font-medium text-foreground">{row.label}</span>
+                          <span className="shrink-0 tabular-nums text-muted-foreground">
+                            <span className="font-semibold text-foreground">{row.events.toLocaleString()}</span>
+                            {' · '}
+                            {row.sharePct}% · {row.visitors.toLocaleString()} visitors · {row.devices.toLocaleString()} devices
+                          </span>
+                        </div>
+                        <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-foreground/10">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${(row.events / maxEvents) * 100}%`,
+                              backgroundColor:
+                                row.action === 'add_to_compare'
+                                  ? '#8B5CF6'
+                                  : row.action === 'save'
+                                    ? '#3B82F6'
+                                    : row.action === 'watch'
+                                      ? '#EF4444'
+                                      : '#10B981',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {(considerationInsights?.mix.byAction ?? []).every((r) => r.events === 0) && (
+                    <p className="py-6 text-center text-sm text-muted-foreground">
+                      No intent events in this period yet.
+                    </p>
+                  )}
                 </div>
-                <div className="rounded-xl border border-border bg-card p-4">
-                  <p className="text-2xl font-bold text-foreground">{consideration.addToCompare.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">Add to compare</p>
+                {(considerationInsights?.mix.byContentType ?? []).length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {considerationInsights!.mix.byContentType.map((row) => (
+                      <span
+                        key={row.type}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs"
+                      >
+                        <span className="text-muted-foreground">{row.label}:</span>
+                        <span className="font-semibold text-foreground">
+                          {row.events.toLocaleString()} · {row.sharePct}%
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ══ C · AUDIENCE — who are the hot, warm and cold? ════════ */}
+          <SectionHeading
+            letter="C"
+            title="Audience — who are the hot, warm and cold?"
+            hint="qualification score · hot/warm/cold"
+          />
+          {/* __COMPARE_AUDIENCE__ */}
+          <div className="grid xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5 text-amber-400" />
+                  Qualification Thermometer
+                  <MetricInfo
+                    metric="Qualification tiers (hot / warm / cold)"
+                    definition="Every scored visitor bucketed by the shared qualification score: hot (8+, purchase-ready), warm (4–7, one nudge away), cold (under 4, browsing). The MQL-equivalent audience the canvas asks for."
+                    formula="hot = score ≥ 8 · warm = 4–7 · cold < 4 (compare×3 + save×2 + watch + related + click×2 + signed-in×2)"
+                    ga4Alias="— (first-party audience, not in GA4)"
+                    dataSource="interactions × affiliate_clicks"
+                    action="A fat cold band with a thin hot band is a nurture problem: warm needs price-drop alerts, hot needs retargeting now."
+                  />
+                </CardTitle>
+                <CardDescription>The shape of the audience, not just its size</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <QualificationThermometer
+                  tiers={considerationInsights?.audience.tiers ?? []}
+                  total={considerationInsights?.audience.totals.scored ?? 0}
+                  avgScore={considerationInsights?.audience.totals.avgScore ?? 0}
+                />
+                {(considerationInsights?.audience.scoreHistogram ?? []).some((h) => h.visitors > 0) && (
+                  <div className="mt-5 border-t border-border pt-4">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Score distribution
+                    </p>
+                    <div className="flex h-16 items-end gap-1.5">
+                      {(considerationInsights?.audience.scoreHistogram ?? []).map((h) => {
+                        const max = Math.max(
+                          1,
+                          ...(considerationInsights?.audience.scoreHistogram ?? []).map((x) => x.visitors),
+                        )
+                        return (
+                          <div key={h.bucket} className="flex flex-1 flex-col items-center gap-1" title={`Score ${h.bucket}: ${h.visitors} visitors`}>
+                            <span className="text-[10px] tabular-nums text-muted-foreground">
+                              {h.visitors > 0 ? h.visitors : ''}
+                            </span>
+                            <div
+                              className="w-full rounded-sm bg-brand-primary/70"
+                              style={{ height: `${Math.max(3, (h.visitors / max) * 44)}px` }}
+                            />
+                            <span className="text-[10px] text-muted-foreground">{h.bucket}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="h-5 w-5 text-amber-400" />
+                    High-Intent Audience — Qualification Scoreboard
+                    <MetricInfo
+                      metric="Qualification scoreboard"
+                      definition="Top-25 scored visitors with their signal mix (compares · saves · watches · related · clicks) and tier. The same score the thermometer buckets — row-level for CRM handoff."
+                      formula="compare×3 + save×2 + watch + related + affiliate_click×2 + signed-in×2"
+                      dataSource="interactions × affiliate_clicks (fp_id)"
+                      action="Export hot for retargeting and signed-in warm for lifecycle email — the first-party audience asset GA can't give you."
+                    />
+                  </CardTitle>
+                  <CardDescription>Row-level scores for the CRM handoff</CardDescription>
                 </div>
-                <div className="rounded-xl border border-border bg-card p-4">
-                  <p className="text-2xl font-bold text-foreground">{consideration.watches.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">Video reviews watched</p>
-                </div>
-                <div className="rounded-xl border border-border bg-card p-4">
-                  <p className="text-2xl font-bold text-foreground">{consideration.relatedClicks.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">Related-device clicks</p>
-                </div>
-              </div>
-              <p className="text-muted-foreground text-xs mt-4">
-                Qualification intent per visitor (save · compare · watch) is the MQL signal. Weighted
-                scores (compare=3 · save=2 · watch=1 · related=1 · affiliate click=2) bucket visitors
-                into hot / warm / cold tiers for the high-intent export.
-              </p>
+                <Link href={`/api/admin/export/qualified-leads?period=${period}`}>
+                  <Button variant="outline" size="sm" className="border-border text-muted-foreground">
+                    <Download className="h-4 w-4 mr-1" /> Qualified Leads CSV
+                  </Button>
+                </Link>
+              </CardHeader>
+              <CardContent>
+                <QualifiedLeadsTable data={qualifiedLeads} />
+                <p className="text-muted-foreground text-xs mt-3">
+                  Hot tier = strong purchase intent (compare + save + clicks). Export to CSV for CRM
+                  onboarding / retargeting — the first-party audience asset GA can&apos;t give you.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ══ D · PAIRS — what is being compared? ═══════════════════ */}
+          <SectionHeading
+            letter="D"
+            title="Pairs — what is being compared, and what converts attention?"
+            hint="rivalries · per-device intent depth"
+          />
+          {/* __COMPARE_PAIRS__ */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Scale className="h-5 w-5 text-brand-primary" />
+                Live Rivalries — What The Audience Puts Head To Head
+                <MetricInfo
+                  metric="Comparison pairs"
+                  definition="Completed comparisons grouped by canonical pair (slugs sorted — redirects enforce this shape on the page itself). The thickest arcs are the rivalries worth editorial investment."
+                  formula="runs per sorted slug pair from /compare?devices= paths"
+                  ga4Alias="pageviews on /compare by query"
+                  dataSource="page_views (/compare)"
+                  action="Give the top 3 rivalries an H2H article or video each; fix or redirect any pair that runs on a dead slug."
+                />
+              </CardTitle>
+              <CardDescription>
+                Arcs = devices in the current top pairs · chords = pair runs ·{' '}
+                {considerationInsights?.demand.lopsidedPairs ?? 0} lopsided or half-dead pairs detected
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ComparePairChord
+                pairs={considerationInsights?.demand.topPairs ?? []}
+                totalRuns={considerationInsights?.demand.totalPairRuns ?? 0}
+              />
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Target className="h-5 w-5 text-amber-400" />
-                High-Intent Audience — Qualification Scoreboard
-              </CardTitle>
-              <Link href={`/api/admin/export/qualified-leads?period=${period}`}>
+            <CardHeader className="flex flex-row items-start justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Wallet className="h-5 w-5 text-brand-primary" />
+                  Consideration Depth — Attention To Purchase, Per Device
+                  <MetricInfo
+                    metric="Consideration depth ledger"
+                    definition="Every device's intent score beside the two ratios that matter: intent-per-100-views (attention density) and clicks-per-100-intent (shortlist conversion). Temperature is the device-level heat of the demand on it."
+                    formula="intent = compare×3 + save×2 + watch + related · density = intent/100 views · conversion = clicks/100 intent"
+                    dataSource="interactions × page_views × affiliate_clicks × devices"
+                    action="High density + low conversion = the buy box is failing a device people already want. High density + zero links = the quarter's easiest win."
+                  />
+                </CardTitle>
+                <CardDescription>S·C·W·R = raw saves · compares · watches · related-clicks</CardDescription>
+              </div>
+              <Link href={`/api/admin/export/consideration-funnel?period=${period}`}>
                 <Button variant="outline" size="sm" className="border-border text-muted-foreground">
-                  <Download className="h-4 w-4 mr-1" /> Qualified Leads CSV
+                  <Download className="h-4 w-4 mr-1" /> CSV
                 </Button>
               </Link>
             </CardHeader>
             <CardContent>
-              <QualifiedLeadsTable data={qualifiedLeads} />
-              <p className="text-muted-foreground text-xs mt-3">
-                Hot tier = strong purchase intent (compare + save + clicks). Export to CSVs for CRM
-                onboarding / retargeting — the first-party audience asset GA can't give you.
-              </p>
+              <ConsiderationDepthTable rows={considerationInsights?.demand.deviceRows ?? []} />
             </CardContent>
           </Card>
 
+          {/* ══ E · ACTION — what to fix, in interest order ═══════════ */}
+          <SectionHeading
+            letter="E"
+            title="Action — what to fix, ranked by the interest at stake"
+            hint="the loop from consideration back into catalog + editorial"
+          />
+
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Scale className="h-5 w-5 text-amber-400" />
-                Most Considered Devices
-              </CardTitle>
+            <CardHeader className="flex flex-row items-start justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Wrench className="h-5 w-5 text-amber-400" />
+                  Consideration Queue
+                  <MetricInfo
+                    metric="Consideration fix queue"
+                    definition="One row per (device or pair, issue) with the interest currently at stake, so the ticket order is the revenue order. Device rows deep-link into the device editor; pair rows link to the live comparison."
+                    formula="issues from intent × views × clicks × buy links × pair health, ranked by interest at stake"
+                    ga4Alias="— (prescriptive, not a GA4 metric)"
+                    dataSource="interactions · page_views · affiliate_clicks · devices"
+                    action="Work top-down: each fixed row converts attention you already earned — no extra traffic needed."
+                  />
+                </CardTitle>
+                <CardDescription>Prescriptive, prioritised, deep-linked where it counts</CardDescription>
+              </div>
+              <Link href={`/api/admin/export/consideration-queue?period=${period}`}>
+                <Button variant="outline" size="sm" className="border-border text-muted-foreground">
+                  <Download className="h-4 w-4 mr-1" /> CSV
+                </Button>
+              </Link>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-muted-foreground border-b border-border">
-                      <th className="text-left py-2 pr-4 font-medium">Rank</th>
-                      <th className="text-left py-2 pr-4 font-medium">Device</th>
-                      <th className="text-right py-2 font-medium">Intent events</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {consideration.topDevices.map((d, i) => (
-                      <tr key={d.deviceSlug} className="border-b border-border last:border-0 hover:bg-foreground/5">
-                        <td className="py-2 pr-4 text-muted-foreground">{i + 1}</td>
-                        <td className="py-2 pr-4 text-brand-primary">{d.deviceSlug}</td>
-                        <td className="py-2 text-right">{d.count.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                    {consideration.topDevices.length === 0 && (
-                      <tr>
-                        <td colSpan={3} className="py-4 text-center text-muted-foreground">
-                          No intent events yet — the beacon collects them as users save, compare and watch reviews
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <ConsiderationFixQueue items={considerationInsights?.action.fixQueue ?? []} />
             </CardContent>
           </Card>
 

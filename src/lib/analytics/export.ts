@@ -10,6 +10,8 @@ import {
   getEarningsReconciliation,
   getLinkHealthSummary,
   runExploreQuery,
+  getDeviceInsights,
+  getConsiderationInsights,
 } from './queries'
 
 export const REPORT_LABELS: Record<string, string> = {
@@ -19,6 +21,10 @@ export const REPORT_LABELS: Record<string, string> = {
   'qualified-leads': 'Qualified Leads',
   'earnings-reconciliation': 'Earnings Reconciliation',
   'link-health': 'Link Health',
+  'device-catalog': 'Device Catalog Performance',
+  'catalog-gaps': 'Catalog Gaps (Fix Queue)',
+  'consideration-funnel': 'Consideration Funnel',
+  'consideration-queue': 'Consideration Queue',
   explore: 'Explore',
 }
 
@@ -139,6 +145,97 @@ export async function generateReportCsv(
           }))
         ),
         filename: `link-health-${date}.csv`,
+      }
+    }
+    case 'device-catalog': {
+      const insights = await getDeviceInsights(period)
+      const rows = insights.demand.deviceRows.slice(0, opts.limit ?? 500)
+      return {
+        csv: toCSV(
+          rows.map((r, i) => ({
+            rank: i + 1,
+            device_slug: r.slug,
+            name: r.name,
+            brand: r.brandName,
+            status: r.status,
+            price_tier: r.priceTier,
+            major_category: r.majorCategory,
+            device_type: r.deviceType,
+            views: r.views,
+            affiliate_clicks: r.clicks,
+            ctr_pct: r.ctr,
+            buy_links: r.buyLinkCount,
+            intent_events: r.intentEvents,
+            outcome: r.outcome,
+          })),
+        ),
+        filename: `device-catalog-${period}-${date}.csv`,
+      }
+    }
+    case 'catalog-gaps': {
+      const insights = await getDeviceInsights(period)
+      return {
+        csv: toCSV(
+          insights.leakage.fixQueue.map((item, i) => ({
+            rank: i + 1,
+            priority: item.severity,
+            issue: item.issue,
+            device_slug: item.slug ?? '',
+            device_name: item.name,
+            brand: item.brandSlug,
+            path: item.path ?? '',
+            views_at_risk: item.viewsAtRisk,
+            detail: item.detail,
+            action: item.action,
+          })),
+        ),
+        filename: `catalog-gaps-${period}-${date}.csv`,
+      }
+    }
+    case 'consideration-funnel': {
+      const insights = await getConsiderationInsights(period)
+      return {
+        csv: toCSV(
+          insights.demand.deviceRows.slice(0, opts.limit ?? 500).map((r, i) => ({
+            rank: i + 1,
+            device_slug: r.slug,
+            name: r.name,
+            brand: r.brandName,
+            status: r.status,
+            price_tier: r.priceTier,
+            saves: r.saves,
+            compares: r.compares,
+            watches: r.watches,
+            related_clicks: r.relatedClicks,
+            intent_score: r.intentScore,
+            intent_per_100_views: r.intentPerView,
+            views: r.views,
+            affiliate_clicks: r.clicks,
+            clicks_per_100_intent: r.intentToClick,
+            buy_links: r.buyLinkCount,
+            temperature: r.temperature,
+          })),
+        ),
+        filename: `consideration-funnel-${period}-${date}.csv`,
+      }
+    }
+    case 'consideration-queue': {
+      const insights = await getConsiderationInsights(period)
+      return {
+        csv: toCSV(
+          insights.action.fixQueue.map((item, i) => ({
+            rank: i + 1,
+            priority: item.severity,
+            issue: item.issue,
+            device_slug: item.slug ?? '',
+            pair: (item.pair ?? []).join(' + '),
+            device_name: item.name,
+            interest_at_stake: item.interest,
+            detail: item.detail,
+            action: item.action,
+          })),
+        ),
+        filename: `consideration-queue-${period}-${date}.csv`,
       }
     }
     case 'explore': {

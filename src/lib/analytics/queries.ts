@@ -7,6 +7,31 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 if (!supabaseUrl) throw new Error('Missing env var NEXT_PUBLIC_SUPABASE_URL')
 if (!supabaseServiceKey) throw new Error('Missing env var SUPABASE_SERVICE_ROLE_KEY')
 
+import {
+  type IntentAction,
+  type QualificationTier,
+  type FunnelStage,
+  type ConsiderationIssue,
+  INTENT_WEIGHTS,
+  AFFILIATE_CLICK_WEIGHT,
+  SIGNED_IN_BONUS,
+  qualificationTier,
+  CONSIDERATION_ISSUE_META,
+} from './consideration'
+
+export type {
+  IntentAction,
+  QualificationTier,
+  FunnelStage,
+  ConsiderationIssue,
+} from './consideration'
+export {
+  INTENT_WEIGHTS,
+  AFFILIATE_CLICK_WEIGHT,
+  SIGNED_IN_BONUS,
+  qualificationTier,
+} from './consideration'
+
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
 function periodToMs(period: string): number {
@@ -1342,16 +1367,20 @@ export const EXPLORE_METRICS: Array<{ id: string; label: string; table: string }
   { id: 'add_to_compare', label: 'Add to Compare', table: 'interactions' },
   { id: 'watches', label: 'Video Watches', table: 'interactions' },
   { id: 'related_clicks', label: 'Related-Device Clicks', table: 'interactions' },
+  { id: 'intent_score', label: 'Intent Score', table: 'interactions' },
 ]
 
 export const EXPLORE_DIMENSIONS: Array<{ id: string; label: string }> = [
   { id: 'date', label: 'Date (daily)' },
   { id: 'path', label: 'Page path' },
   { id: 'device', label: 'Device' },
+  { id: 'price_tier', label: 'Price tier' },
+  { id: 'category', label: 'Major category' },
   { id: 'retailer', label: 'Retailer' },
   { id: 'source_medium', label: 'Source / Medium' },
   { id: 'section', label: 'Content section' },
   { id: 'action', label: 'Intent action' },
+  { id: 'qualification_tier', label: 'Qualification tier' },
 ]
 
 const INTERACTION_ACTIONS = new Set(['saves', 'add_to_compare', 'watches', 'related_clicks'])
@@ -1384,16 +1413,59 @@ export async function runExploreQuery(input: {
   const since = sinceISO(period)
 
   const inInteractions = INTERACTION_ACTIONS.has(metric)
+  const isIntentScore = metric === 'intent_score'
+  const useInteractions = inInteractions || isIntentScore
+  const useQualification = dimension === 'qualification_tier'
+  const needsCatalog = dimension === 'price_tier' || dimension === 'category'
 
   let rows: Array<Record<string, unknown>> = []
   let rates = new Map<string, number>()
+  let catalogDims = new Map<string, { tier: string; category: string }>()
+  let fpQualification = new Map<string, QualificationTier>()
 
-  if (inInteractions) {
+  if (useInteractions) {
     const { data } = await supabase
       .from('interactions')
-      .select('action, content_type, device_slug, created_at, utm_source, utm_medium')
+      .select('action, content_type, device_slug, fp_id, user_id, created_at, utm_source, utm_medium')
       .gte('created_at', since)
     rows = data ?? []
+    if (useQualification) {
+      // Qualification needs the click weight (+2) and sign-in bonus (+2) per visitor.
+      const [{ data: clicks }] = await Promise.all([
+        supabase.from('affiliate_clicks').select('fp_id').gte('created_at', since).not('fp_id', 'is', null),
+      ])
+      const clickCounts = new Map<string, number>()
+      for (const c of clicks ?? []) {
+        const fp = String(c.fp_id ?? '')
+        if (fp) clickCounts.set(fp, (clickCounts.get(fp) ?? 0) + 1)
+      }
+      const signedIn = new Set<string>()
+      for (const r of rows) {
+        if (r.fp_id && r.user_id) signedIn.add(String(r.fp_id))
+      }
+      fpQualification = new Map<string, QualificationTier>()
+      const scoreOf = (fp: string): number => {
+        if (!fp) return 0
+        return (clickCounts.get(fp) ?? 0) * 2 + (signedIn.has(fp) ? 2 : 0)
+      }
+      for (const r of rows) {
+        const fp = String(r.fp_id ?? '')
+        if (fp && !fpQualification.has(fp)) {
+          const s = scoreOf(fp) + (INTENT_WEIGHTS[String(r.action ?? '') as IntentAction] ?? 0)
+          fpQualification.set(fp, qualificationTier(s))
+        }
+      }
+      // Re-score on the full visitor (intent + clicks + bonus) for accuracy.
+      const visitorTotals = new Map<string, number>()
+      for (const r of rows) {
+        const fp = String(r.fp_id ?? '')
+        if (!fp) continue
+        visitorTotals.set(fp, (visitorTotals.get(fp) ?? 0) + (INTENT_WEIGHTS[String(r.action ?? '') as IntentAction] ?? 0))
+      }
+      for (const [fp, base] of visitorTotals) {
+        fpQualification.set(fp, qualificationTier(base + (clickCounts.get(fp) ?? 0) * 2 + (signedIn.has(fp) ? 2 : 0)))
+      }
+    }
   } else if (metric === 'clicks' || metric === 'revenue_proxy') {
     const { data } = await supabase
       .from('affiliate_clicks')
@@ -1414,6 +1486,31 @@ export async function runExploreQuery(input: {
       .gte('created_at', since)
     rows = data ?? []
   }
+
+  // Catalog-aware dimensions (price tier / major category) need the slug → catalog
+  // map. Loaded lazily so the other dimensions keep their single round trip.
+  if (needsCatalog) {
+    const { data: catalog } = await supabase.from('devices').select('slug, price_tier, major_category')
+    catalogDims = new Map(
+      (catalog ?? []).map((d) => [
+        String(d.slug),
+        {
+          tier: d.price_tier ? String(d.price_tier) : '(unspecified)',
+          category: d.major_category ? String(d.major_category) : '(unspecified)',
+        },
+      ]),
+    )
+  }
+
+  const slugFromRow = (row: Record<string, unknown>): string => {
+    const explicit = row.device_slug ? String(row.device_slug) : ''
+    if (explicit) return explicit
+    const path = String(row.path ?? '')
+    if (!path.startsWith('/devices/')) return ''
+    const parts = path.replace('/devices/', '').split('/').filter(Boolean)
+    return parts[1] ?? parts[0] ?? ''
+  }
+
 const extract = (row: Record<string, unknown>): string => {
     const path = String(row.path ?? '')
     const createdAt = row.created_at ? new Date(String(row.created_at)).toISOString().split('T')[0] : ''
@@ -1442,6 +1539,16 @@ const extract = (row: Record<string, unknown>): string => {
       }
       case 'retailer':
         return retailer || '(retailer n/a)'
+      case 'price_tier': {
+        const slug = slugFromRow(row)
+        if (!slug) return '(non-device)'
+        return catalogDims.get(slug)?.tier ?? '(not in catalog)'
+      }
+      case 'category': {
+        const slug = slugFromRow(row)
+        if (!slug) return '(non-device)'
+        return catalogDims.get(slug)?.category ?? '(not in catalog)'
+      }
       case 'source_medium':
         return `${source ?? '(direct)'}${medium ? ` / ${medium}` : ''}`
       case 'section': {
@@ -1455,6 +1562,13 @@ const extract = (row: Record<string, unknown>): string => {
       }
       case 'action':
         return action || '(n/a)'
+      case 'qualification_tier': {
+        if (!useInteractions) return '(needs an intent metric)'
+        const fp = String(row.fp_id ?? '')
+        if (!fp) return '(anonymous)'
+        const tier = fpQualification.get(fp)
+        return tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : '(unscored)'
+      }
       default:
         return '(unknown)'
     }
@@ -1470,6 +1584,9 @@ const extract = (row: Record<string, unknown>): string => {
       if (!fp) continue
       if (!uniquePerBucket.has(label)) uniquePerBucket.set(label, new Set())
       uniquePerBucket.get(label)!.add(fp)
+    } else if (isIntentScore) {
+      const weight = INTENT_WEIGHTS[String(row.action ?? '') as IntentAction] ?? 0
+      if (weight > 0) buckets.set(label, (buckets.get(label) ?? 0) + weight)
     } else if (inInteractions) {
       const action = String(row.action ?? '')
       if (action !== metric) continue
@@ -1610,6 +1727,10 @@ export const SCHEDULED_EXPORT_REPORTS = [
   'qualified-leads',
   'earnings-reconciliation',
   'link-health',
+  'device-catalog',
+  'catalog-gaps',
+  'consideration-funnel',
+  'consideration-queue',
   'explore',
 ]
 
@@ -2637,3 +2758,1719 @@ export async function getContentInsights(period: string): Promise<ContentInsight
     topBySection,
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 8 — Devices & Catalog intelligence
+//
+// Canvas anchors: `Manage Digital Channels` (catalog entries ARE channel assets)
+// + `Manage Distribution & Marketing` (buy links = the distribution plane).
+//
+// The tab answers four questions, in order:
+//   A. Coverage   — can this catalog earn at all? (kpi_buy_fill, retailer reach)
+//   B. Demand     — which assets pull their weight? (tier/category/brand, Pareto)
+//   C. Leakage    — where does demand hit a dead end? (ghost demand, orphan paths)
+//   D. Action     — what to fix, ranked by views at risk (prescriptive queue)
+//
+// Everything is derived from tables that already exist (devices · brands ·
+// device_types · page_views · affiliate_clicks · interactions ·
+// link_health_checks · affiliate_commission_rates) — no new instrumentation,
+// no migration, no new cron. Pure-JS aggregation, same discipline as
+// getTrafficInsights / getContentInsights.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Where a device-page view lands, from a revenue point of view. */
+export type {
+  DeviceOutcome,
+  DeviceIssue,
+} from './deviceOutcome'
+export {
+  DEVICE_OUTCOME_ORDER,
+  DEVICE_OUTCOME_LABELS,
+  DEVICE_OUTCOME_COLORS,
+  DEVICE_OUTCOME_DESCRIPTIONS,
+  DEVICE_ISSUE_META,
+  DEVICE_ISSUE_SEVERITY_COLORS,
+  PRICE_TIER_ORDER,
+  BUYBOX_RETAILER_KEYS,
+  priceTierLabel,
+  majorCategoryLabel,
+  normaliseRetailer,
+  retailerLabel,
+} from './deviceOutcome'
+import {
+  type DeviceOutcome,
+  type DeviceIssue,
+  DEVICE_OUTCOME_ORDER,
+  DEVICE_OUTCOME_LABELS,
+  DEVICE_ISSUE_META,
+  PRICE_TIER_ORDER,
+  BUYBOX_RETAILER_KEYS,
+  priceTierLabel,
+  majorCategoryLabel,
+  normaliseRetailer,
+  retailerLabel,
+} from './deviceOutcome'
+
+function severityForViews(views: number): 'high' | 'medium' | 'low' {
+  if (views >= 50) return 'high'
+  if (views >= 10) return 'medium'
+  return 'low'
+}
+
+function sharePct(part: number, whole: number, decimals = 2): number {
+  if (whole <= 0) return 0
+  const factor = Math.pow(10, decimals)
+  return Math.round((part / whole) * 100 * factor) / factor
+}
+
+interface BuyLinkEntry {
+  retailer: string
+  url: string
+  price: string
+  priceDate: string
+}
+
+/** Internal, normalised catalog entry (one published or draft device). */
+interface CatalogEntry {
+  id: number | null
+  slug: string
+  name: string
+  brandSlug: string
+  brandName: string
+  status: string
+  priceTier: string
+  majorCategory: string
+  deviceType: string
+  availability: string | null
+  releaseYear: number | null
+  priceKes: number | null
+  buyLinks: BuyLinkEntry[]
+  hasImages: boolean
+  hasVerdict: boolean
+  hasScore: boolean
+  hasSeo: boolean
+  createdAt: string | null
+}
+
+/** One row of the catalog performance grid (demand per channel asset). */
+export interface DeviceCatalogRow {
+  slug: string
+  name: string
+  brandSlug: string
+  brandName: string
+  priceTier: string
+  majorCategory: string
+  deviceType: string
+  status: string
+  views: number
+  clicks: number
+  ctr: number
+  buyLinkCount: number
+  intentEvents: number
+  outcome: DeviceOutcome
+  href: string
+}
+
+/** One prescriptive row of the catalog fix queue (the loop-closer). */
+export interface DeviceFixQueueItem {
+  slug: string | null
+  path: string | null
+  name: string
+  brandSlug: string
+  issue: DeviceIssue
+  label: string
+  action: string
+  detail: string
+  viewsAtRisk: number
+  severity: 'high' | 'medium' | 'low'
+  href: string | null
+  editHref: string | null
+}
+
+export interface DeviceInsights {
+  /** A. Coverage — can the catalog earn at all? */
+  catalog: {
+    total: number
+    published: number
+    draft: number
+    publishRatePct: number
+    withBuyLink: number
+    withoutBuyLink: number
+    buyLinkTotal: number
+    /** kpi_buy_fill — % of published devices with ≥1 valid buy link. */
+    fillRatePct: number
+    retailersUsed: number
+    linksPerMonetisedDevice: number
+    linkCountBuckets: Array<{ label: string; devices: number }>
+    readiness: Array<{ key: string; label: string; covered: number; total: number; pct: number }>
+    priceFreshness: Array<{ label: string; links: number; sharePct: number }>
+    avgPriceKes: number | null
+    newestPublishedAt: string | null
+  }
+  /** A2. Distribution — the retailer plane + link-health census. */
+  distribution: {
+    retailerCoverage: Array<{ retailer: string; label: string; devices: number; sharePct: number }>
+    retailerTierMatrix: {
+      tiers: string[]
+      tierLabels: string[]
+      rows: Array<{ retailer: string; label: string; counts: number[]; total: number }>
+      maxCell: number
+    }
+    retailerTaxonomy: Array<{
+      retailer: string
+      label: string
+      inCatalog: boolean
+      inClicks: boolean
+      inCommission: boolean
+      buyBoxRenders: boolean
+      clicks: number
+      mismatch: boolean
+      note: string
+    }>
+    linkHealth: {
+      checked: number
+      ok: number
+      broken: number
+      unhealthyPct: number
+      uncheckedLive: number
+      orphanChecks: number
+      lastCheckedAt: string | null
+    }
+  }
+  /** B. Demand — which assets pull their weight? */
+  demand: {
+    totals: {
+      deviceViews: number
+      deviceClicks: number
+      ctr: number
+      devicesWithViews: number
+      devicesWithoutViews: number
+      publishedWithoutViews: number
+      viewsPerDevice: number
+    }
+    deviceRows: DeviceCatalogRow[]
+    byTier: Array<{
+      tier: string
+      label: string
+      devices: number
+      views: number
+      clicks: number
+      ctr: number
+      viewsPerDevice: number
+      monetisedSharePct: number
+    }>
+    byCategory: Array<{ category: string; label: string; devices: number; views: number; clicks: number; ctr: number }>
+    byBrand: Array<{
+      brandSlug: string
+      brandName: string
+      devices: number
+      views: number
+      clicks: number
+      ctr: number
+      coveragePct: number
+    }>
+    concentration: Array<{ rank: number; slug: string; label: string; views: number; sharePct: number; cumulativePct: number }>
+    /** How many devices it takes to reach 80% of device views (head of the catalog). */
+    paretoIndex: number | null
+    topDeviceSharePct: number
+    top10SharePct: number
+    heatmap: Array<{ bucket: string; tiers: Record<string, number>; total: number }>
+    heatmapTiers: string[]
+    heatmapTierLabels: string[]
+  }
+  /** C. Leakage — where does demand hit a dead end? */
+  leakage: {
+    flow: { nodes: Array<{ name: string }>; links: Array<{ source: number; target: number; value: number }> }
+    outcomes: Array<{ outcome: DeviceOutcome; label: string; views: number; sharePct: number }>
+    monetisedViews: number
+    wastedViews: number
+    wastedPct: number
+    monetisedSharePct: number
+    orphanPaths: Array<{ path: string; slug: string; views: number }>
+    fixQueue: DeviceFixQueueItem[]
+  }
+}
+
+/**
+ * Devices & Catalog analytics — one aggregator for the whole tab.
+ *
+ * @param period '7d' | '30d' | '90d'
+ */
+export async function getDeviceInsights(period: string): Promise<DeviceInsights> {
+  const since = sinceISO(period)
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30
+  const dayMs = 86400000
+  const nowMs = Date.now()
+  const sinceMs = nowMs - days * dayMs
+
+  // 1) Load the four planes in parallel — catalog, audience, clicks, distribution.
+  const [deviceRes, typeRes, viewRes, clickRes, rateRes, healthRes, interactionRes] = await Promise.all([
+    supabase
+      .from('devices')
+      .select(
+        'id, slug, name, status, price_tier, major_category, device_type_id, availability, release_year, price_kes, images, verdict_pros, verdict_bottom_line, scores_overall, seo_title, buy_links, created_at, brand:brands(slug, name)',
+      ),
+    supabase.from('device_types').select('id, label, slug'),
+    supabase.from('page_views').select('path, created_at').gte('created_at', since).like('path', '/devices/%'),
+    supabase.from('affiliate_clicks').select('device_slug, retailer').gte('created_at', since),
+    supabase.from('affiliate_commission_rates').select('retailer'),
+    supabase
+      .from('link_health_checks')
+      .select('device_slug, retailer, url, status_code, ok, checked_at')
+      .order('checked_at', { ascending: false })
+      .limit(4000),
+    supabase.from('interactions').select('action, device_slug').gte('created_at', since),
+  ])
+
+  const typeById = new Map<number, string>()
+  for (const t of typeRes.data ?? []) typeById.set(Number(t.id), String(t.label ?? t.slug ?? ''))
+
+  // 2) Normalise the catalog. A buy link only counts when it carries a real
+  //    http URL — a row with a retailer but no URL can be neither clicked nor
+  //    HEAD-checked, so it is not distribution coverage.
+  const catalog: CatalogEntry[] = (deviceRes.data ?? []).map((d) => {
+    const brandRaw = d.brand as { slug?: string; name?: string } | Array<{ slug?: string; name?: string }> | null
+    const brand = Array.isArray(brandRaw) ? brandRaw[0] : brandRaw
+    const rawLinks = Array.isArray(d.buy_links) ? (d.buy_links as Array<Record<string, unknown>>) : []
+    const buyLinks: BuyLinkEntry[] = []
+    for (const l of rawLinks) {
+      const retailer = String(l?.retailer ?? '').trim()
+      const url = String(l?.url ?? '').trim()
+      if (!retailer || !url.startsWith('http')) continue
+      buyLinks.push({
+        retailer,
+        url,
+        price: l?.price === undefined || l?.price === null ? '' : String(l.price),
+        priceDate: l?.priceDate ? String(l.priceDate) : '',
+      })
+    }
+    const pros = Array.isArray(d.verdict_pros) ? d.verdict_pros : []
+    const images = Array.isArray(d.images) ? d.images : []
+    const brandSlug = String(brand?.slug ?? '')
+    return {
+      id: d.id === null || d.id === undefined ? null : Number(d.id),
+      slug: String(d.slug ?? ''),
+      name: String(d.name ?? d.slug ?? ''),
+      brandSlug,
+      brandName: String(brand?.name ?? (brandSlug ? titleCaseSlug(brandSlug) : 'Unknown brand')),
+      status: String(d.status ?? 'draft'),
+      priceTier: d.price_tier ? String(d.price_tier) : 'unspecified',
+      majorCategory: d.major_category ? String(d.major_category) : 'unspecified',
+      deviceType: typeById.get(Number(d.device_type_id)) ?? 'Unspecified',
+      availability: d.availability ? String(d.availability) : null,
+      releaseYear: d.release_year === null || d.release_year === undefined ? null : Number(d.release_year),
+      priceKes: d.price_kes === null || d.price_kes === undefined ? null : Number(d.price_kes),
+      buyLinks,
+      hasImages: images.length > 0,
+      hasVerdict: pros.length > 0 || Boolean(d.verdict_bottom_line),
+      hasScore: Number(d.scores_overall ?? 0) > 0,
+      hasSeo: Boolean(d.seo_title),
+      createdAt: d.created_at ? String(d.created_at) : null,
+    }
+  })
+
+  const bySlug = new Map<string, CatalogEntry>()
+  for (const entry of catalog) if (entry.slug) bySlug.set(entry.slug, entry)
+
+  // 3) Audience: device-page views by slug (plus the day, for the heatmap) and
+  //    the brand slug actually observed in the URL — a mismatch is a 404.
+  const viewsBySlug = new Map<string, number>()
+  const dayViewsBySlug = new Map<string, Map<string, number>>()
+  const pathViews = new Map<string, number>()
+  const observedBrand = new Map<string, string>()
+  let deviceViews = 0
+  for (const row of viewRes.data ?? []) {
+    const path = String(row.path ?? '')
+    const parts = path.replace('/devices/', '').split('/').filter(Boolean)
+    const pathBrand = parts[0] ?? ''
+    const slug = parts[1] ?? parts[0] ?? ''
+    if (!slug) continue
+    deviceViews++
+    pathViews.set(path, (pathViews.get(path) ?? 0) + 1)
+    viewsBySlug.set(slug, (viewsBySlug.get(slug) ?? 0) + 1)
+    if (pathBrand && !observedBrand.has(slug)) observedBrand.set(slug, pathBrand)
+    const day = new Date(String(row.created_at)).toISOString().split('T')[0]
+    const perDay = dayViewsBySlug.get(slug) ?? new Map<string, number>()
+    perDay.set(day, (perDay.get(day) ?? 0) + 1)
+    dayViewsBySlug.set(slug, perDay)
+  }
+
+  // 4) Conversion + intent signals.
+  const clicksBySlug = new Map<string, number>()
+  const clicksByRetailer = new Map<string, number>()
+  const rawRetailerVariants = new Map<string, Set<string>>()
+  let deviceClicks = 0
+  for (const row of clickRes.data ?? []) {
+    deviceClicks++
+    const slug = String(row.device_slug ?? '')
+    const raw = String(row.retailer ?? '').trim()
+    const retailer = normaliseRetailer(raw)
+    if (slug) clicksBySlug.set(slug, (clicksBySlug.get(slug) ?? 0) + 1)
+    if (retailer) {
+      clicksByRetailer.set(retailer, (clicksByRetailer.get(retailer) ?? 0) + 1)
+      const set = rawRetailerVariants.get(retailer) ?? new Set<string>()
+      set.add(raw)
+      rawRetailerVariants.set(retailer, set)
+    }
+  }
+  const intentBySlug = new Map<string, number>()
+  for (const row of interactionRes.data ?? []) {
+    const slug = String(row.device_slug ?? '')
+    if (slug) intentBySlug.set(slug, (intentBySlug.get(slug) ?? 0) + 1)
+  }
+
+  // 5) Resolve what a device-page view actually lands on. Order matters: a
+  //    wrong brand slug 404s even though the slug exists, so it stays "stale".
+  const outcomeForSlug = (slug: string): DeviceOutcome => {
+    const entry = bySlug.get(slug)
+    if (!entry) return 'missing'
+    const seen = observedBrand.get(slug)
+    if (seen && entry.brandSlug && seen !== entry.brandSlug) return 'missing'
+    if (entry.status !== 'published') return 'unpublished'
+    return entry.buyLinks.length > 0 ? 'monetised' : 'live_no_buylink'
+  }
+
+  // ── A. COVERAGE — can the catalog earn at all? ────────────────────────────
+  const publishedEntries = catalog.filter((e) => e.status === 'published')
+  const monetisedEntries = publishedEntries.filter((e) => e.buyLinks.length > 0)
+  const buyLinkTotal = publishedEntries.reduce((sum, e) => sum + e.buyLinks.length, 0)
+  const pricedEntries = publishedEntries.filter((e) => (e.priceKes ?? 0) > 0)
+
+  const linkCountBuckets = [
+    { label: 'No link', devices: publishedEntries.length - monetisedEntries.length },
+    { label: '1 link', devices: publishedEntries.filter((e) => e.buyLinks.length === 1).length },
+    { label: '2–3 links', devices: publishedEntries.filter((e) => e.buyLinks.length >= 2 && e.buyLinks.length <= 3).length },
+    { label: '4+ links', devices: publishedEntries.filter((e) => e.buyLinks.length >= 4).length },
+  ]
+
+  // Catalog readiness — every published asset must carry the fields that make
+  // it findable (SEO), trustworthy (verdict, score, images) and clickable (price, buy link).
+  const readiness = (
+    [
+      { key: 'buy_link', label: 'Buy link', covered: monetisedEntries.length },
+      { key: 'images', label: 'Images', covered: publishedEntries.filter((e) => e.hasImages).length },
+      { key: 'price', label: 'Price (KES)', covered: pricedEntries.length },
+      { key: 'verdict', label: 'Verdict', covered: publishedEntries.filter((e) => e.hasVerdict).length },
+      { key: 'score', label: 'Score', covered: publishedEntries.filter((e) => e.hasScore).length },
+      { key: 'seo', label: 'SEO title', covered: publishedEntries.filter((e) => e.hasSeo).length },
+    ] satisfies Array<{ key: string; label: string; covered: number }>
+  ).map((row) => ({
+    ...row,
+    total: publishedEntries.length,
+    pct: sharePct(row.covered, publishedEntries.length, 0),
+  }))
+
+  // Price freshness — a buy box quoting a three-month-old price loses the click
+  // it just earned. Buckets come from buy_links[].priceDate (catalogue-owned).
+  const freshness = { '0–30d': 0, '31–90d': 0, '91d+': 0, 'No price date': 0 }
+  for (const entry of publishedEntries) {
+    for (const link of entry.buyLinks) {
+      const parsed = Date.parse(link.priceDate)
+      if (!link.priceDate || Number.isNaN(parsed)) {
+        freshness['No price date']++
+        continue
+      }
+      const ageDays = Math.floor((nowMs - parsed) / dayMs)
+      if (ageDays <= 30) freshness['0–30d']++
+      else if (ageDays <= 90) freshness['31–90d']++
+      else freshness['91d+']++
+    }
+  }
+  const priceFreshness = Object.entries(freshness).map(([label, links]) => ({
+    label,
+    links,
+    sharePct: sharePct(links, buyLinkTotal, 1),
+  }))
+
+  const retailersUsed = new Set<string>()
+  for (const entry of publishedEntries) for (const link of entry.buyLinks) retailersUsed.add(normaliseRetailer(link.retailer))
+
+  const publishedDates = publishedEntries
+    .map((e) => (e.createdAt ? Date.parse(e.createdAt) : Number.NaN))
+    .filter((t) => Number.isFinite(t))
+
+  // ── A2. DISTRIBUTION — the retailer plane ────────────────────────────────
+  // Retailer coverage is a catalog census (how many published devices can be
+  // bought through each retailer), then broken down by price tier so an
+  // unmonetised tier shows up as a blank column rather than a hidden zero.
+  const coverageByRetailer = new Map<string, Set<string>>()
+  for (const entry of publishedEntries) {
+    for (const link of entry.buyLinks) {
+      const retailer = normaliseRetailer(link.retailer)
+      const set = coverageByRetailer.get(retailer) ?? new Set<string>()
+      set.add(entry.slug)
+      coverageByRetailer.set(retailer, set)
+    }
+  }
+
+  const presentTiers = PRICE_TIER_ORDER.filter((t) => publishedEntries.some((e) => e.priceTier === t))
+  const tiers: string[] =
+    presentTiers.length > 0 ? [...presentTiers] : [...PRICE_TIER_ORDER]
+  if (publishedEntries.some((e) => e.priceTier === 'unspecified')) tiers.push('unspecified')
+
+  const matrixRetailers = Array.from(
+    new Set([
+      ...Array.from(coverageByRetailer.keys()),
+      ...Array.from(clicksByRetailer.keys()),
+      ...(rateRes.data ?? []).map((r) => normaliseRetailer(String(r.retailer ?? ''))),
+    ]),
+  ).filter(Boolean)
+
+  const retailerTierRows = matrixRetailers
+    .map((retailer) => {
+      const counts = tiers.map(
+        (tier) =>
+          publishedEntries.filter(
+            (e) => e.priceTier === tier && e.buyLinks.some((l) => normaliseRetailer(l.retailer) === retailer),
+          ).length,
+      )
+      return { retailer, label: retailerLabel(retailer), counts, total: counts.reduce((a, b) => a + b, 0) }
+    })
+    .sort((a, b) => b.total - a.total || (clicksByRetailer.get(b.retailer) ?? 0) - (clicksByRetailer.get(a.retailer) ?? 0))
+
+  const maxCell = Math.max(1, ...retailerTierRows.flatMap((r) => r.counts))
+
+  // ── Retailer taxonomy reconciliation ─────────────────────────────────────
+  // Case variants are collected too: click rows written before the lowercase
+  // convention (e.g. "Jumia") never match the lowercase rate sheet, so the
+  // revenue proxy silently weights them 0.
+  const catalogRetailerVariants = new Map<string, Set<string>>()
+  for (const entry of catalog) {
+    for (const link of entry.buyLinks) {
+      const key = normaliseRetailer(link.retailer)
+      const set = catalogRetailerVariants.get(key) ?? new Set<string>()
+      set.add(link.retailer)
+      catalogRetailerVariants.set(key, set)
+    }
+  }
+  const clickRetailers = new Set(clicksByRetailer.keys())
+  const commissionRetailers = new Set((rateRes.data ?? []).map((r) => normaliseRetailer(String(r.retailer ?? ''))))
+
+  const retailerTaxonomy = Array.from(
+    new Set([...catalogRetailerVariants.keys(), ...clickRetailers, ...commissionRetailers, ...BUYBOX_RETAILER_KEYS]),
+  )
+    .filter(Boolean)
+    .map((retailer) => {
+      const catalogVariants = catalogRetailerVariants.get(retailer) ?? new Set<string>()
+      const clickVariants = rawRetailerVariants.get(retailer) ?? new Set<string>()
+      const allVariants = new Set<string>([...catalogVariants, ...clickVariants])
+      const inCatalog = catalogVariants.size > 0
+      const inClicks = clickRetailers.has(retailer)
+      const inCommission = commissionRetailers.has(retailer)
+      const buyBoxRenders = BUYBOX_RETAILER_KEYS.includes(retailer)
+      // Any stored spelling other than the canonical lowercase key is a hazard:
+      // /api/out matches retailers case-sensitively and the rate sheet is lowercase.
+      const caseMismatch = Array.from(allVariants).some((v) => v !== retailer)
+      const notes: string[] = []
+      if (!buyBoxRenders) notes.push('buy box renders "Other"')
+      if (!inCommission) notes.push('no rate — proxy weights clicks 0')
+      if (caseMismatch) notes.push(`case mismatch (${Array.from(allVariants).join(' / ')})`)
+      if (!inCatalog && inClicks) notes.push('clicks with no catalog link')
+      if (notes.length === 0) notes.push('registries agree')
+      return {
+        retailer,
+        label: retailerLabel(retailer),
+        inCatalog,
+        inClicks,
+        inCommission,
+        buyBoxRenders,
+        clicks: clicksByRetailer.get(retailer) ?? 0,
+        mismatch: !buyBoxRenders || !inCommission || caseMismatch || (!inCatalog && inClicks),
+        note: notes.join(' · '),
+      }
+    })
+    .sort((a, b) => b.clicks - a.clicks || Number(b.mismatch) - Number(a.mismatch) || a.retailer.localeCompare(b.retailer))
+
+  // ── Link-health census ───────────────────────────────────────────────────
+  // Three numbers matter: what the cron checked, what it has never seen (blind
+  // spots on live buy links) and what it still checks but the catalog dropped.
+  const liveUrls = new Set<string>()
+  for (const entry of catalog) for (const link of entry.buyLinks) liveUrls.add(link.url)
+
+  const checkedUrls = new Set<string>()
+  const brokenBySlug = new Map<string, { retailer: string; url: string; statusCode: number | null }>()
+  let okUrls = 0
+  let brokenUrls = 0
+  let lastCheckedAt: string | null = null
+  for (const row of healthRes.data ?? []) {
+    const url = String(row.url ?? '')
+    if (!url) continue
+    const checkedAt = row.checked_at ? new Date(String(row.checked_at)).toISOString() : null
+    if (checkedAt && (!lastCheckedAt || checkedAt > lastCheckedAt)) lastCheckedAt = checkedAt
+    if (checkedUrls.has(url)) continue
+    checkedUrls.add(url)
+    if (row.ok) {
+      okUrls++
+    } else {
+      brokenUrls++
+      const slug = String(row.device_slug ?? '')
+      if (slug && !brokenBySlug.has(slug)) {
+        brokenBySlug.set(slug, {
+          retailer: String(row.retailer ?? ''),
+          url,
+          statusCode: row.status_code === null || row.status_code === undefined ? null : Number(row.status_code),
+        })
+      }
+    }
+  }
+
+  // __DEVICE_INSIGHTS_NEXT__
+
+  // ── B. DEMAND — which assets pull their weight? ──────────────────────────
+  const deviceRows: DeviceCatalogRow[] = catalog
+    .map((entry) => {
+      const views = viewsBySlug.get(entry.slug) ?? 0
+      const clicks = clicksBySlug.get(entry.slug) ?? 0
+      return {
+        slug: entry.slug,
+        name: entry.name,
+        brandSlug: entry.brandSlug,
+        brandName: entry.brandName,
+        priceTier: entry.priceTier,
+        majorCategory: entry.majorCategory,
+        deviceType: entry.deviceType,
+        status: entry.status,
+        views,
+        clicks,
+        ctr: views > 0 ? sharePct(clicks, views) : 0,
+        buyLinkCount: entry.buyLinks.length,
+        intentEvents: intentBySlug.get(entry.slug) ?? 0,
+        outcome: outcomeForSlug(entry.slug),
+        href: entry.brandSlug ? `/devices/${entry.brandSlug}/${entry.slug}` : `/devices/${entry.slug}`,
+      }
+    })
+    .sort((a, b) => b.views - a.views || b.clicks - a.clicks || a.name.localeCompare(b.name))
+
+  const devicesWithViews = deviceRows.filter((r) => r.views > 0).length
+  const publishedWithoutViews = publishedEntries.filter((e) => (viewsBySlug.get(e.slug) ?? 0) === 0).length
+
+  // Aggregate a set of devices into one demand row (views, clicks, CTR, monetised share).
+  const aggregate = (entries: CatalogEntry[]) => {
+    const views = entries.reduce((sum, e) => sum + (viewsBySlug.get(e.slug) ?? 0), 0)
+    const clicks = entries.reduce((sum, e) => sum + (clicksBySlug.get(e.slug) ?? 0), 0)
+    const monetisedViews = entries
+      .filter((e) => outcomeForSlug(e.slug) === 'monetised')
+      .reduce((sum, e) => sum + (viewsBySlug.get(e.slug) ?? 0), 0)
+    return {
+      devices: entries.length,
+      views,
+      clicks,
+      ctr: views > 0 ? sharePct(clicks, views) : 0,
+      viewsPerDevice: entries.length > 0 ? Math.round((views / entries.length) * 10) / 10 : 0,
+      monetisedSharePct: sharePct(monetisedViews, views, 1),
+    }
+  }
+
+  const tierKeys = Array.from(new Set(deviceRows.map((r) => r.priceTier)))
+  const orderedTiers = [
+    ...PRICE_TIER_ORDER.filter((t) => tierKeys.includes(t)),
+    ...tierKeys.filter((t) => !(PRICE_TIER_ORDER as readonly string[]).includes(t)).sort(),
+  ]
+  const byTier = orderedTiers.map((tier) => {
+    const entries = catalog.filter((e) => e.priceTier === tier)
+    return { tier, label: priceTierLabel(tier), ...aggregate(entries) }
+  })
+
+  const categoryKeys = Array.from(new Set(deviceRows.map((r) => r.majorCategory)))
+  const byCategory = categoryKeys
+    .map((category) => {
+      const entries = catalog.filter((e) => e.majorCategory === category)
+      const agg = aggregate(entries)
+      return { category, label: majorCategoryLabel(category), devices: agg.devices, views: agg.views, clicks: agg.clicks, ctr: agg.ctr }
+    })
+    .sort((a, b) => b.views - a.views || b.devices - a.devices)
+
+  const brandKeys = Array.from(new Set(catalog.map((e) => e.brandSlug))).filter(Boolean)
+  const byBrand = brandKeys
+    .map((brandSlug) => {
+      const entries = catalog.filter((e) => e.brandSlug === brandSlug)
+      const published = entries.filter((e) => e.status === 'published')
+      const agg = aggregate(entries)
+      const monetised = published.filter((e) => e.buyLinks.length > 0).length
+      return {
+        brandSlug,
+        brandName: entries[0]?.brandName ?? titleCaseSlug(brandSlug),
+        devices: agg.devices,
+        views: agg.views,
+        clicks: agg.clicks,
+        ctr: agg.ctr,
+        coveragePct: sharePct(monetised, published.length, 0),
+      }
+    })
+    .sort((a, b) => b.views - a.views || b.devices - a.devices)
+    .slice(0, 12)
+
+  // __DEVICE_INSIGHTS_NEXT2__
+
+  // ── Concentration (Pareto) ───────────────────────────────────────────────
+  // How few pages carry the whole catalog. Head-heavy is normal; a long tail
+  // of zero-view published pages is the signal that matters.
+  const listed = deviceRows.filter((r) => r.views > 0)
+  const listedViews = listed.reduce((sum, r) => sum + r.views, 0)
+  let paretoIndex: number | null = null
+  {
+    let running = 0
+    for (let i = 0; i < listed.length; i++) {
+      running += listed[i].views
+      if (paretoIndex === null && listedViews > 0 && running >= listedViews * 0.8) paretoIndex = i + 1
+    }
+  }
+  let cumulativeViews = 0
+  const concentration = listed.slice(0, 12).map((row, i) => {
+    cumulativeViews += row.views
+    return {
+      rank: i + 1,
+      slug: row.slug,
+      label: row.name,
+      views: row.views,
+      sharePct: sharePct(row.views, listedViews, 1),
+      cumulativePct: sharePct(cumulativeViews, listedViews, 1),
+    }
+  })
+  const top10Views = listed.slice(0, 10).reduce((sum, r) => sum + r.views, 0)
+
+  // ── Demand rhythm heatmap (bucket × price tier) ───────────────────────────
+  // Same recipe as the Content tab's section momentum, but keyed by the
+  // catalog's own dimension — where attention moves across the price ladder.
+  const bucketSize = days === 7 ? 1 : 7
+  const heatmap: DeviceInsights['demand']['heatmap'] = []
+  for (let start = sinceMs; start <= nowMs; start += bucketSize * dayMs) {
+    const bucketStart = new Date(start)
+    const isoStart = bucketStart.toISOString().split('T')[0]
+    const isoEnd = new Date(start + (bucketSize - 1) * dayMs).toISOString().split('T')[0]
+    const tierValues: Record<string, number> = {}
+    for (const tier of orderedTiers) tierValues[tier] = 0
+    for (const entry of catalog) {
+      const perDay = dayViewsBySlug.get(entry.slug)
+      if (!perDay) continue
+      for (const [day, count] of perDay) {
+        if (day >= isoStart && day <= isoEnd) tierValues[entry.priceTier] = (tierValues[entry.priceTier] ?? 0) + count
+      }
+    }
+    heatmap.push({
+      bucket: `${bucketStart.getMonth() + 1}/${bucketStart.getDate()}`,
+      tiers: tierValues,
+      total: Object.values(tierValues).reduce((a, b) => a + b, 0),
+    })
+  }
+
+  // __DEVICE_INSIGHTS_NEXT3__
+
+  // ── C. LEAKAGE — where does demand hit a dead end? ───────────────────────
+  const outcomeViews: Record<DeviceOutcome, number> = {
+    monetised: 0,
+    live_no_buylink: 0,
+    unpublished: 0,
+    missing: 0,
+  }
+  for (const [slug, views] of Array.from(viewsBySlug.entries())) {
+    outcomeViews[outcomeForSlug(slug)] += views
+  }
+  const outcomeOrder: DeviceOutcome[] = DEVICE_OUTCOME_ORDER
+  const outcomes = outcomeOrder.map((outcome) => ({
+    outcome,
+    label: DEVICE_OUTCOME_LABELS[outcome],
+    views: outcomeViews[outcome],
+    sharePct: sharePct(outcomeViews[outcome], deviceViews, 1),
+  }))
+
+  // Ghost-demand flow: brand → outcome. A Sankey because the point is the
+  // ribbon width: how much of each brand's demand survives to a live buy link.
+  const brandViews = new Map<string, number>()
+  const viewsBySlugPath = new Map<string, { path: string; views: number; slug: string }>()
+  for (const [slug, views] of Array.from(viewsBySlug.entries())) {
+    const entry = bySlug.get(slug)
+    const brand = entry?.brandName ?? 'Not in catalog'
+    brandViews.set(brand, (brandViews.get(brand) ?? 0) + views)
+    const observed = observedBrand.get(slug)
+    viewsBySlugPath.set(slug, { path: observed ? `/devices/${observed}/${slug}` : `/devices/${slug}`, views, slug })
+  }
+  const rankedBrands = Array.from(brandViews.entries()).sort((a, b) => b[1] - a[1])
+  const flowBrands =
+    rankedBrands.length > 6 ? [...rankedBrands.slice(0, 6).map(([name]) => name), 'Other brands'] : rankedBrands.map(([name]) => name)
+
+  const flowNodes = [...flowBrands, ...outcomeOrder.map((o) => DEVICE_OUTCOME_LABELS[o])].map((name) => ({ name }))
+  const flowValue = new Map<string, number>()
+  for (const [slug, views] of Array.from(viewsBySlug.entries())) {
+    const entry = bySlug.get(slug)
+    const brandRaw = entry?.brandName ?? 'Not in catalog'
+    const brand = flowBrands.includes(brandRaw) ? brandRaw : 'Other brands'
+    const key = `${brand}||${outcomeForSlug(slug)}`
+    flowValue.set(key, (flowValue.get(key) ?? 0) + views)
+  }
+  const flowLinks: Array<{ source: number; target: number; value: number }> = []
+  for (const [key, value] of Array.from(flowValue.entries())) {
+    const [brand, outcome] = key.split('||')
+    const source = flowNodes.findIndex((n) => n.name === brand)
+    const target = flowNodes.findIndex((n) => n.name === DEVICE_OUTCOME_LABELS[outcome as DeviceOutcome])
+    if (source === -1 || target === -1 || value <= 0) continue
+    flowLinks.push({ source, target, value })
+  }
+
+  // Device paths that match no catalog row (or the wrong brand slug) — pure
+  // 404 traffic. This is the "ghost demand" list.
+  const orphanPaths = Array.from(viewsBySlugPath.values())
+    .filter(({ slug }) => !bySlug.has(slug))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 10)
+
+  // __DEVICE_INSIGHTS_NEXT4__
+
+  // ── D. ACTION — the prescriptive fix queue ───────────────────────────────
+  // One row per (device, issue), ranked by the views currently at risk, so the
+  // ticket order is the revenue order. This is the loop-closer the plan asks
+  // for: an analytics output that becomes a concrete catalog action.
+  const fixQueue: DeviceFixQueueItem[] = []
+  const queueSeen = new Set<string>()
+  const pushFix = (
+    issue: DeviceIssue,
+    opts: {
+      slug: string | null
+      path?: string | null
+      name: string
+      brandSlug: string
+      viewsAtRisk: number
+      detail: string
+      href: string | null
+      editHref: string | null
+    },
+  ) => {
+    const key = `${issue}::${opts.slug ?? opts.path ?? opts.name}`
+    if (queueSeen.has(key)) return
+    queueSeen.add(key)
+    fixQueue.push({
+      slug: opts.slug,
+      path: opts.path ?? null,
+      name: opts.name,
+      brandSlug: opts.brandSlug,
+      issue,
+      label: DEVICE_ISSUE_META[issue].label,
+      action: DEVICE_ISSUE_META[issue].action,
+      detail: opts.detail,
+      viewsAtRisk: opts.viewsAtRisk,
+      severity: severityForViews(opts.viewsAtRisk),
+      href: opts.href,
+      editHref: opts.editHref,
+    })
+  }
+
+  // 1) Traffic that lands on a page which cannot convert.
+  for (const [slug, views] of Array.from(viewsBySlug.entries())) {
+    const outcome = outcomeForSlug(slug)
+    if (outcome === 'monetised') continue
+    const entry = bySlug.get(slug)
+    const observed = observedBrand.get(slug)
+    const path = observed ? `/devices/${observed}/${slug}` : `/devices/${slug}`
+    if (outcome === 'unpublished') {
+      pushFix('unpublished_but_trafficked', {
+        slug,
+        path,
+        name: entry?.name ?? slug,
+        brandSlug: entry?.brandSlug ?? '',
+        viewsAtRisk: views,
+        detail: `${views.toLocaleString()} views · catalog status "${entry?.status ?? 'unknown'}" — the page 404s`,
+        href: null,
+        editHref: entry?.id ? `/admin/devices/${entry.id}/edit` : null,
+      })
+    } else if (outcome === 'missing') {
+      pushFix('stale_slug', {
+        slug,
+        path,
+        name: entry?.name ?? titleCaseSlug(slug),
+        brandSlug: entry?.brandSlug ?? observed ?? '',
+        viewsAtRisk: views,
+        detail: entry
+          ? `${views.toLocaleString()} views · path brand "${observed}" does not match catalog brand "${entry.brandSlug}"`
+          : `${views.toLocaleString()} views · no catalog row for this slug`,
+        href: null,
+        editHref: entry?.id ? `/admin/devices/${entry.id}/edit` : null,
+      })
+    } else {
+      pushFix('no_buy_link', {
+        slug,
+        path,
+        name: entry?.name ?? slug,
+        brandSlug: entry?.brandSlug ?? '',
+        viewsAtRisk: views,
+        detail: `${views.toLocaleString()} views · live page with 0 buy links`,
+        href: entry?.brandSlug ? `/devices/${entry.brandSlug}/${slug}` : null,
+        editHref: entry?.id ? `/admin/devices/${entry.id}/edit` : null,
+      })
+    }
+  }
+
+  // 2) Published pages nobody links to yet — a different failure from a page
+  //    people visit and cannot buy from, so it stays in the queue at low risk.
+  for (const entry of publishedEntries) {
+    if (entry.buyLinks.length > 0) continue
+    pushFix('no_buy_link', {
+      slug: entry.slug,
+      name: entry.name,
+      brandSlug: entry.brandSlug,
+      viewsAtRisk: viewsBySlug.get(entry.slug) ?? 0,
+      detail: 'Published with 0 buy links — no views yet either',
+      href: entry.brandSlug ? `/devices/${entry.brandSlug}/${entry.slug}` : null,
+      editHref: entry.id ? `/admin/devices/${entry.id}/edit` : null,
+    })
+  }
+
+  // 3) Dead retailer URLs found by the link-health cron.
+  for (const [slug, broken] of Array.from(brokenBySlug.entries())) {
+    const entry = bySlug.get(slug)
+    pushFix('broken_link', {
+      slug,
+      name: entry?.name ?? titleCaseSlug(slug),
+      brandSlug: entry?.brandSlug ?? '',
+      viewsAtRisk: viewsBySlug.get(slug) ?? 0,
+      detail: `${retailerLabel(broken.retailer)} link returned ${broken.statusCode ?? 'no response'}`,
+      href: entry?.brandSlug ? `/devices/${entry.brandSlug}/${slug}` : null,
+      editHref: entry?.id ? `/admin/devices/${entry.id}/edit` : null,
+    })
+  }
+
+  // 4) Buy links that will under-sell the click: stale or missing prices.
+  for (const entry of publishedEntries) {
+    if (entry.buyLinks.length === 0) continue
+    const views = viewsBySlug.get(entry.slug) ?? 0
+    const stale = entry.buyLinks.find((l) => {
+      const parsed = Date.parse(l.priceDate)
+      return Boolean(l.priceDate) && Number.isFinite(parsed) && (nowMs - parsed) / dayMs > 90
+    })
+    if (stale) {
+      const ageDays = Math.floor((nowMs - Date.parse(stale.priceDate)) / dayMs)
+      pushFix('stale_price', {
+        slug: entry.slug,
+        name: entry.name,
+        brandSlug: entry.brandSlug,
+        viewsAtRisk: views,
+        detail: `${retailerLabel(stale.retailer)} price dated ${stale.priceDate} (${ageDays}d old)`,
+        href: entry.brandSlug ? `/devices/${entry.brandSlug}/${entry.slug}` : null,
+        editHref: entry.id ? `/admin/devices/${entry.id}/edit` : null,
+      })
+    }
+    const unpriced = entry.buyLinks.find((l) => !l.price)
+    if (unpriced) {
+      pushFix('missing_price', {
+        slug: entry.slug,
+        name: entry.name,
+        brandSlug: entry.brandSlug,
+        viewsAtRisk: views,
+        detail: `${retailerLabel(unpriced.retailer)} link has no price — the buy box shows a bare link`,
+        href: entry.brandSlug ? `/devices/${entry.brandSlug}/${entry.slug}` : null,
+        editHref: entry.id ? `/admin/devices/${entry.id}/edit` : null,
+      })
+    }
+  }
+
+  fixQueue.sort((a, b) => b.viewsAtRisk - a.viewsAtRisk || a.label.localeCompare(b.label))
+
+  // __DEVICE_INSIGHTS_RETURN__
+
+  return {
+    catalog: {
+      total: catalog.length,
+      published: publishedEntries.length,
+      draft: catalog.length - publishedEntries.length,
+      publishRatePct: sharePct(publishedEntries.length, catalog.length, 0),
+      withBuyLink: monetisedEntries.length,
+      withoutBuyLink: publishedEntries.length - monetisedEntries.length,
+      buyLinkTotal,
+      fillRatePct: sharePct(monetisedEntries.length, publishedEntries.length, 0),
+      retailersUsed: retailersUsed.size,
+      linksPerMonetisedDevice: monetisedEntries.length > 0 ? Math.round((buyLinkTotal / monetisedEntries.length) * 10) / 10 : 0,
+      linkCountBuckets,
+      readiness,
+      priceFreshness,
+      avgPriceKes:
+        pricedEntries.length > 0
+          ? Math.round(pricedEntries.reduce((sum, e) => sum + (e.priceKes ?? 0), 0) / pricedEntries.length)
+          : null,
+      newestPublishedAt: publishedDates.length > 0 ? new Date(Math.max(...publishedDates)).toISOString() : null,
+    },
+    distribution: {
+      retailerCoverage: Array.from(coverageByRetailer.entries())
+        .map(([retailer, slugs]) => ({
+          retailer,
+          label: retailerLabel(retailer),
+          devices: slugs.size,
+          sharePct: sharePct(slugs.size, publishedEntries.length, 1),
+        }))
+        .sort((a, b) => b.devices - a.devices || a.label.localeCompare(b.label)),
+      retailerTierMatrix: {
+        tiers,
+        tierLabels: tiers.map(priceTierLabel),
+        rows: retailerTierRows,
+        maxCell,
+      },
+      retailerTaxonomy,
+      linkHealth: {
+        checked: checkedUrls.size,
+        ok: okUrls,
+        broken: brokenUrls,
+        unhealthyPct: sharePct(brokenUrls, checkedUrls.size, 1),
+        uncheckedLive: Array.from(liveUrls).filter((url) => !checkedUrls.has(url)).length,
+        orphanChecks: Array.from(checkedUrls).filter((url) => !liveUrls.has(url)).length,
+        lastCheckedAt,
+      },
+    },
+    demand: {
+      totals: {
+        deviceViews,
+        deviceClicks,
+        ctr: deviceViews > 0 ? sharePct(deviceClicks, deviceViews) : 0,
+        devicesWithViews,
+        devicesWithoutViews: deviceRows.length - devicesWithViews,
+        publishedWithoutViews,
+        viewsPerDevice: deviceRows.length > 0 ? Math.round((deviceViews / deviceRows.length) * 10) / 10 : 0,
+      },
+      deviceRows,
+      byTier,
+      byCategory,
+      byBrand,
+      concentration,
+      paretoIndex,
+      topDeviceSharePct: listed.length > 0 ? sharePct(listed[0].views, listedViews, 1) : 0,
+      top10SharePct: sharePct(top10Views, listedViews, 1),
+      heatmap,
+      heatmapTiers: orderedTiers,
+      heatmapTierLabels: orderedTiers.map(priceTierLabel),
+    },
+    leakage: {
+      flow: { nodes: flowNodes, links: flowLinks },
+      outcomes,
+      monetisedViews: outcomeViews.monetised,
+      wastedViews: outcomeViews.unpublished + outcomeViews.missing,
+      wastedPct: sharePct(outcomeViews.unpublished + outcomeViews.missing, deviceViews, 1),
+      monetisedSharePct: sharePct(outcomeViews.monetised, deviceViews, 1),
+      orphanPaths,
+      fixQueue,
+    },
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 9 — Compare & Consideration intelligence
+//
+// Canvas anchors: `Manage Digital Channels` (/compare IS a channel asset) +
+// `Manage Qualification Analytics` (intent → hot/warm/cold is the MQL layer).
+//
+// One aggregator for the whole tab; pure-JS over existing tables
+// (interactions · page_views · affiliate_clicks · devices · brands) — no new
+// instrumentation, no migration, no new cron. Same discipline as
+// getTrafficInsights / getContentInsights / getDeviceInsights.
+
+/** One visitor's full consideration journey in the period. */
+export interface ConsiderationVisitor {
+  fpId: string
+  score: number
+  tier: QualificationTier
+  signedIn: boolean
+  saves: number
+  compares: number
+  watches: number
+  relatedClicks: number
+  affiliateClicks: number
+  deviceSlugs: string[]
+  lastSeenAt: string
+}
+
+/** One device's role in the consideration story. */
+export interface ConsideredDeviceRow {
+  slug: string
+  name: string
+  brandSlug: string
+  brandName: string
+  priceTier: string
+  deviceType: string
+  status: string
+  saves: number
+  compares: number
+  watches: number
+  relatedClicks: number
+  /** Weighted intent (compare×3 + save×2 + watch + related). */
+  intentScore: number
+  views: number
+  clicks: number
+  /** Weighted intent per 100 device-page views (×100 for readability). */
+  intentPerView: number
+  /** Shortlist → buy-link conversion: clicks per 100 intent points. */
+  intentToClick: number
+  buyLinkCount: number
+  /** Temperature of the demand sitting on this device. */
+  temperature: 'hot' | 'warm' | 'cold' | 'untouched'
+}
+
+/** One prescriptive row of the consideration fix queue. */
+export interface ConsiderationFixQueueItem {
+  slug: string | null
+  pair: string[] | null
+  name: string
+  issue: ConsiderationIssue
+  label: string
+  action: string
+  detail: string
+  interest: number
+  severity: 'high' | 'medium' | 'low'
+  href: string | null
+  editHref: string | null
+}
+
+export interface ConsiderationInsights {
+  /** A. Funnel — browsers → savers → comparers → buy clickers. */
+  funnel: {
+    stages: Array<{
+      stage: FunnelStage
+      label: string
+      visitors: number
+      shareOfBrowsersPct: number
+      stepConversionPct: number | null
+    }>
+    browsers: number
+    buyClickers: number
+    browserToBuyerPct: number
+  }
+  /** B. Mix — where intent events concentrate. */
+  mix: {
+    totals: {
+      events: number
+      saves: number
+      compares: number
+      watches: number
+      relatedClicks: number
+      activeVisitors: number
+      signedInVisitors: number
+      comparePageViews: number
+      topAction: IntentAction | null
+    }
+    byAction: Array<{
+      action: IntentAction
+      label: string
+      events: number
+      sharePct: number
+      visitors: number
+      devices: number
+    }>
+    byContentType: Array<{ type: string; label: string; events: number; sharePct: number }>
+    momentum: Array<{ bucket: string; save: number; add_to_compare: number; watch: number; related_click: number; total: number }>
+    momentumTotal: number
+  }
+  /** C. Audience — hot / warm / cold visitors. */
+  audience: {
+    totals: {
+      scored: number
+      hot: number
+      warm: number
+      cold: number
+      hotSharePct: number
+      warmSharePct: number
+      avgScore: number
+      signedInSharePct: number
+    }
+    tiers: Array<{ tier: QualificationTier; label: string; visitors: number; sharePct: number; avgScore: number }>
+    topVisitors: ConsiderationVisitor[]
+    scoreHistogram: Array<{ bucket: string; visitors: number }>
+  }
+  /** D. Pairs + devices — what is compared, and which devices convert attention. */
+  demand: {
+    topPairs: Array<{ pair: string[]; label: string; names: string[]; runs: number; sharePct: number; href: string }>
+    totalPairRuns: number
+    lopsidedPairs: number
+    deviceRows: ConsideredDeviceRow[]
+    consideredDevices: number
+    consideredSharePct: number
+    topConsidered: ConsideredDeviceRow[]
+    intentLeaders: ConsideredDeviceRow[]
+    conversionLeaders: ConsideredDeviceRow[]
+  }
+  /** E. Action — consideration fixes ranked by the interest at stake. */
+  action: {
+    fixQueue: ConsiderationFixQueueItem[]
+    interestAtStake: number
+  }
+}
+
+interface RawInteractionRow {
+  action: string
+  content_type: string
+  content_id: string | null
+  device_slug: string | null
+  fp_id: string | null
+  user_id: string | null
+  created_at: string
+}
+
+function isIntentAction(action: string): action is IntentAction {
+  return action === 'save' || action === 'add_to_compare' || action === 'watch' || action === 'related_click'
+}
+
+function severityForInterest(interest: number): 'high' | 'medium' | 'low' {
+  if (interest >= 10) return 'high'
+  if (interest >= 4) return 'medium'
+  return 'low'
+}
+
+function temperatureFor(intentEvents: number, intentScore: number): ConsideredDeviceRow['temperature'] {
+  if (intentEvents === 0) return 'untouched'
+  if (intentScore >= 8) return 'hot'
+  if (intentScore >= 4) return 'warm'
+  return 'cold'
+}
+
+/** Parse `/compare?devices=a,b` into a sorted slug pair (canonical page shape). */
+function parseComparePair(path: string): string[] | null {
+  const qIndex = path.indexOf('?')
+  if (qIndex === -1) return null
+  const params = new URLSearchParams(path.slice(qIndex + 1))
+  const raw = params.get('devices')
+  if (!raw) return null
+  const slugs = raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean).slice(0, 3)
+  if (slugs.length < 2) return null
+  return [...slugs].sort()
+}
+
+/**
+ * Compare & Consideration analytics — one aggregator for the whole tab.
+ *
+ * @param period '7d' | '30d' | '90d'
+ */
+export async function getConsiderationInsights(period: string): Promise<ConsiderationInsights> {
+  const since = sinceISO(period)
+  const dayMs = 86400000
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30
+  const nowMs = Date.now()
+
+  // 1) Load the three planes in parallel — intent events, compare traffic, clicks + catalog.
+  const [interactionRes, compareViewRes, clickRes, deviceRes] = await Promise.all([
+    supabase
+      .from('interactions')
+      .select('action, content_type, content_id, device_slug, fp_id, user_id, created_at')
+      .gte('created_at', since),
+    supabase.from('page_views').select('path, fp_id').gte('created_at', since).like('path', '/compare%'),
+    supabase.from('affiliate_clicks').select('device_slug, retailer, fp_id').gte('created_at', since),
+    supabase
+      .from('devices')
+      .select('id, slug, name, status, price_tier, device_type_id, buy_links, brand:brands(slug, name)'),
+  ])
+
+  const interactions = (interactionRes.data ?? []) as RawInteractionRow[]
+
+  // 2) Catalog map — names for every slug we will surface (pairs + device rows).
+  const slugMeta = new Map<string, { name: string; brandSlug: string; brandName: string; priceTier: string; deviceId: number | null; status: string; buyLinkCount: number }>()
+  for (const d of deviceRes.data ?? []) {
+    const slug = String(d.slug ?? '')
+    if (!slug) continue
+    const brandRaw = d.brand as { slug?: string; name?: string } | Array<{ slug?: string; name?: string }> | null
+    const brand = Array.isArray(brandRaw) ? brandRaw[0] : brandRaw
+    const brandSlug = String(brand?.slug ?? '')
+    const links = Array.isArray(d.buy_links)
+      ? (d.buy_links as Array<Record<string, unknown>>).filter((l) => String(l?.url ?? '').startsWith('http'))
+      : []
+    slugMeta.set(slug, {
+      name: String(d.name ?? slug),
+      brandSlug,
+      brandName: String(brand?.name ?? (brandSlug ? brandSlug.replace(/[-_]/g, ' ') : 'Unknown brand')),
+      priceTier: d.price_tier ? String(d.price_tier) : 'unspecified',
+      deviceId: d.id === null || d.id === undefined ? null : Number(d.id),
+      status: String(d.status ?? 'draft'),
+      buyLinkCount: links.length,
+    })
+  }
+
+  // __CONSIDERATION_FN_2__
+
+  // 3) Device-page browsing universe (funnel's first stage + per-device views).
+  const { data: deviceViewRows } = await supabase
+    .from('page_views')
+    .select('path, fp_id')
+    .gte('created_at', since)
+    .like('path', '/devices/%')
+  const browserFps = new Set<string>()
+  const viewsBySlug = new Map<string, number>()
+  for (const row of deviceViewRows ?? []) {
+    const fp = row.fp_id ? String(row.fp_id) : ''
+    if (fp) browserFps.add(fp)
+    const parts = String(row.path ?? '').replace('/devices/', '').split('/').filter(Boolean)
+    const slug = parts[1] ?? parts[0] ?? ''
+    if (slug) viewsBySlug.set(slug, (viewsBySlug.get(slug) ?? 0) + 1)
+  }
+
+  // 4) Clicks by visitor + by device (funnel's last stage + device conversion).
+  const clickerFps = new Set<string>()
+  const clicksBySlug = new Map<string, number>()
+  for (const row of clickRes.data ?? []) {
+    const fp = row.fp_id ? String(row.fp_id) : ''
+    if (fp) clickerFps.add(fp)
+    const slug = String(row.device_slug ?? '')
+    if (slug) clicksBySlug.set(slug, (clicksBySlug.get(slug) ?? 0) + 1)
+  }
+
+  // 5) Intent events: totals, per-visitor, per-action, per-device, momentum days.
+  const intentRows = interactions.filter((r) => isIntentAction(r.action))
+  const totalEvents = intentRows.length
+  const actionCounts: Record<IntentAction, number> = { save: 0, add_to_compare: 0, watch: 0, related_click: 0 }
+  const actionFps = new Map<IntentAction, Set<string>>()
+  const deviceActions = new Map<string, Record<IntentAction, number>>()
+  const deviceActionFps = new Map<string, Set<string>>()
+  const contentTypeCounts = new Map<string, number>()
+  const momentumDays = new Map<string, Record<IntentAction, number>>()
+  const eventsByFp = new Map<string, RawInteractionRow[]>()
+  const signedInFps = new Set<string>()
+
+  for (const row of intentRows) {
+    const action = row.action as IntentAction
+    actionCounts[action]++
+    contentTypeCounts.set(String(row.content_type ?? 'device'), (contentTypeCounts.get(String(row.content_type ?? 'device')) ?? 0) + 1)
+    const fp = row.fp_id ? String(row.fp_id) : ''
+    if (fp) {
+      const list = eventsByFp.get(fp) ?? []
+      list.push(row)
+      eventsByFp.set(fp, list)
+      const set = actionFps.get(action) ?? new Set<string>()
+      set.add(fp)
+      actionFps.set(action, set)
+      if (row.user_id) signedInFps.add(fp)
+    }
+    const slug = row.device_slug ? String(row.device_slug) : ''
+    if (slug) {
+      const counts = deviceActions.get(slug) ?? { save: 0, add_to_compare: 0, watch: 0, related_click: 0 }
+      counts[action]++
+      deviceActions.set(slug, counts)
+      if (fp) {
+        const set = deviceActionFps.get(slug) ?? new Set<string>()
+        set.add(fp)
+        deviceActionFps.set(slug, set)
+      }
+    }
+    const day = new Date(String(row.created_at)).toISOString().split('T')[0]
+    const perDay = momentumDays.get(day) ?? { save: 0, add_to_compare: 0, watch: 0, related_click: 0 }
+    perDay[action]++
+    momentumDays.set(day, perDay)
+  }
+
+  // __CONSIDERATION_FN_3__
+
+  // 6) Qualification — shared score (intent weights + click weight + sign-in bonus).
+  const intentBase = new Map<string, number>()
+  for (const [fp, list] of eventsByFp) {
+    let base = 0
+    for (const row of list) base += INTENT_WEIGHTS[row.action as IntentAction] ?? 0
+    intentBase.set(fp, base)
+  }
+  const clickExtra = new Map<string, number>()
+  for (const row of clickRes.data ?? []) {
+    const fp = row.fp_id ? String(row.fp_id) : ''
+    if (!fp) continue
+    clickExtra.set(fp, (clickExtra.get(fp) ?? 0) + AFFILIATE_CLICK_WEIGHT)
+  }
+
+  const scoredFps = new Set<string>([...intentBase.keys(), ...clickExtra.keys(), ...signedInFps])
+  const visitors: ConsiderationVisitor[] = []
+  for (const fp of scoredFps) {
+    const list = eventsByFp.get(fp) ?? []
+    let saves = 0
+    let compares = 0
+    let watches = 0
+    let related = 0
+    let lastSeen = 0
+    const slugs = new Set<string>()
+    for (const row of list) {
+      const action = row.action as IntentAction
+      if (action === 'save') saves++
+      else if (action === 'add_to_compare') compares++
+      else if (action === 'watch') watches++
+      else related++
+      if (row.device_slug) slugs.add(String(row.device_slug))
+      const t = new Date(String(row.created_at)).getTime()
+      if (Number.isFinite(t)) lastSeen = Math.max(lastSeen, t)
+    }
+    const affiliate = clickExtra.get(fp) ?? 0
+    const isSignedIn = signedInFps.has(fp)
+    const score = (intentBase.get(fp) ?? 0) + affiliate + (isSignedIn ? SIGNED_IN_BONUS : 0)
+    visitors.push({
+      fpId: fp,
+      score,
+      tier: qualificationTier(score),
+      signedIn: isSignedIn,
+      saves,
+      compares,
+      watches,
+      relatedClicks: related,
+      affiliateClicks: affiliate / AFFILIATE_CLICK_WEIGHT,
+      deviceSlugs: Array.from(slugs),
+      lastSeenAt: lastSeen ? new Date(lastSeen).toISOString() : '',
+    })
+  }
+  visitors.sort((a, b) => b.score - a.score || (b.lastSeenAt > a.lastSeenAt ? 1 : -1))
+
+  const hotVisitors = visitors.filter((v) => v.tier === 'hot')
+  const warmVisitors = visitors.filter((v) => v.tier === 'warm')
+  const coldVisitors = visitors.filter((v) => v.tier === 'cold')
+  const avgScore = visitors.length > 0
+    ? Math.round((visitors.reduce((s, v) => s + v.score, 0) / visitors.length) * 10) / 10
+    : 0
+
+  // Score histogram: 0–2 · 3–4 · 5–7 · 8–10 · 11+.
+  const histogramDefs = [
+    { bucket: '0–2', min: 0, max: 2 },
+    { bucket: '3–4', min: 3, max: 4 },
+    { bucket: '5–7', min: 5, max: 7 },
+    { bucket: '8–10', min: 8, max: 10 },
+    { bucket: '11+', min: 11, max: Number.MAX_SAFE_INTEGER },
+  ]
+  const scoreHistogram = histogramDefs.map((def) => ({
+    bucket: def.bucket,
+    visitors: visitors.filter((v) => v.score >= def.min && v.score <= def.max).length,
+  }))
+
+  // 7) Funnel stages — distinct visitors per stage (order matters: browse ⊇ save ⊇ compare).
+  const saverFps = actionFps.get('save') ?? new Set<string>()
+  const comparerFps = actionFps.get('add_to_compare') ?? new Set<string>()
+  const stageSpecs: Array<{ stage: FunnelStage; label: string; set: Set<string> }> = [
+    { stage: 'browse', label: 'Browsers', set: browserFps },
+    { stage: 'save', label: 'Savers', set: saverFps },
+    { stage: 'compare_run', label: 'Comparers', set: comparerFps },
+    { stage: 'buy_click', label: 'Buy clickers', set: clickerFps },
+  ]
+  const stageCounts = stageSpecs.map((s) => s.set.size)
+  const funnelStages = stageSpecs.map((s, i) => ({
+    stage: s.stage,
+    label: s.label,
+    visitors: stageCounts[i],
+    shareOfBrowsersPct: sharePct(stageCounts[i], stageCounts[0], 1),
+    stepConversionPct: i === 0 ? null : stageCounts[i - 1] > 0 ? sharePct(stageCounts[i], stageCounts[i - 1], 1) : 0,
+  }))
+
+  // __CONSIDERATION_FN_4__
+
+  // 8) Intent momentum — daily when 7d, weekly otherwise (content-tab recipe).
+  const bucketSize = days === 7 ? 1 : 7
+  const momentum: ConsiderationInsights['mix']['momentum'] = []
+  for (let start = nowMs - (days - 1) * dayMs; start <= nowMs; start += bucketSize * dayMs) {
+    const bucketStart = new Date(start)
+    const isoStart = bucketStart.toISOString().split('T')[0]
+    const isoEnd = new Date(start + (bucketSize - 1) * dayMs).toISOString().split('T')[0]
+    const row = { bucket: `${bucketStart.getMonth() + 1}/${bucketStart.getDate()}`, save: 0, add_to_compare: 0, watch: 0, related_click: 0, total: 0 }
+    for (const [day, counts] of momentumDays) {
+      if (day >= isoStart && day <= isoEnd) {
+        row.save += counts.save
+        row.add_to_compare += counts.add_to_compare
+        row.watch += counts.watch
+        row.related_click += counts.related_click
+        row.total += counts.save + counts.add_to_compare + counts.watch + counts.related_click
+      }
+    }
+    momentum.push(row)
+  }
+
+  // 9) Compare pairs — /compare?devices=a,b runs keyed by canonical pair.
+  const pairRuns = new Map<string, { pair: string[]; runs: number }>()
+  let comparePageViews = 0
+  for (const row of compareViewRes.data ?? []) {
+    comparePageViews++
+    const pair = parseComparePair(String(row.path ?? ''))
+    if (!pair) continue
+    const key = pair.join(' + ')
+    const existing = pairRuns.get(key) ?? { pair, runs: 0 }
+    existing.runs++
+    pairRuns.set(key, existing)
+  }
+  const totalPairRuns = Array.from(pairRuns.values()).reduce((s, p) => s + p.runs, 0)
+  const pairName = (slug: string) => slugMeta.get(slug)?.name ?? slug.replace(/[-_]/g, ' ')
+  const topPairs = Array.from(pairRuns.values())
+    .sort((a, b) => b.runs - a.runs)
+    .slice(0, 12)
+    .map(({ pair, runs }) => ({
+      pair,
+      label: pair.map(pairName).join(' vs '),
+      names: pair.map(pairName),
+      runs,
+      sharePct: totalPairRuns > 0 ? sharePct(runs, totalPairRuns, 1) : 0,
+      href: `/compare?devices=${pair.join(',')}`,
+    }))
+
+  // Lopsided pairs: pair runs exist but one slug has no catalog row or no views.
+  let lopsidedPairs = 0
+  for (const { pair } of pairRuns.values()) {
+    const weak = pair.some((slug) => !slugMeta.has(slug) || (viewsBySlug.get(slug) ?? 0) === 0)
+    if (weak) lopsidedPairs++
+  }
+
+  // 10) Per-device consideration rows — intent joined to views + clicks.
+  const deviceSlugs = new Set<string>([...deviceActions.keys(), ...viewsBySlug.keys(), ...clicksBySlug.keys()])
+  const deviceRows: ConsideredDeviceRow[] = []
+  for (const slug of deviceSlugs) {
+    const counts = deviceActions.get(slug) ?? { save: 0, add_to_compare: 0, watch: 0, related_click: 0 }
+    const intentEvents = counts.save + counts.add_to_compare + counts.watch + counts.related_click
+    const intentScore = counts.add_to_compare * 3 + counts.save * 2 + counts.watch + counts.related_click
+    const views = viewsBySlug.get(slug) ?? 0
+    const clicks = clicksBySlug.get(slug) ?? 0
+    const meta = slugMeta.get(slug)
+    deviceRows.push({
+      slug,
+      name: meta?.name ?? slug.replace(/[-_]/g, ' '),
+      brandSlug: meta?.brandSlug ?? '',
+      brandName: meta?.brandName ?? 'Unknown brand',
+      priceTier: meta?.priceTier ?? 'unspecified',
+      deviceType: 'Unspecified',
+      status: meta?.status ?? 'unknown',
+      saves: counts.save,
+      compares: counts.add_to_compare,
+      watches: counts.watch,
+      relatedClicks: counts.related_click,
+      intentScore,
+      views,
+      clicks,
+      intentPerView: views > 0 ? Math.round((intentScore / views) * 100 * 10) / 10 : 0,
+      intentToClick: intentScore > 0 ? Math.round((clicks / intentScore) * 100 * 10) / 10 : 0,
+      buyLinkCount: meta?.buyLinkCount ?? 0,
+      temperature: temperatureFor(intentEvents, intentScore),
+    })
+  }
+  deviceRows.sort((a, b) => b.intentScore - a.intentScore || b.views - a.views)
+
+  const consideredDevices = deviceRows.filter((r) => r.intentScore > 0).length
+
+  // __CONSIDERATION_FN_5__
+
+  // 11) Fix queue — one row per (device / pair, issue) ranked by interest at stake.
+  const fixQueue: ConsiderationFixQueueItem[] = []
+  const queueSeen = new Set<string>()
+  const pushFix = (
+    issue: ConsiderationIssue,
+    opts: {
+      slug: string | null
+      pair?: string[] | null
+      name: string
+      interest: number
+      detail: string
+      href: string | null
+      editHref: string | null
+    },
+  ) => {
+    const key = `${issue}::${opts.slug ?? (opts.pair ?? []).join('+')}`
+    if (queueSeen.has(key)) return
+    queueSeen.add(key)
+    fixQueue.push({
+      slug: opts.slug,
+      pair: opts.pair ?? null,
+      name: opts.name,
+      issue,
+      label: CONSIDERATION_ISSUE_META[issue].label,
+      action: CONSIDERATION_ISSUE_META[issue].action,
+      detail: opts.detail,
+      interest: opts.interest,
+      severity: severityForInterest(opts.interest),
+      href: opts.href,
+      editHref: opts.editHref,
+    })
+  }
+  const editHrefFor = (slug: string): string | null => {
+    const id = slugMeta.get(slug)?.deviceId ?? null
+    return id ? `/admin/devices/${id}/edit` : null
+  }
+  const hrefFor = (slug: string): string | null => {
+    const meta = slugMeta.get(slug)
+    return meta?.brandSlug ? `/devices/${meta.brandSlug}/${slug}` : null
+  }
+
+  // 11a) Devices with real shortlist heat but no buy path.
+  for (const row of deviceRows) {
+    if (row.intentScore < 2 || row.buyLinkCount > 0) continue
+    pushFix('high_interest_no_links', {
+      slug: row.slug,
+      name: row.name,
+      interest: row.intentScore,
+      detail: `intent score ${row.intentScore} (${row.compares} compares · ${row.saves} saves) on a page with 0 buy links`,
+      href: hrefFor(row.slug),
+      editHref: editHrefFor(row.slug),
+    })
+  }
+
+  // 11b) Intent that never reaches a buy link (has links, has interest, no clicks).
+  for (const row of deviceRows) {
+    if (row.buyLinkCount === 0 || row.intentScore < 4 || row.clicks > 0) continue
+    pushFix('conversion_leak', {
+      slug: row.slug,
+      name: row.name,
+      interest: row.intentScore,
+      detail: `intent score ${row.intentScore} with ${row.buyLinkCount} buy link(s) but 0 clicks — the box, not the traffic, is broken`,
+      href: hrefFor(row.slug),
+      editHref: editHrefFor(row.slug),
+    })
+  }
+
+  // 11c) One-dimensional demand: saved but never compared / watched but never shortlisted.
+  for (const row of deviceRows) {
+    if (row.saves >= 3 && row.compares === 0) {
+      pushFix('save_only', {
+        slug: row.slug,
+        name: row.name,
+        interest: row.saves,
+        detail: `${row.saves} saves but 0 compares — it is bookmarked and then abandoned`,
+        href: hrefFor(row.slug),
+        editHref: editHrefFor(row.slug),
+      })
+    }
+    if (row.watches >= 3 && row.saves === 0 && row.compares === 0) {
+      pushFix('watch_only', {
+        slug: row.slug,
+        name: row.name,
+        interest: row.watches,
+        detail: `${row.watches} video watches but 0 saves/compares — attention without a next step`,
+        href: hrefFor(row.slug),
+        editHref: editHrefFor(row.slug),
+      })
+    }
+  }
+
+  // 11d) Pairs whose runs cannot be healthy: a slug with no catalog row or no views.
+  for (const { pair, runs } of pairRuns.values()) {
+    if (runs < 2) continue
+    const weak = pair.filter((slug) => !slugMeta.has(slug) || (viewsBySlug.get(slug) ?? 0) === 0)
+    if (weak.length === 0) continue
+    pushFix('compare_orphan', {
+      slug: null,
+      pair,
+      name: pair.map(pairName).join(' vs '),
+      interest: runs,
+      detail: `${runs} comparison runs, but ${weak.join(', ')} has no catalog row or no views — the pair is half-dead`,
+      href: `/compare?devices=${pair.join(',')}`,
+      editHref: null,
+    })
+  }
+
+  // 11e) Lopsided pairs: both sides live, but one side carries <15% of the intent.
+  for (const { pair, runs } of pairRuns.values()) {
+    if (runs < 3 || pair.length !== 2) continue
+    if (pair.some((slug) => !slugMeta.has(slug))) continue
+    const scores = pair.map((slug) => deviceRows.find((r) => r.slug === slug)?.intentScore ?? 0)
+    const total = scores[0] + scores[1]
+    if (total < 4) continue
+    const smaller = Math.min(scores[0], scores[1])
+    if (smaller / total < 0.15) {
+      pushFix('lopsided_pair', {
+        slug: null,
+        pair,
+        name: pair.map(pairName).join(' vs '),
+        interest: total,
+        detail: `${runs} runs but intent splits ${scores[0]}–${scores[1]} — the quieter side needs promotion inside the pair`,
+        href: `/compare?devices=${pair.join(',')}`,
+        editHref: null,
+      })
+    }
+  }
+
+  fixQueue.sort((a, b) => b.interest - a.interest || a.label.localeCompare(b.label))
+  const interestAtStake = fixQueue.reduce((s, item) => s + item.interest, 0)
+
+  // __CONSIDERATION_RETURN__
+
+  // 12) Shape the return payload.
+  const actionTotals: Array<{ action: IntentAction; label: string; events: number; sharePct: number; visitors: number; devices: number }> = (
+    ['add_to_compare', 'save', 'watch', 'related_click'] as IntentAction[]
+  ).map((action) => {
+    const devices = new Set<string>()
+    for (const [slug, counts] of deviceActions) if (counts[action] > 0) devices.add(slug)
+    return {
+      action,
+      label: action === 'add_to_compare' ? 'Compare' : action === 'save' ? 'Save' : action === 'watch' ? 'Watch' : 'Related',
+      events: actionCounts[action],
+      sharePct: sharePct(actionCounts[action], totalEvents, 1),
+      visitors: (actionFps.get(action) ?? new Set<string>()).size,
+      devices: devices.size,
+    }
+  })
+
+  const contentTypeLabels: Record<string, string> = { device: 'Devices', article: 'Articles', video: 'Videos', comparison: 'Comparisons' }
+  const byContentType = Array.from(contentTypeCounts.entries())
+    .map(([type, events]) => ({
+      type,
+      label: contentTypeLabels[type] ?? type.charAt(0).toUpperCase() + type.slice(1),
+      events,
+      sharePct: sharePct(events, totalEvents, 1),
+    }))
+    .sort((a, b) => b.events - a.events)
+
+  const topActionEntry = [...actionTotals].sort((a, b) => b.events - a.events)[0]
+  const tierRows: ConsiderationInsights['audience']['tiers'] = (['hot', 'warm', 'cold'] as QualificationTier[]).map((tier) => {
+    const list = tier === 'hot' ? hotVisitors : tier === 'warm' ? warmVisitors : coldVisitors
+    const labels: Record<QualificationTier, string> = { hot: 'Hot', warm: 'Warm', cold: 'Cold' }
+    return {
+      tier,
+      label: labels[tier],
+      visitors: list.length,
+      sharePct: sharePct(list.length, visitors.length, 1),
+      avgScore: list.length > 0 ? Math.round((list.reduce((s, v) => s + v.score, 0) / list.length) * 10) / 10 : 0,
+    }
+  })
+
+  return {
+    funnel: {
+      stages: funnelStages,
+      browsers: stageCounts[0],
+      buyClickers: stageCounts[3],
+      browserToBuyerPct: sharePct(stageCounts[3], stageCounts[0], 1),
+    },
+    mix: {
+      totals: {
+        events: totalEvents,
+        saves: actionCounts.save,
+        compares: actionCounts.add_to_compare,
+        watches: actionCounts.watch,
+        relatedClicks: actionCounts.related_click,
+        activeVisitors: eventsByFp.size,
+        signedInVisitors: signedInFps.size,
+        comparePageViews,
+        topAction: topActionEntry && topActionEntry.events > 0 ? topActionEntry.action : null,
+      },
+      byAction: actionTotals,
+      byContentType,
+      momentum,
+      momentumTotal: momentum.reduce((s, m) => s + m.total, 0),
+    },
+    audience: {
+      totals: {
+        scored: visitors.length,
+        hot: hotVisitors.length,
+        warm: warmVisitors.length,
+        cold: coldVisitors.length,
+        hotSharePct: sharePct(hotVisitors.length, visitors.length, 1),
+        warmSharePct: sharePct(warmVisitors.length, visitors.length, 1),
+        avgScore,
+        signedInSharePct: sharePct(signedInFps.size, visitors.length, 1),
+      },
+      tiers: tierRows,
+      topVisitors: visitors.slice(0, 25),
+      scoreHistogram,
+    },
+    demand: {
+      topPairs,
+      totalPairRuns,
+      lopsidedPairs,
+      deviceRows,
+      consideredDevices,
+      consideredSharePct: sharePct(consideredDevices, deviceRows.length, 1),
+      topConsidered: deviceRows.filter((r) => r.intentScore > 0).slice(0, 10),
+      intentLeaders: [...deviceRows].filter((r) => r.views >= 5).sort((a, b) => b.intentPerView - a.intentPerView).slice(0, 10),
+      conversionLeaders: [...deviceRows].filter((r) => r.intentScore >= 3).sort((a, b) => b.intentToClick - a.intentToClick).slice(0, 10),
+    },
+    action: {
+      fixQueue,
+      interestAtStake,
+    },
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
