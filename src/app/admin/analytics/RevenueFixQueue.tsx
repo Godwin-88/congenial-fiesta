@@ -141,9 +141,9 @@ export default function RevenueFixQueue({ items, limit = 25 }: Props) {
         </p>
       ) : null}
       <p className="text-[11px] text-muted-foreground">
-        Stake = KES proxy (or views, for traffic rows) at risk. {REVENUE_ISSUE_META['tax_mismatch'].label} and{' '}
-        {REVENUE_ISSUE_META.unpriced_clicks.label.toLowerCase()} price real clicks at zero until the rate sheet and
-        the click stream agree.
+        Stake = KES proxy (or views, for traffic rows) at risk. {REVENUE_ISSUE_META['tax_mismatch'].label} rows price
+        via the normalised fallback until the rate sheet and the click stream agree;{' '}
+        {REVENUE_ISSUE_META.unpriced_clicks.label.toLowerCase()} price at zero until a rate exists.
       </p>
     </div>
   )

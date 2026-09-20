@@ -65,8 +65,8 @@ export default function RevenueMixChart({ ledger }: Props) {
         })}
       </div>
       <p className="mt-3 text-[11px] text-muted-foreground">
-        Bar = KES the proxy prices into each channel (state-coloured); thin line = raw click volume. A channel
-        showing clicks with an empty bar is a pricing leak — see the queue below.
+        Bar = KES the proxy prices into each channel (state-coloured, normalised-key join); thin line = raw click
+        volume. A channel showing clicks with an empty bar has no rate at all — see the queue below.
       </p>
     </div>
   )

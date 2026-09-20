@@ -280,9 +280,10 @@ also removed a per-page Supabase round-trip from the analytics page load.
   share` stays a strict per-device ratio.
 - Buy-link *validity* requires an `http(s)` URL; a retailer with no URL counts as **no coverage** (it can be neither
   clicked nor HEAD-checked).
-- Retailer keys are matched case-sensitively by `/api/out/[device]/[retailer]` and the commission rate sheet is
-  lowercase — a capitalised key (e.g. `Jumia`) still renders the click but prices it at **0**, so the taxonomy table
-  flags it instead of hiding it.
+- Retailer keys are matched case-sensitively by `/api/out/[device]/[retailer]`; the commission rate sheet is
+  lowercase. Proxies price through a **normalised join** (`normalizeRetailerKey`), so a capitalised key
+  (e.g. `Jumia`) still prices — but the taxonomy table flags it anyway, because any literal-key join downstream
+  drops it and the outbound matcher can miss the buy link before the click is ever recorded.
 - `link_health_checks` is capped at the 4 000 most recent rows; the census reports what it actually saw (`checked`,
   `broken`, `uncheckedLive`, `orphanChecks`) rather than implying full coverage.
 
@@ -430,13 +431,15 @@ same four-act shape as Devices/Compare/Community: **A Money → B Flow → C Cha
 `src/lib/analytics/revenue.ts` (dependency-free, shared server+client), mirroring `deviceOutcome.ts` /
 `consideration.ts` / `community.ts`.
 
-**The pricing model (channel states, not just totals).** The rate sheet (`affiliate_commission_rates`) keys are
-joined to the click stream's recorded retailer names **literally**, then normally:
+**The pricing model (channel states, not just totals).** Every proxy prices clicks through a **normalised
+rate-sheet join** (`normalizeRetailerKey`: lowercase + collapsed whitespace — `Amazon` matches sheet key `amazon`).
+Channel states keep the taxonomy check visible anyway: the recorded key may still differ literally, and any
+literal-key join downstream (outbound matcher, ad-hoc exports) drops it.
 
 | State | Definition | Read as |
 |---|---|---|
 | `priced` | clicks flow and the recorded key literally matches the rate sheet | the channel earns |
-| `tax_mismatch` | a normalised rate exists but the recorded key differs (casing/spacing) — e.g. clicks recorded as `Amazon` vs sheet key `amazon` | real clicks priced at **zero** by the proxy |
+| `tax_mismatch` | a normalised rate exists but the recorded key differs (casing/spacing) — e.g. clicks recorded as `Amazon` vs sheet key `amazon` | priced via the normalised fallback; any literal-key join downstream still drops it |
 | `unpriced` | no rate for this retailer at all | revenue the proxy cannot see |
 | `idle` | a rate is configured but no clicks in the period | catalog stopped linking, or keys drifted |
 

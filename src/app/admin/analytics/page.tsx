@@ -1218,7 +1218,7 @@ const csvLinks = [
                     definition="A click only becomes commission when three registries use the same retailer key: the catalog buy link, the click log and the commission rate sheet. The buy box additionally only renders five known keys."
                     formula="presence + case-match across catalog · affiliate_clicks · affiliate_commission_rates · buy-box keys"
                     dataSource="devices.buy_links · affiliate_clicks · affiliate_commission_rates"
-                    action="Fix mismatched keys before trusting any per-retailer revenue number — a case mismatch silently prices clicks at zero."
+                    action="Fix mismatched keys before trusting any per-retailer revenue number — the proxy now prices via a normalised fallback, but the buy box and outbound matcher still match literally, so a capitalised key can break the click before it is ever recorded."
                   />
                 </CardTitle>
                 <CardDescription>The silent failure mode behind per-retailer revenue</CardDescription>
@@ -1652,7 +1652,7 @@ const csvLinks = [
                   Where The Proxy Is Made
                   <MetricInfo
                     metric="Revenue mix by channel"
-                    definition="Each retailer channel as a pair: the KES the proxy prices into it (bar, state-coloured) over the raw clicks it sent (thin line). A channel with clicks and no bar is being priced at zero — mismatch or missing rate."
+                    definition="Each retailer channel as a pair: the KES the proxy prices into it (bar, state-coloured) over the raw clicks it sent (thin line). A mismatched channel prices via the normalised fallback — literal-key joins downstream still miss it — and an unpriced channel shows clicks with an empty bar."
                     formula="proxy per channel = clicks × rate; state from the rate-sheet join"
                     ga4Alias="— (revenue-owned)"
                     dataSource="affiliate_clicks × affiliate_commission_rates"
@@ -1760,7 +1760,7 @@ const csvLinks = [
                 Retailer Ledger
                 <MetricInfo
                   metric="Channel ledger"
-                  definition="One row per retailer channel, with its state: priced (rate matches), taxonomy mismatch (recorded name doesn't literally match the rate-sheet key — priced at zero), unpriced (no rate), idle (rate configured, no clicks). Δ = proxy − actual per channel."
+                  definition="One row per retailer channel, with its state: priced (rate matches), taxonomy mismatch (recorded name doesn't literally match the rate-sheet key — priced only via the normalised fallback), unpriced (no rate), idle (rate configured, no clicks). Δ = proxy − actual per channel."
                   formula="state from the literal rate-sheet join; Δ per channel"
                   dataSource="affiliate_clicks × affiliate_commission_rates × affiliate_earnings"
                   action="Fix mismatched and unpriced channels first — they are real clicks the proxy cannot see; the queue deep-links to the rate sheet."

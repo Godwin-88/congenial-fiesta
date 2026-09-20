@@ -103,7 +103,8 @@ export default function RetailerLedger({ rows, idleRates }: Props) {
       )}
       <p className="mt-2 text-[11px] text-muted-foreground">
         Δ = proxy − actual per channel. A mismatch state means the recorded retailer name does not literally match
-        the rate-sheet key (casing/spacing) — the join is the taxonomy check, and the queue carries the fix.
+        the rate-sheet key (casing/spacing) — the proxy prices it via the normalised fallback, any literal-key join
+        downstream still misses it, and the queue carries the fix.
       </p>
     </div>
   )

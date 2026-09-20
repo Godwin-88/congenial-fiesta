@@ -112,7 +112,7 @@ export const CHANNEL_COLORS: Record<ChannelState, string> = {
 
 export const CHANNEL_DESCRIPTIONS: Record<ChannelState, string> = {
   priced: 'Clicks flow and a commission rate matches the key — the channel is earning its keep.',
-  'tax_mismatch': 'Clicks flow but the recorded retailer name does not literally match the rate-sheet key (casing/spacing) — the proxy silently prices them at zero.',
+  'tax_mismatch': 'Clicks flow but the recorded retailer name does not literally match the rate-sheet key (casing/spacing) — every proxy now prices these via a case-insensitive fallback, but any literal-key join downstream silently drops them.',
   unpriced: 'Clicks flow but no commission rate exists for this retailer — real revenue the proxy cannot see.',
   idle: 'A rate is configured but no clicks this period — either the catalog stopped linking or the channel is dead.',
 }
@@ -142,7 +142,7 @@ export const REVENUE_ISSUE_META: Record<RevenueIssue, { label: string; action: s
   },
   'tax_mismatch': {
     label: 'Rate key mismatch',
-    action: 'Normalise the recorded retailer name to the rate-sheet key (casing/spacing) — the proxy prices these clicks at zero today.',
+    action: 'Normalise the recorded retailer name to the rate-sheet key (casing/spacing) — the proxy prices these clicks via a case-insensitive fallback today, and any literal-key join downstream silently drops them.',
   },
   no_clicks: {
     label: 'Traffic without clicks',

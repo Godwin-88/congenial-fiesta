@@ -666,12 +666,16 @@ export async function getRevenueProxy(
 
   const clickCounts: Record<string, number> = {}
   for (const row of clicks ?? []) clickCounts[row.retailer] = (clickCounts[row.retailer] ?? 0) + 1
+  // Join on the normalised key (lowercase + collapsed whitespace): the click
+  // stream records 'Amazon'/'Jumia' while the sheet keys are lowercase. The
+  // literal-key drift is surfaced as a tax_mismatch row on the revenue tab —
+  // but the proxy itself must never silently price real clicks at zero.
   const rateMap = new Map<string, number>()
-  for (const r of rates ?? []) rateMap.set(r.retailer, Number(r.rate))
+  for (const r of rates ?? []) rateMap.set(normalizeRetailerKey(r.retailer), Number(r.rate))
 
   const byRetailer = Object.entries(clickCounts)
     .map(([retailer, count]) => {
-      const rate = rateMap.get(retailer) ?? 0
+      const rate = rateMap.get(normalizeRetailerKey(retailer)) ?? 0
       return { retailer, clicks: count, rate, weighted: Math.round(count * rate * 100) / 100 }
     })
     .sort((a, b) => b.weighted - a.weighted)
@@ -1494,7 +1498,7 @@ export async function runExploreQuery(input: {
       const { data: rateRows } = await supabase
         .from('affiliate_commission_rates')
         .select('retailer, rate')
-      for (const r of rateRows ?? []) rates.set(r.retailer, Number(r.rate))
+      for (const r of rateRows ?? []) rates.set(normalizeRetailerKey(r.retailer), Number(r.rate))
     }
   } else {
     // views / unique_visitors
@@ -1610,7 +1614,7 @@ const extract = (row: Record<string, unknown>): string => {
       if (action !== metric) continue
       buckets.set(label, (buckets.get(label) ?? 0) + 1)
     } else if (metric === 'revenue_proxy') {
-      const retailer = String(row.retailer ?? '')
+      const retailer = normalizeRetailerKey(String(row.retailer ?? ''))
       buckets.set(label, (buckets.get(label) ?? 0) + (rates.get(retailer) ?? 0))
     } else {
       buckets.set(label, (buckets.get(label) ?? 0) + 1)
@@ -3285,7 +3289,7 @@ export async function getDeviceInsights(period: string): Promise<DeviceInsights>
       const caseMismatch = Array.from(allVariants).some((v) => v !== retailer)
       const notes: string[] = []
       if (!buyBoxRenders) notes.push('buy box renders "Other"')
-      if (!inCommission) notes.push('no rate — proxy weights clicks 0')
+      if (!inCommission) notes.push('no rate — proxy cannot price clicks')
       if (caseMismatch) notes.push(`case mismatch (${Array.from(allVariants).join(' / ')})`)
       if (!inCatalog && inClicks) notes.push('clicks with no catalog link')
       if (notes.length === 0) notes.push('registries agree')
@@ -5068,7 +5072,7 @@ export async function getCommunityInsights(period: string): Promise<CommunityIns
 // tiers) → C Channels (retailer ledger + earners) → D Action (revenue queue).
 //
 // The story is NOT "how many clicks" (that's the old table) — it is:
-//   1. every click is priced (proxy = clicks × rate, and mismatches price at 0),
+//   1. every click is priced (proxy = clicks × rate via the normalised join),
 //   2. every retailer is a channel with a health state,
 //   3. the proxy must reconcile with real imported earnings (±10% reads honest),
 //   4. the queue names the leak: unpriced clicks, dead links, unsold traffic.
@@ -5399,7 +5403,8 @@ export async function getRevenueInsights(period: string): Promise<RevenueInsight
     })
   }
 
-  // 2) Taxonomy mismatches + unpriced channels — real clicks the proxy prices at zero.
+  // 2) Taxonomy mismatches + unpriced channels — clicks priced only via the
+  // normalised fallback (any literal-key join downstream still drops them).
   for (const ch of ledger) {
     if (ch.state === 'priced' || ch.state === 'idle') continue
     const isMismatch = ch.state === 'tax_mismatch'
@@ -5409,7 +5414,7 @@ export async function getRevenueInsights(period: string): Promise<RevenueInsight
       action: isMismatch
         ? 'Normalise the recorded retailer name to the rate-sheet key — the proxy prices these clicks at zero today.'
         : 'Add a commission rate for this retailer — every click it receives is invisible to the proxy.',
-      detail: `${ch.clicks} click${ch.clicks === 1 ? '' : 's'} recorded as "${ch.rawKey}" with no literally-matching rate-sheet key.`,
+      detail: `${ch.clicks} click${ch.clicks === 1 ? '' : 's'} recorded as "${ch.rawKey}" with no literally-matching rate-sheet key${isMismatch ? ' (priced only via the normalised fallback)' : ''}.`,
       stake: ch.clicks,
       severity: 'low',
       slug: null,
