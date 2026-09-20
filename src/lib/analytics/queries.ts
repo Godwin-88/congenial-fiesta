@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
-import { fetchUpstashTopQueries } from '@/lib/upstash/search'
+import { listIndexIds } from '@/lib/upstash/search'
+import { isVectorConfigured } from '@/lib/upstash/vector'
+import { fetchUpstashSearchTelemetry, type UpstashSearchTelemetry } from '@/lib/upstash/telemetry'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -37,6 +39,21 @@ import {
   revenueSeverity,
   rpm,
 } from './revenue'
+import {
+  type QueryAnswerState,
+  type QueryShape,
+  type SearchIssue,
+  ANSWER_STATE_LABELS,
+  ANSWER_STATE_ORDER,
+  QUERY_SHAPE_LABELS,
+  QUERY_SHAPE_ORDER,
+  SEARCH_ISSUE_META,
+  answerStateFor,
+  classifyQueryShape,
+  diceSimilarity,
+  normalizeQuery,
+  searchSeverity,
+} from './searchStory'
 
 export type {
   IntentAction,
@@ -273,19 +290,14 @@ export async function getClicksByRetailer(
 }
 
 // Top search queries from the first-party search_queries table (logged in /api/search).
-// (The previous Upstash "/analytics/top" REST call never existed → always returned [].)
+//
+// Upstash has NO per-query analytics endpoint (verified: /analytics/top → 404),
+// so this table is the single source of truth for WHAT was searched. Upstash's
+// account API contributes HOW MANY queries executed + latency (see
+// `fetchUpstashSearchTelemetry`), which reconciles against this log.
 export async function getTopSearchQueries(
   limit: number = 20
 ): Promise<Array<{ query: string; count: number }>> {
-  // 1. Try Upstash Search native analytics first (Upstash-first).
-  try {
-    const upstash = await fetchUpstashTopQueries(limit)
-    if (upstash.length > 0) return upstash
-  } catch {
-    // fall through
-  }
-
-  // 2. Supabase first-party search_queries fallback.
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
   const { data } = await supabase
     .from('search_queries')
@@ -1757,6 +1769,8 @@ export const SCHEDULED_EXPORT_REPORTS = [
   'community-queue',
   'revenue-ledger',
   'revenue-queue',
+  'search-demand',
+  'search-backlog',
   'explore',
 ]
 
@@ -5495,7 +5509,643 @@ export async function getRevenueInsights(period: string): Promise<RevenueInsight
     channels: { ledger, idleRates },
     action: {
       fixQueue: fixQueue.slice(0, 20),
+
       stakeTotal: Math.round(fixQueue.reduce((s, i) => s + i.stake, 0) * 100) / 100,
+    },
+  }
+}
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 12 — Search & Discovery: demand vs supply
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// One aggregator for the whole tab, same discipline as Devices/Compare/
+// Community/Revenue: A Demand (what is typed) → B Supply (can the catalog
+// answer it) → C Habit + index health (is search working at all) → D Action
+// (the ranked backlog with the fix attached).
+//
+// The story is NOT "how many searches" (that was the old two-table tab) — it is:
+//   1. every query carries an answer state (answered · thin · zero),
+//   2. every query carries an intent shape (brand · model · comparison · spec ·
+//      price · generic) so the backlog reads as a content brief,
+//   3. zero-result queries are matched back to the catalog to catch near misses
+//      (a synonym/slug fix, not a new article),
+//   4. instrumentation health is on the tab itself: which search layers are live
+//      and whether published pages are actually in the index.
+
+export interface SearchNearMiss {
+  id: string
+  title: string
+  url: string
+  kind: 'device' | 'article' | 'video'
+  similarity: number
+}
+
+export interface SearchQueryRow {
+  query: string
+  searches: number
+  avgResults: number
+  zeroResults: number
+  state: QueryAnswerState
+  shape: QueryShape
+  sharePct: number
+  lastSeen: string
+  nearMiss: SearchNearMiss | null
+  /** Rows logged with a result count — false means pre-instrumentation legacy rows. */
+  recorded: boolean
+  /** Searches in this query whose result count was actually captured. */
+  recordedSearches: number
+}
+
+export interface SearchFixQueueItem {
+  issue: SearchIssue
+  label: string
+  query: string
+  searches: number
+  zeroSharePct: number
+  severity: 'high' | 'medium' | 'low'
+  stake: number
+  detail: string
+  action: string
+  /** What the visitor saw — the live search page for this query. */
+  href: string
+  /** Where the fix lands (device editor / article creator), when applicable. */
+  editHref: string | null
+}
+
+export interface SearchInsights {
+  totals: {
+    searches: number
+    /** Searches carrying a recorded result count — the denominator for every rate. */
+    recordedSearches: number
+    /** Searches logged before result instrumentation — real demand, unmeasured quality. */
+    unrecordedSearches: number
+    uniqueQueries: number
+    zeroResultSearches: number
+    zeroResultRatePct: number
+    answeredSharePct: number
+    thinSharePct: number
+    avgResults: number
+    repeatQuerySharePct: number
+    /** Distinct queries typed only once in the period. */
+    oneOffQueries: number
+    /** Search-page renders recorded by the beacon in the same period. */
+    searchPageViews: number
+    /** Interval between the first and last logged query in the period (days). */
+    activeDays: number
+  }
+  demand: {
+    topQueries: SearchQueryRow[]
+    /** Same rows, trimmed for the treemap (volume-ranked, top 24). */
+    treemap: Array<{ query: string; searches: number; state: QueryAnswerState; shape: QueryShape; sharePct: number }>
+    maxSearches: number
+  }
+  supply: {
+    mix: Array<{ state: QueryAnswerState; label: string; queries: number; searches: number; sharePct: number }>
+    shapes: Array<{
+      shape: QueryShape
+      label: string
+      searches: number
+      queries: number
+      recordedSearches: number
+      sharePct: number
+      successPct: number
+    }>
+    headSharePct: number
+  }
+  habit: {
+    buckets: Array<{ bucket: string; label: string; queries: number; searches: number; sharePct: number }>
+    topRepeats: SearchQueryRow[]
+  }
+  health: {
+    layers: { postgres: boolean; upstash: boolean; semantic: boolean; upstashAnalytics: boolean }
+    indexed: { devices: number; articles: number; videos: number; total: number; readable: boolean }
+    published: { devices: number; articles: number; videos: number }
+    /** Published devices+articles present in the index (0–100). */
+    coveragePct: number
+    /** Published catalog rows the index can't serve — the corpus gap. */
+    missingFromIndex: string[]
+    /**
+     * Index-side telemetry from the Upstash account API — query volume the
+     * engine actually executed, plus latency percentiles. Used to reconcile
+     * against the first-party log (capture rate) and to watch engine latency.
+     */
+    telemetry: {
+      configured: boolean
+      ok: boolean
+      error: string | null
+      indexName: string | null
+      indexId: string | null
+      /** Upstash stats window (90d clamps to 30d — the API's widest). */
+      upstashPeriod: string
+      /** Documents in the index per Upstash (cross-checks `indexed.total`). */
+      documentCount: number | null
+      pendingDocumentCount: number | null
+      /** Queries executed today / this month on Upstash's account clock. */
+      dailyQueryCount: number | null
+      monthlyQueryCount: number | null
+      /** Queries executed within the stats window (sum of the throughput series). */
+      periodQueryCount: number | null
+      /** Logged terms ÷ Upstash-executed queries in the window, %. */
+      captureRatePct: number | null
+      latencyMeanMs: number | null
+      latencyP99Ms: number | null
+      queryThroughput: Array<{ ts: string; value: number }>
+      fetchedAt: string
+    }
+  }
+  action: {
+    fixQueue: SearchFixQueueItem[]
+    stakeTotal: number
+  }
+}
+
+/** Count indexed documents by prefix (best-effort; unreadable index reads as 0). */
+async function readIndexCounts(): Promise<{
+  devices: number
+  articles: number
+  videos: number
+  total: number
+  readable: boolean
+  ids: string[]
+}> {
+  const counts = { devices: 0, articles: 0, videos: 0, total: 0, readable: false, ids: [] as string[] }
+  try {
+    let cursor: string | undefined
+    // Upstash `range` pages at 100 documents max — read 50 pages, which is far
+    // beyond any plausible catalog, then stop.
+    for (let page = 0; page < 50; page++) {
+      const res = await listIndexIds(100, cursor)
+      if (res.ids.length === 0) break
+      counts.readable = true
+      for (const id of res.ids) {
+        counts.total++
+        counts.ids.push(id)
+        if (id.startsWith('device:')) counts.devices++
+        else if (id.startsWith('article:')) counts.articles++
+        else if (id.startsWith('video:') || id.startsWith('youtube:')) counts.videos++
+      }
+      if (!res.cursor) break
+      cursor = res.cursor
+    }
+  } catch {
+    // unreadable index — reported honestly as readable:false
+  }
+  return counts
+}
+
+/** A query's tokens overlap a catalog title this much → treat it as a near miss. */
+const NEAR_MISS_THRESHOLD = 0.5
+
+interface CatalogEntryForMatch {
+  id: string
+  title: string
+  url: string
+  kind: 'device' | 'article' | 'video'
+}
+
+function findNearMiss(query: string, catalog: CatalogEntryForMatch[]): SearchNearMiss | null {
+  let best: SearchNearMiss | null = null
+  for (const entry of catalog) {
+    const sim = diceSimilarity(query, entry.title)
+    if (sim >= NEAR_MISS_THRESHOLD && (!best || sim > best.similarity)) {
+      best = {
+        id: entry.id,
+        title: entry.title,
+        url: entry.url,
+        kind: entry.kind,
+        similarity: Math.round(sim * 100) / 100,
+      }
+    }
+  }
+  return best
+}
+
+export async function getSearchInsights(period: string): Promise<SearchInsights> {
+  const since = sinceISO(period)
+
+  const [queriesRes, devicesRes, articlesRes, videosRes, searchPageRes, indexCounts, telemetryRaw] =
+    await Promise.all([
+      supabase
+        .from('search_queries')
+        .select('query, results_count, zero_result, created_at')
+        .gte('created_at', since),
+      supabase.from('devices').select('slug, name, brand:brands(name, slug)').eq('status', 'published'),
+      supabase.from('articles').select('slug, title').eq('status', 'published'),
+      supabase.from('videos').select('id, title'),
+      supabase
+        .from('page_views')
+        .select('*', { count: 'exact', head: true })
+        .eq('path', '/search')
+        .gte('created_at', since),
+      readIndexCounts(),
+      // Account-level telemetry (query volume + latency) — cached 60s, never throws.
+      fetchUpstashSearchTelemetry(period).catch(
+        (e: unknown): UpstashSearchTelemetry => ({
+          ok: false,
+          configured: false,
+          error: e instanceof Error ? e.message : String(e),
+          indexId: null,
+          indexName: null,
+          period: period,
+          documentCount: null,
+          pendingDocumentCount: null,
+          dailyQueryCount: null,
+          monthlyQueryCount: null,
+          periodQueryCount: null,
+          latencyMeanMs: null,
+          latencyP99Ms: null,
+          queryThroughput: [],
+          fetchedAt: new Date().toISOString(),
+        }),
+      ),
+    ])
+
+  const telemetry = telemetryRaw
+
+  const rows = (queriesRes.data ?? []) as Array<{
+    query: string | null
+    results_count: number | null
+    zero_result: boolean | null
+    created_at: string
+  }>
+
+  // ── catalog (near-miss target + index-coverage denominator) ────────────────
+  const catalog: CatalogEntryForMatch[] = []
+  const published = { devices: 0, articles: 0, videos: 0 }
+  const brandNames = new Set<string>()
+
+  for (const d of devicesRes.data ?? []) {
+    published.devices++
+    const brand = d.brand as { name?: string; slug?: string } | null
+    if (brand?.name) brandNames.add(brand.name.toLowerCase())
+    if (brand?.slug) brandNames.add(brand.slug.toLowerCase())
+    catalog.push({
+      id: `device:${d.slug}`,
+      title: d.name,
+      url: `/devices/${brand?.slug ?? 'brand'}/${d.slug}`,
+      kind: 'device',
+    })
+  }
+  for (const a of articlesRes.data ?? []) {
+    published.articles++
+    catalog.push({ id: `article:${a.slug}`, title: a.title, url: `/articles/${a.slug}`, kind: 'article' })
+  }
+  for (const v of videosRes.data ?? []) {
+    published.videos++
+    catalog.push({ id: `video:${v.id}`, title: v.title, url: `/videos#${v.id}`, kind: 'video' })
+  }
+  const brandList = Array.from(brandNames)
+
+  // ── per-query rollup (normalised: casing + whitespace must not split a term)
+  //
+  // `zero_result = false` with `results_count = 0` is NOT a confirmed miss — it
+  // is a row logged before result instrumentation existed. Those rows are real
+  // demand but unmeasured quality, so they are tracked separately (`recorded`)
+  // and excluded from every rate rather than being counted as zero-results.
+  const perQuery = new Map<
+    string,
+    {
+      query: string
+      searches: number
+      resultSum: number
+      zeroResults: number
+      recordedSearches: number
+      lastSeen: string
+    }
+  >()
+  for (const r of rows) {
+    const key = normalizeQuery(String(r.query ?? ''))
+    if (!key) continue
+    const entry =
+      perQuery.get(key) ??
+      { query: key, searches: 0, resultSum: 0, zeroResults: 0, recordedSearches: 0, lastSeen: '' }
+    entry.searches++
+    const count = Number(r.results_count ?? 0)
+    const isRecorded = r.zero_result === true || count > 0
+    if (isRecorded) {
+      entry.recordedSearches++
+      entry.resultSum += count
+      if (r.zero_result) entry.zeroResults++
+    }
+    if (r.created_at && r.created_at > entry.lastSeen) entry.lastSeen = r.created_at
+    perQuery.set(key, entry)
+  }
+
+  const searchesTotal = rows.length
+  const queryRows: SearchQueryRow[] = Array.from(perQuery.values())
+    .map((e) => {
+      const recorded = e.recordedSearches > 0
+      const avgResults =
+        recorded ? Math.round((e.resultSum / e.recordedSearches) * 100) / 100 : 0
+      const state: QueryAnswerState = recorded ? answerStateFor(avgResults) : 'unknown'
+      return {
+        query: e.query,
+        searches: e.searches,
+        avgResults,
+        zeroResults: e.zeroResults,
+        recorded,
+        recordedSearches: e.recordedSearches,
+        state,
+        shape: classifyQueryShape(e.query, brandList),
+        sharePct: sharePct(e.searches, searchesTotal, 1),
+        lastSeen: e.lastSeen,
+        nearMiss: state === 'answered' ? null : findNearMiss(e.query, catalog),
+      }
+    })
+    .sort((a, b) => b.searches - a.searches || a.query.localeCompare(b.query))
+
+
+  // ── totals ────────────────────────────────────────────────────────────────
+  //
+  // Rates are computed over RECORDED searches only (rows that carry a result
+  // count). Legacy rows are reported as `unrecordedSearches` instead of being
+  // silently folded into the zero-result rate as false misses.
+  const uniqueQueries = queryRows.length
+  const recordedSearches = queryRows.reduce((s, r) => s + r.recordedSearches, 0)
+  const unrecordedSearches = searchesTotal - recordedSearches
+  const zeroResultSearches = rows.filter((r) => r.zero_result === true).length
+  const answeredSearches = queryRows
+    .filter((r) => r.state === 'answered')
+    .reduce((s, r) => s + r.recordedSearches, 0)
+  const thinSearches = queryRows
+    .filter((r) => r.state === 'thin')
+    .reduce((s, r) => s + r.recordedSearches, 0)
+  const resultSum = queryRows.reduce((s, r) => s + r.avgResults * r.recordedSearches, 0)
+  const oneOffQueries = queryRows.filter((r) => r.searches === 1).length
+  const repeatQuerySharePct = sharePct(searchesTotal - oneOffQueries, searchesTotal, 1)
+
+  const timestamps = rows.map((r) => new Date(r.created_at).getTime()).filter((t) => Number.isFinite(t))
+  const activeDays =
+    timestamps.length > 1
+      ? Math.max(1, Math.round((Math.max(...timestamps) - Math.min(...timestamps)) / (24 * 60 * 60 * 1000)) + 1)
+      : timestamps.length
+
+  // ── B · supply — answer coverage + intent shapes ──────────────────────────
+  const mix = ANSWER_STATE_ORDER.map((state) => {
+    const list = queryRows.filter((r) => r.state === state)
+    const searched = list.reduce((s, r) => s + r.searches, 0)
+    return {
+      state,
+      label: ANSWER_STATE_LABELS[state],
+      queries: list.length,
+      searches: searched,
+      sharePct: sharePct(searched, searchesTotal, 1),
+    }
+  })
+
+  const shapes = QUERY_SHAPE_ORDER.map((shape) => {
+    const list = queryRows.filter((r) => r.shape === shape)
+    const searched = list.reduce((s, r) => s + r.searches, 0)
+    const shapeRecorded = list.reduce((s, r) => s + r.recordedSearches, 0)
+    const answered = list
+      .filter((r) => r.state === 'answered')
+      .reduce((s, r) => s + r.recordedSearches, 0)
+    return {
+      shape,
+      label: QUERY_SHAPE_LABELS[shape],
+      searches: searched,
+      queries: list.length,
+      recordedSearches: shapeRecorded,
+      sharePct: sharePct(searched, searchesTotal, 1),
+      successPct: sharePct(answered, shapeRecorded, 1),
+    }
+  }).filter((s) => s.searches > 0)
+
+  // Head = the top 20% of queries by volume; the rest is the long tail.
+  const headCount = Math.max(1, Math.ceil(queryRows.length * 0.2))
+  const headSharePct = sharePct(
+    queryRows.slice(0, headCount).reduce((s, r) => s + r.searches, 0),
+    searchesTotal,
+    1,
+  )
+
+  // ── C · habit — is search a habit or a one-off? ───────────────────────────
+  const HABIT_BUCKETS: Array<{ bucket: string; label: string; min: number; max: number }> = [
+    { bucket: '1', label: '1×', min: 1, max: 1 },
+    { bucket: '2', label: '2×', min: 2, max: 2 },
+    { bucket: '3-5', label: '3–5×', min: 3, max: 5 },
+    { bucket: '6+', label: '6×+', min: 6, max: Number.MAX_SAFE_INTEGER },
+  ]
+  const buckets = HABIT_BUCKETS.map((b) => {
+    const list = queryRows.filter((r) => r.searches >= b.min && r.searches <= b.max)
+    const searched = list.reduce((s, r) => s + r.searches, 0)
+    return {
+      bucket: b.bucket,
+      label: b.label,
+      queries: list.length,
+      searches: searched,
+      sharePct: sharePct(searched, searchesTotal, 1),
+    }
+  })
+
+  // ── C · health — are the search layers actually serving? ──────────────────
+  const indexedRoutable = new Set(indexCounts.ids.filter((id) => id.startsWith('device:') || id.startsWith('article:')))
+  const missingFromIndex = indexCounts.readable
+    ? catalog
+        .filter((c) => c.kind !== 'video' && !indexedRoutable.has(c.id))
+        .map((c) => `${c.title} (${c.id.split(':')[0]})`)
+        .slice(0, 25)
+    : []
+  const publishedRoutable = published.devices + published.articles
+  const indexedPublishedRoutable = catalog.filter((c) => c.kind !== 'video' && indexedRoutable.has(c.id)).length
+
+  // Capture-rate reconciliation: Upstash executed N queries on the index within
+  // the stats window; we logged M terms. Interpretation is two-sided — a wide
+  // gap can be lost instrumentation OR index traffic from jobs rather than
+  // visitors, so the tab states both readings instead of picking one.
+  const periodQueryCount = telemetry.periodQueryCount
+  const captureRatePct =
+    telemetry.ok && periodQueryCount !== null && periodQueryCount > 0
+      ? sharePct(recordedSearches ?? searchesTotal, periodQueryCount, 1)
+      : null
+
+  const health: SearchInsights['health'] = {
+    layers: {
+      // Postgres full-text is always available (it is the catalog itself).
+      postgres: true,
+      upstash: indexCounts.readable,
+      semantic: isVectorConfigured(),
+      // Upstash's own telemetry feed: live only when the account API answered.
+      upstashAnalytics: telemetry.ok,
+    },
+    indexed: {
+      devices: indexCounts.devices,
+      articles: indexCounts.articles,
+      videos: indexCounts.videos,
+      total: indexCounts.total,
+      readable: indexCounts.readable,
+    },
+    published,
+    coveragePct: sharePct(indexedPublishedRoutable, publishedRoutable, 1),
+    missingFromIndex,
+    telemetry: {
+      configured: telemetry.configured,
+      ok: telemetry.ok,
+      error: telemetry.ok ? null : (telemetry.error ?? 'Telemetry unavailable'),
+      indexName: telemetry.indexName,
+      indexId: telemetry.indexId,
+      upstashPeriod: telemetry.period,
+      documentCount: telemetry.documentCount,
+      pendingDocumentCount: telemetry.pendingDocumentCount,
+      dailyQueryCount: telemetry.dailyQueryCount,
+      monthlyQueryCount: telemetry.monthlyQueryCount,
+      periodQueryCount,
+      captureRatePct,
+      latencyMeanMs: telemetry.latencyMeanMs,
+      latencyP99Ms: telemetry.latencyP99Ms,
+      queryThroughput: telemetry.queryThroughput.slice(-24),
+      fetchedAt: telemetry.fetchedAt,
+    },
+  }
+
+
+  // ── D · action — the backlog, ranked by demand at stake ───────────────────
+  const fixQueue: SearchFixQueueItem[] = []
+
+  for (const row of queryRows) {
+    if (row.state === 'answered') continue
+    const zeroSharePct = sharePct(row.zeroResults, row.recordedSearches, 0)
+    const searchHref = `/search?q=${encodeURIComponent(row.query)}`
+
+    // Un-instrumented rows first: real demand, unconfirmed miss. Lowest weight so
+    // they never outrank a confirmed gap, but never dropped either.
+    if (row.state === 'unknown') {
+      const stake = row.searches
+      fixQueue.push({
+        issue: 'unrecorded_result',
+        label: SEARCH_ISSUE_META.unrecorded_result.label,
+        query: row.query,
+        searches: row.searches,
+        zeroSharePct: 0,
+        severity: searchSeverity(stake),
+        stake,
+        detail: row.nearMiss
+          ? `${row.searches} search${row.searches === 1 ? '' : 'es'} with no recorded result count. Closest catalog match: ${row.nearMiss.title} — ${Math.round(row.nearMiss.similarity * 100)}% token overlap.`
+          : `${row.searches} search${row.searches === 1 ? '' : 'es'} with no recorded result count — the miss is unconfirmed.`,
+        action: SEARCH_ISSUE_META.unrecorded_result.action,
+        href: searchHref,
+        editHref: null,
+      })
+      continue
+    }
+
+    if (row.nearMiss) {
+      // Cheapest fix in the queue: the page almost certainly exists already.
+      const stake = row.searches * 4
+      fixQueue.push({
+        issue: 'near_miss',
+        label: SEARCH_ISSUE_META.near_miss.label,
+        query: row.query,
+        searches: row.searches,
+        zeroSharePct,
+        severity: searchSeverity(stake),
+        stake,
+        detail: `Closest catalog match: ${row.nearMiss.title} — ${Math.round(row.nearMiss.similarity * 100)}% token overlap.`,
+        action: SEARCH_ISSUE_META.near_miss.action,
+        href: searchHref,
+        editHref: null,
+      })
+      continue
+    }
+
+    if (row.state === 'zero') {
+      const singleToken = row.query.trim().split(/\s+/).length === 1
+      const issue: SearchIssue = singleToken ? 'vague_query' : 'zero_result'
+      const stake = row.searches * (singleToken ? 1 : 3)
+      fixQueue.push({
+        issue,
+        label: SEARCH_ISSUE_META[issue].label,
+        query: row.query,
+        searches: row.searches,
+        zeroSharePct,
+        severity: searchSeverity(stake),
+        stake,
+        detail: `${row.searches} search${row.searches === 1 ? '' : 'es'} · ${zeroSharePct}% returned nothing · no catalog title comes close.`,
+        action: SEARCH_ISSUE_META[issue].action,
+        href: searchHref,
+        editHref: null,
+      })
+      continue
+    }
+
+    const stake = row.searches * 1.5
+    fixQueue.push({
+      issue: 'thin_result',
+      label: SEARCH_ISSUE_META.thin_result.label,
+      query: row.query,
+      searches: row.searches,
+      zeroSharePct,
+      severity: searchSeverity(stake),
+      stake,
+      detail: `${row.searches} search${row.searches === 1 ? '' : 'es'} · ${row.avgResults} results on average — one match is a coin flip.`,
+      action: SEARCH_ISSUE_META.thin_result.action,
+      href: searchHref,
+      editHref: null,
+    })
+  }
+
+  // Unindexed published pages: the content exists but search cannot serve it.
+  // Ranked by a fixed stake (weight 10) and capped so a bulk import can't drown
+  // out real demand.
+  for (const label of health.missingFromIndex.slice(0, 5)) {
+    fixQueue.push({
+      issue: 'unindexed_content',
+      label: SEARCH_ISSUE_META.unindexed_content.label,
+      query: label,
+      searches: 0,
+      zeroSharePct: 0,
+      severity: 'medium',
+      stake: 10,
+      detail: `${health.coveragePct}% of published devices + articles are in the search index — this one is not.`,
+      action: SEARCH_ISSUE_META.unindexed_content.action,
+      href: '/admin/devices',
+      editHref: null,
+    })
+  }
+
+  fixQueue.sort((a, b) => b.stake - a.stake || b.searches - a.searches)
+
+
+
+  return {
+    totals: {
+      searches: searchesTotal,
+      recordedSearches,
+      unrecordedSearches,
+      uniqueQueries,
+      zeroResultSearches,
+      zeroResultRatePct: sharePct(zeroResultSearches, recordedSearches, 1),
+      answeredSharePct: sharePct(answeredSearches, recordedSearches, 1),
+      thinSharePct: sharePct(thinSearches, recordedSearches, 1),
+      avgResults: recordedSearches > 0 ? Math.round((resultSum / recordedSearches) * 100) / 100 : 0,
+      repeatQuerySharePct,
+      oneOffQueries,
+      searchPageViews: searchPageRes.count ?? 0,
+      activeDays,
+    },
+    demand: {
+      topQueries: queryRows.slice(0, 50),
+      treemap: queryRows.slice(0, 24).map((r) => ({
+        query: r.query,
+        searches: r.searches,
+        state: r.state,
+        shape: r.shape,
+        sharePct: r.sharePct,
+      })),
+      maxSearches: queryRows.length > 0 ? queryRows[0].searches : 0,
+    },
+    supply: { mix, shapes, headSharePct },
+    habit: {
+      buckets,
+      topRepeats: [...queryRows]
+        .filter((r) => r.searches >= 2)
+        .sort((a, b) => b.searches - a.searches)
+        .slice(0, 10),
+    },
+    health,
+    action: {
+      fixQueue: fixQueue.slice(0, 25),
+      stakeTotal: Math.round(fixQueue.reduce((s, i) => s + i.stake, 0) * 10) / 10,
     },
   }
 }

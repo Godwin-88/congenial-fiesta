@@ -41,9 +41,14 @@ export default function SearchBar({ placeholder = 'Search devices, reviews, comp
   }
 
   const totalResults = results.length
+  const seqRef = useRef(0)
+
+  // Latest-query-wins: a slow earlier response must never overwrite results for
+  // newer input (the classic "type fast, see stale dropdown" race).
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
+    const seq = ++seqRef.current
     debounceRef.current = setTimeout(async () => {
       if (query.length < 2) {
         setResults([])
@@ -52,16 +57,23 @@ export default function SearchBar({ placeholder = 'Search devices, reviews, comp
       }
       setLoading(true)
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&preview=true`)
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 8000)
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&preview=true`, {
+          signal: controller.signal,
+        })
+        clearTimeout(timeout)
+        if (seq !== seqRef.current) return // a newer keystroke already fired — drop this stale response
         if (!res.ok) throw new Error('Search failed')
         const data = await res.json()
         setResults(data.results ?? [])
         setIsOpen(true)
         setSelectedIndex(-1)
       } catch {
+        if (seq !== seqRef.current) return
         setResults([])
       } finally {
-        setLoading(false)
+        if (seq === seqRef.current) setLoading(false)
       }
     }, 200)
     return () => {

@@ -3,7 +3,7 @@ import {
   QUALIFICATION_COLORS,
   type QualificationTier,
 } from '@/lib/analytics/consideration'
-import type { ConsiderationInsights, DeviceInsights, CommunityInsights, RevenueInsights } from '@/lib/analytics/queries'
+import type { ConsiderationInsights, DeviceInsights, CommunityInsights, RevenueInsights, SearchInsights } from '@/lib/analytics/queries'
 import { RECON_LABELS } from '@/lib/analytics/revenue'
 
 type DeviceChip = { label: string; value: string }
@@ -143,6 +143,42 @@ export function revenueChipsFor(insights: RevenueInsights): RevenueChip[] {
   }
   if (insights.action.fixQueue.length > 0) {
     chips.push({ label: 'Revenue queue', value: `${insights.action.fixQueue.length} leaks` })
+  }
+  return chips
+}
+
+type SearchChip = { label: string; value: string }
+
+export function searchChipsFor(insights: SearchInsights): SearchChip[] {
+  const { totals, demand, supply, health } = insights
+  const chips: SearchChip[] = [
+    { label: 'Searches', value: totals.searches.toLocaleString() },
+    { label: 'Unique queries', value: totals.uniqueQueries.toLocaleString() },
+    { label: 'Zero-result rate', value: `${totals.zeroResultRatePct}%` },
+    { label: 'Avg results', value: `${totals.avgResults}` },
+  ]
+  if (demand.topQueries[0]) {
+    chips.push({
+      label: 'Top term',
+      value: `"${demand.topQueries[0].query}" · ${demand.topQueries[0].searches}×`,
+    })
+  }
+  const weakest = [...supply.shapes].sort((a, b) => a.successPct - b.successPct)[0]
+  if (weakest) {
+    chips.push({ label: 'Weakest shape', value: `${weakest.label} · ${weakest.successPct}% answered` })
+  }
+  chips.push({
+    label: 'Index coverage',
+    value: health.indexed.readable ? `${health.coveragePct}%` : 'index unreadable',
+  })
+  if (totals.unrecordedSearches > 0) {
+    chips.push({ label: 'Unmeasured', value: `${totals.unrecordedSearches} pre-instrumentation` })
+  }
+  if (health.missingFromIndex.length > 0) {
+    chips.push({ label: 'Unindexed pages', value: `${health.missingFromIndex.length}` })
+  }
+  if (insights.action.fixQueue.length > 0) {
+    chips.push({ label: 'Backlog', value: `${insights.action.fixQueue.length} terms` })
   }
   return chips
 }

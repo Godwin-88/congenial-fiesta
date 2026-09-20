@@ -133,3 +133,30 @@ export async function removeFromIndex(id: string): Promise<void> {
     // idempotent
   }
 }
+
+/**
+ * Publish-aware device sync — index when published, EVICT when not.
+ *
+ * The old call sites only indexed `status === 'published'`, so unpublishing or
+ * deleting a device left its document in Upstash forever: /search kept serving
+ * dead devices that 404 on click. This is the single entry point every device
+ * write path should use.
+ */
+export async function syncDeviceIndex(device: (Device & { slug?: string }) | null | undefined): Promise<void> {
+  if (!device?.slug) return
+  if (device.status === 'published') {
+    await indexDevice(device)
+    return
+  }
+  await removeFromIndex(`device:${device.slug}`)
+}
+
+/** Publish-aware article sync — index when published, EVICT when not. */
+export async function syncArticleIndex(article: (Article & { slug?: string }) | null | undefined): Promise<void> {
+  if (!article?.slug) return
+  if (article.status === 'published') {
+    await indexArticle(article)
+    return
+  }
+  await removeFromIndex(`article:${article.slug}`)
+}

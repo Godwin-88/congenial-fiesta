@@ -311,14 +311,13 @@ export async function PATCH(
       }
     }
 
-    // Trigger search reindex if status changed to published
-    if (body.status === 'published') {
-      try {
-        const { indexDevice } = await import('@/lib/search/indexing')
-        await indexDevice(data).catch(() => {})
-      } catch {
-        // Non-blocking
-      }
+    // Search index sync — index when published, evict when unpublished/draft so
+    // /search never serves a device that is no longer live.
+    try {
+      const { syncDeviceIndex } = await import('@/lib/search/indexing')
+      await syncDeviceIndex(data).catch(() => {})
+    } catch {
+      // Non-blocking: search indexing is optional
     }
 
     return NextResponse.json({
@@ -344,6 +343,14 @@ export async function DELETE(
     const { id } = await params
     const supabase = await getAdminClient()
 
+    // Grab the slug first — the index key is `device:<slug>` and the row is
+    // about to disappear.
+    const { data: existing } = await supabase
+      .from('devices')
+      .select('slug')
+      .eq('id', parseInt(id))
+      .maybeSingle()
+
     const { error } = await supabase
       .from('devices')
       .delete()
@@ -351,6 +358,17 @@ export async function DELETE(
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Evict from the search + vector indexes so a deleted device can never be
+    // served by /search again.
+    if (existing?.slug) {
+      try {
+        const { removeFromIndex } = await import('@/lib/search/indexing')
+        await removeFromIndex(`device:${existing.slug}`).catch(() => {})
+      } catch {
+        // Non-blocking: search indexing is optional
+      }
     }
 
     return NextResponse.json({ success: true })

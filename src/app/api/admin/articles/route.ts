@@ -108,14 +108,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Trigger search reindex if published
-    if (body.status === 'published') {
-      try {
-        const { indexArticle } = await import('@/lib/search/indexing')
-        await indexArticle(data).catch(() => {})
-      } catch {
-        // Non-blocking: search indexing is optional
-      }
+    // Search index sync — index when published, evict when draft.
+    try {
+      const { syncArticleIndex } = await import('@/lib/search/indexing')
+      await syncArticleIndex(data).catch(() => {})
+    } catch {
+      // Non-blocking: search indexing is optional
     }
 
     return NextResponse.json({ data }, { status: 201 })

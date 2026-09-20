@@ -130,6 +130,7 @@ These are *our* implementation's contribution — recorded **here** as "proposed
 - **Phase 9 (Compare & Consideration intelligence) — ✅ LIVE:** the Compare tab rebuilt as the intent story — `getConsiderationInsights(period)` joins the intent beacon to traffic + catalog (funnel → mix → audience → pairs → action); shared qualification model (hot/warm/cold MQL tiers) in `src/lib/analytics/consideration.ts`; six purpose-built visuals + a prescriptive consideration queue; two new CSV reports + a JSON endpoint + two new Explore surfaces (`intent_score` metric · `qualification_tier` dimension) — see §7.5.
 - **Phase 10 (Community & Trust intelligence) — ✅ LIVE:** the Community tab rebuilt as the social-proof story — `getCommunityInsights(period)` joins ratings + comments + votes + watchers to traffic (Trust → Voice → People → Action); shared trust model (healthy/thin/stale/silent bands, `trustGrade()`, contributor grades) in `src/lib/analytics/community.ts`; five purpose-built visuals + a prescriptive community queue with issue codes; two new CSV reports + a JSON endpoint — see §7.6.
 - **Phase 11 (Affiliate & Revenue intelligence) — ✅ LIVE (+ normalised rate-sheet join):** the Affiliate tab rebuilt as the money story — `getRevenueInsights(period)` joins the click stream to the rate sheet + earnings ledger + link health (Money → Flow → Channels → Action); shared revenue model (monetization tiers converter→unsold, reconciliation states reconciled/over/under/blind, channel states priced/mismatch/unpriced/idle) in `src/lib/analytics/revenue.ts`; seven purpose-built visuals + a prescriptive revenue queue; two new CSV reports + a JSON endpoint — see §7.7.
+- **Phase 12 (Search & Discovery intelligence + engine telemetry) — ✅ LIVE:** the Search tab rebuilt as the demand story — `getSearchInsights(period)` joins the query log to the catalog and the index (Demand → Supply → Habit & Health → Action); shared query model (answer states answered/thin/zero/**unknown**, intent shapes, near-miss Dice matching, stake weighting) in `src/lib/analytics/searchStory.ts`; six purpose-built visuals incl. the dashboard's only treemap + a prescriptive backlog; two CSV reports + a JSON endpoint — see §7.8. Search itself fixed end-to-end (3-layer hybrid + publish-aware index eviction); Upstash index-side telemetry (query volume, capture-rate reconciliation, latency percentiles) wired through the account Developer API.
 
 
 ### 5.3 KPI dictionary skeleton (every KPI ships with full metadata — ℹ glossary)
@@ -480,6 +481,103 @@ roadmap; `EarningsImportCard` and `AffiliateNetworksPanel` stay as the tab's fin
   warning, not a zero. Only `unpriced` (no rate anywhere) shows clicks with an empty bar.
 - Rate thresholds (±10% recon, 3%/1% CTR tiers, 100/20 stake severity) live in `revenue.ts` so UI and aggregator
   cannot drift.
+
+
+### 7.8 Search & Discovery tab — the demand story (Phase 12, ✅ LIVE)
+
+**Thesis.** Search is where the audience tells us, in their own words, what the catalog is missing. Every other
+tab infers intent from behaviour; this one reads it verbatim. The story runs **Demand → Supply → Habit & Health →
+Action**: what people asked for, whether we can answer it, whether it is a habit or a one-off, and what to fix
+first. Distinctive visual: the **only treemap on the dashboard** (area = search volume, so the shape of demand is
+legible at a glance).
+
+**Aggregator.** `getSearchInsights(period)` (queries.ts) joins four first-party sources — the `search_queries`
+log, the published catalog (devices · articles · videos), the Upstash index enumeration, and `page_views` on
+`/search` — plus the Upstash account telemetry feed. Shared vocabulary lives in `src/lib/analytics/searchStory.ts`
+(answer states, intent shapes, near-miss matching, stake weights) so the aggregator and the client charts cannot
+drift.
+
+**Sections.**
+
+- **A Demand:** four-KPI strip (searches · unique terms · zero-result rate · answered-with-depth) + full-width
+  `QueryDemandTreemap` (area-weighted demand by term) + `QueryShapeBreakdown` (intent shapes: comparison → price →
+  spec → brand → generic).
+- **B Supply:** `AnswerCoverageBand` — answered / thin / zero / **unknown** as one stacked band, so the honest
+  share of demand we cannot grade yet is visible rather than silently folded into "answered".
+- **C Habit & Health:** `QueryRepeatChart` (repeat vs one-off demand, plus active days) + `SearchIndexHealth`
+  (layer-by-layer status · published-vs-indexed coverage · the Upstash telemetry panel).
+- **D Action:** `SearchFixQueue` ranked by demand at stake, plus the Roadmap card.
+
+**Answer states (the core vocabulary).** `answered` = avg results ≥ 4 · `thin` = 1–3 · `zero` = < 1 ·
+`unknown` = the row predates result instrumentation (`results_count` was never captured). `unknown` is
+deliberately a first-class state: older rows must not be counted as failures *or* successes. Rates that depend
+on grading (`zeroResultRate`, `answeredWithDepth`) divide by **recorded** searches only, and the API documents
+that denominator explicitly.
+
+**Fix queue & stake.** `stake = searches × weight` — near-miss 4 · zero-result 3 · thin 1.5 · unindexed published
+page a flat 10 · unrecorded row 1. Issue codes: `near_miss` (a published page scores Dice ≥ 0.5 against the term
+but did not surface), `zero_result`, `thin_result`, `unindexed_page`, `unrecorded_result`.
+
+
+**Search itself — fixed end-to-end in this phase.** The complaint that "search isn't working" traced to the
+index/escalation path, not the UI:
+
+- `src/lib/search/server-search.ts` — the three-layer hybrid search (Postgres FTS → Upstash BM25 → Upstash
+  semantic) with the merged escalation contract the tab measures.
+- `src/app/api/search/route.ts` — the route now uses that hybrid path and logs only **committed** searches
+  (autocomplete keystrokes are excluded by design, so the log measures intent, not typing).
+- `src/lib/search/indexing.ts` · `src/lib/upstash/search.ts` · `src/lib/upstash/vector.ts` +
+  `api/admin/{devices,articles}/**` — **publish-aware index eviction**: unpublishing deletes the stale index
+  entry, and publishing re-indexes, so the BM25/semantic layers stop serving documents the catalog retracted.
+- `src/components/search/SearchBar.tsx` · `src/app/search/page.tsx` — UI follows the hybrid result contract.
+
+**Upstash telemetry (production-grade, account Developer API).** Verified live: Upstash Search has **no
+per-query analytics** — the SDK exposes none and `POST|GET {rest}/analytics/top` returns
+`404 "Endpoint not found"`. The only supported index-side source is the account API
+(`/v2/search` → list · `/v2/search/{id}/stats` → statistics), authenticated with `Basic <email:api_key>`. So:
+
+- **What** was searched → first-party `search_queries` (always, sole source of truth).
+- **How many** queries executed + **latency** → `src/lib/upstash/telemetry.ts`.
+
+`fetchUpstashSearchTelemetry(period)` resolves the index id deterministically (env id → endpoint-prefix match from
+the REST URL host → name → sole index), fetches stats, and returns an honest `{ok, configured, error}` object.
+Implementation notes that matter in production:
+
+- **It never throws** and caches for 60s in-process — a metadata API must not hold a page render hostage.
+- **One retry with backoff** on 429/5xx, plus a 10s `AbortSignal.timeout`.
+- `query_throughput` is a **rate** series (queries/sec), not counts — the window total is
+  `mean(rate) × sample span`, derived from the series' own timestamps. Summing it directly yields a fraction.
+- Latency uses the latest **non-zero** bucket, since an idle trailing bucket reads as `0 ms`.
+- **Period degradation:** some index tiers reject wide windows (`HTTP 400 "You cannot get metrics for period:
+  30d"`), so the request walks `period → 7d → 3d → 1d` and reports whichever window actually served via
+  `telemetry.upstashPeriod`.
+- `UPSTASH_EMAIL` + `UPSTASH_API_KEY` are **account** credentials (Developer API), distinct from
+  `UPSTASH_SEARCH_REST_URL` / `UPSTASH_SEARCH_REST_TOKEN` (index REST). Optional
+  `UPSTASH_SEARCH_INDEX_ID` / `UPSTASH_SEARCH_INDEX_NAME` override resolution.
+
+**Capture-rate reconciliation (the distinctive telemetry read).** `captureRatePct = logged measured terms ÷
+queries Upstash executed in the window`. This is deliberately presented with a **two-sided reading**: Upstash
+counts *every* index operation — visitor searches, reindex jobs and admin probes alike — and never sees
+Postgres-only searches, so a low rate means lost instrumentation **or** non-visitor traffic. A rate above 100% is
+impossible. `documentCount` from Upstash is shown beside our own index enumeration because the two must match
+(verified live: 36 = 36).
+
+**Endpoints & registration.** JSON:
+`GET /api/admin/analytics/search?period=7d|30d|90d&view=full|summary|demand|supply|habit|health|telemetry|queue`
+(`meta.definitions` documents every formula including the capture-rate and telemetry-window semantics). CSVs:
+`search-backlog` and `search-demand` registered in `generateReportCsv` + `REPORT_LABELS` (export.ts) and
+`SCHEDULED_EXPORT_REPORTS` (queries.ts).
+
+**Live reads / caveats (all surfaced in the UI):**
+
+- The live query log is near-empty, so the tab renders honest empty states rather than inventing shape; the
+  `unknown` bucket is the dominant real state on existing rows.
+- `missingFromIndex` / coverage compare **published** rows only — drafts are correctly absent from the index.
+- Near-miss matching is Sørensen–Dice over tokens ≥ 0.5; it is a lead generator for the queue, not a relevance
+  score.
+- Telemetry is account-level per **index**, not per query, and cannot be broken down by term or channel.
+- If `UPSTASH_EMAIL`/`UPSTASH_API_KEY` are absent the panel says exactly that and first-party demand analytics
+  are unaffected — telemetry is additive, never load-bearing.
 
 
 ## 8. Open Questions (for architecture review)

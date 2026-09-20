@@ -14,6 +14,7 @@ import {
   getConsiderationInsights,
   getCommunityInsights,
   getRevenueInsights,
+  getSearchInsights,
 } from './queries'
 
 export const REPORT_LABELS: Record<string, string> = {
@@ -31,6 +32,8 @@ export const REPORT_LABELS: Record<string, string> = {
   'community-queue': 'Community Queue (Trust Fixes)',
   'revenue-ledger': 'Revenue Channel Ledger',
   'revenue-queue': 'Revenue Queue (Pricing Leaks)',
+  'search-demand': 'Search Demand Ledger',
+  'search-backlog': 'Search Backlog Queue',
   explore: 'Explore',
 }
 
@@ -317,6 +320,48 @@ export async function generateReportCsv(
           })),
         ),
         filename: `revenue-queue-${period}-${date}.csv`,
+      }
+    }
+    case 'search-demand': {
+      const insights = await getSearchInsights(period)
+      return {
+        csv: toCSV(
+          insights.demand.topQueries.map((row, i) => ({
+            rank: i + 1,
+            query: row.query,
+            searches: row.searches,
+            demand_share_pct: row.sharePct,
+            answer_state: row.state,
+            intent_shape: row.shape,
+            avg_results: row.avgResults,
+            zero_results: row.zeroResults,
+            closest_catalog_match: row.nearMiss?.title ?? '',
+            near_miss_similarity: row.nearMiss?.similarity ?? '',
+            last_seen: row.lastSeen,
+            live_search: `https://fweezytech.co.ke/search?q=${encodeURIComponent(row.query)}`,
+          })),
+        ),
+        filename: `search-demand-${period}-${date}.csv`,
+      }
+    }
+    case 'search-backlog': {
+      const insights = await getSearchInsights(period)
+      return {
+        csv: toCSV(
+          insights.action.fixQueue.map((item, i) => ({
+            rank: i + 1,
+            priority: item.severity,
+            issue: item.issue,
+            query: item.query,
+            searches: item.searches,
+            zero_share_pct: item.zeroSharePct,
+            stake: item.stake,
+            detail: item.detail,
+            action: item.action,
+            live_search: `https://fweezytech.co.ke${item.href}`,
+          })),
+        ),
+        filename: `search-backlog-${period}-${date}.csv`,
       }
     }
     case 'explore': {

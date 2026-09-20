@@ -2,17 +2,22 @@ import Link from 'next/link'
 import {
   getTotalPageViews,
   getPageViewsOverTime, getTopPages, getTrafficSources, getDeviceTypeBreakdown,
-  getTopAffiliatePages, getAffiliateCTR, getClicksByRetailer, getTopSearchQueries, getFunnelMetrics,
+  getTopAffiliatePages, getAffiliateCTR, getClicksByRetailer, getFunnelMetrics,
   getZeroReport, getTopDevices, getTopContentPages, type ContentSection,
   getAudienceMetrics, getConsiderationMetrics, getCampaignMetrics, getTrustMetrics,
-  getRevenueProxy, getSearchQuality,
+  getRevenueProxy,
   getQualifiedLeads, getEarningsReconciliation, getLinkHealthSummary,
   getAlertRules, computeAlertKpiValues, listAlertEvents,
   getRetentionStatus, listRetentionLog,
   runExploreQuery, listScheduledExports, getTrafficInsights, getContentInsights, getDeviceInsights,
-  getConsiderationInsights, getCommunityInsights, getRevenueInsights,
+  getConsiderationInsights, getCommunityInsights, getRevenueInsights, getSearchInsights,
 } from '@/lib/analytics/queries'
 import { ROLE_ALLOWED, type TabId } from '@/lib/analytics/tabs'
+import {
+  ANSWER_STATE_COLORS,
+  ANSWER_STATE_LABELS,
+  QUERY_SHAPE_LABELS,
+} from '@/lib/analytics/searchStory'
 import { getAdminUser } from '@/lib/admin/require-admin'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -42,6 +47,10 @@ import {
   Wallet,
   Wrench,
   BarChart3,
+  LayoutGrid,
+  ListOrdered,
+  Repeat,
+  ShieldCheck,
 } from 'lucide-react'
 import PageViewsChart from './PageViewsChart'
 import TrafficSourcesChart from './TrafficSourcesChart'
@@ -94,7 +103,13 @@ import MonetizationThermometer from './MonetizationThermometer'
 import RetailerLedger from './RetailerLedger'
 import DeviceEarnersTable from './DeviceEarnersTable'
 import RevenueFixQueue from './RevenueFixQueue'
-import { deviceChipsFor, considerationChipsFor, communityChipsFor, revenueChipsFor, tierBadgeClass, tierLabel, TierDot } from './ConsiderationTabHelpers'
+import QueryDemandTreemap from './QueryDemandTreemap'
+import AnswerCoverageBand from './AnswerCoverageBand'
+import QueryShapeBreakdown from './QueryShapeBreakdown'
+import QueryRepeatChart from './QueryRepeatChart'
+import SearchIndexHealth from './SearchIndexHealth'
+import SearchFixQueue from './SearchFixQueue'
+import { deviceChipsFor, considerationChipsFor, communityChipsFor, revenueChipsFor, searchChipsFor, tierBadgeClass, tierLabel, TierDot } from './ConsiderationTabHelpers'
 import RoadmapPanel, { type RoadmapItem } from './RoadmapPanel'
 import QualifiedLeadsTable from './QualifiedLeadsTable'
 import LinkHealthTable from './LinkHealthTable'
@@ -177,6 +192,33 @@ const ROADMAP_OUTREACH: RoadmapItem[] = [
     feature: 'Press/sponsor/media-kit inquiry funnel',
     data: 'inquiry submissions with status flow',
     kpi: 'Lead volume + status win-rate',
+  },
+]
+
+const ROADMAP_SEARCH: RoadmapItem[] = [
+  {
+    phase: 'Live',
+    feature: 'Demand → answer coverage → backlog',
+    data: 'search_queries (query · results_count · zero_result) × catalog titles',
+    kpi: 'Zero-result rate · answered-with-depth share · stake-ranked backlog',
+  },
+  {
+    phase: 'Live',
+    feature: 'Index health + publish-aware eviction',
+    data: 'Upstash index ids vs published devices/articles; unpublish/delete evicts',
+    kpi: 'Index coverage % — a published page that search cannot serve is a bug',
+  },
+  {
+    phase: 'Phase 3',
+    feature: 'Synonym & alias dictionary',
+    data: 'near-miss query → target page mapping, editable in admin',
+    kpi: 'Near-miss rows closed without new content',
+  },
+  {
+    phase: 'Phase 3',
+    feature: 'Zero-result → brief generator',
+    data: 'backlog rows routed into the editorial calendar with the query verbatim',
+    kpi: 'Time from missed search to published page',
   },
 ]
 
@@ -298,9 +340,9 @@ export default async function AnalyticsPage({
 
   const [
     totalViews,
- viewsOverTime, topPages, trafficSources, deviceTypes, topAffiliate,
- searchQueries, funnel, zeroReport, topDevices, topContentPages,
-    audience, consideration, campaignRows, trust, revenueProxy, searchQuality,
+    viewsOverTime, topPages, trafficSources, deviceTypes, topAffiliate,
+    funnel, zeroReport, topDevices, topContentPages,
+    audience, consideration, campaignRows, trust, revenueProxy,
     qualifiedLeads, linkHealth,
   ] = await Promise.all([
     getTotalPageViews(period),
@@ -309,7 +351,6 @@ export default async function AnalyticsPage({
     getTrafficSources(period),
     getDeviceTypeBreakdown(period),
     getTopAffiliatePages(period, 20),
-    getTopSearchQueries(20),
     getFunnelMetrics(period),
     getZeroReport(period, 10),
     getTopDevices(period, 20),
@@ -319,7 +360,6 @@ export default async function AnalyticsPage({
     getCampaignMetrics(period),
     getTrustMetrics(period),
     getRevenueProxy(period),
-    getSearchQuality(period, 10),
     getQualifiedLeads(period, 25),
     getLinkHealthSummary(10),
   ])
@@ -453,6 +493,15 @@ export default async function AnalyticsPage({
     revenueInsights = await getRevenueInsights(period)
   }
   const revenueChips = revenueInsights ? revenueChipsFor(revenueInsights) : []
+
+  // Search & Discovery analytics hang off one aggregator too (same discipline as
+  // the other tabs): demand surface → answer coverage → habit + index health →
+  // ranked backlog, all from search_queries + the live catalog + the index.
+  let searchInsights: Awaited<ReturnType<typeof getSearchInsights>> | null = null
+  if (activeTab === 'search' && allowedTabs.includes('search')) {
+    searchInsights = await getSearchInsights(period)
+  }
+  const searchChips = searchInsights ? searchChipsFor(searchInsights) : []
 
 const csvLinks = [
     { href: `/api/admin/export/top-pages?period=${period}`, label: 'Top Pages CSV' },
@@ -1870,83 +1919,453 @@ const csvLinks = [
 
       {activeTab === 'search' && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Search className="h-5 w-5 text-brand-primary" />
-                Top Internal Searches
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-muted-foreground border-b border-border">
-                      <th className="text-left py-2 pr-4 font-medium">Rank</th>
-                      <th className="text-left py-2 pr-4 font-medium">Query</th>
-                      <th className="text-right py-2 font-medium">Count</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {searchQueries.map((q, i) => (
-                      <tr key={q.query} className="border-b border-border last:border-0 hover:bg-foreground/5">
-                        <td className="py-2 pr-4 text-muted-foreground">{i + 1}</td>
-                        <td className="py-2 pr-4 text-foreground">{q.query}</td>
-                        <td className="py-2 text-right">{q.count.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                    {searchQueries.length === 0 && (
-                      <tr>
-                        <td colSpan={3} className="py-4 text-center text-muted-foreground">No search data</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+          {/* ── Insight banner ─────────────────────────────────────── */}
+          {searchInsights && (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {searchChips.map((chip) => (
+                  <span
+                    key={chip.label}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs"
+                  >
+                    <span className="text-muted-foreground">{chip.label}:</span>
+                    <span className="font-semibold text-foreground">{chip.value}</span>
+                  </span>
+                ))}
               </div>
-              <p className="text-muted-foreground text-xs mt-2">
-                Average results per query: <span className="text-foreground font-medium">{searchQuality.avgResults}</span>
+              <p className="text-xs text-muted-foreground mt-3">
+                Data sources:{' '}
+                <span className="font-medium text-foreground">
+                  search_queries · devices · articles · videos · page_views · Upstash Search index
+                </span>
+                <span className="ml-1">
+                  — demand-owned: every logged term carries an answer state and an intent shape, zero-result terms are
+                  matched back to the catalog, and the index itself is on the tab. The tab reads as demand → answer
+                  coverage → habit + health → action.
+                </span>
               </p>
-            </CardContent>
-          </Card>
+            </div>
+          )}
+
+          {/* ══ A · DEMAND — what is the audience asking for? ═════════ */}
+          <SectionHeading
+            letter="A"
+            title="Demand — what is the audience asking for?"
+            hint="search volume · answer state · intent shape"
+          />
+          {/* __SEARCH_KPIS__ */}
+          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Searches</CardTitle>
+                <MetricInfo
+                  metric="Searches logged"
+                  definition="Committed searches recorded in the period. Only page-loads are logged — keystrokes in the autocomplete dropdown are deliberately excluded, so this counts real intent, not typing."
+                  formula="count(search_queries rows) in period"
+                  ga4Alias="view_search_results"
+                  dataSource="search_queries"
+                  action="If this is near zero the tab is not measuring opinion, it is measuring silence — check the Query capture panel before reading anything else."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">
+                  {(searchInsights?.totals.searches ?? 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {(searchInsights?.totals.uniqueQueries ?? 0).toLocaleString()} unique terms ·{' '}
+                  {searchInsights?.totals.oneOffQueries ?? 0} typed once ·{' '}
+                  {(searchInsights?.totals.recordedSearches ?? 0).toLocaleString()} measured
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Zero-Result Rate</CardTitle>
+                <MetricInfo
+                  metric="Zero-result rate"
+                  definition="Share of logged searches that returned nothing at all, across all three search layers (catalog full-text + BM25 + semantic). The clearest single measure of whether the site answers its own audience."
+                  formula="zero-result rows ÷ all logged searches × 100"
+                  ga4Alias="— (first-party, needs the result-count join)"
+                  dataSource="search_queries.zero_result"
+                  action="Above ~10% the catalog has a visible hole: work the near-miss rows first — those are synonym or slug fixes, not new articles."
+                />
+              </CardHeader>
+              <CardContent>
+                <p
+                  className={`text-3xl font-bold ${
+                    (searchInsights?.totals.zeroResultRatePct ?? 0) > 10 ? 'text-rose-400' : 'text-foreground'
+                  }`}
+                >
+                  {searchInsights?.totals.zeroResultRatePct ?? 0}%
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {(searchInsights?.totals.zeroResultSearches ?? 0).toLocaleString()} of{' '}
+                  {(searchInsights?.totals.recordedSearches ?? 0).toLocaleString()} measured searches answered with
+                  silence
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Answered With Depth</CardTitle>
+                <MetricInfo
+                  metric="Answered with depth"
+                  definition="Searches that returned four or more results on average — enough choice to compare rather than settle. Counted on the merged result count each query actually produced."
+                  formula="rows with results_count ≥ 4 ÷ all logged searches × 100"
+                  ga4Alias="— (first-party)"
+                  dataSource="search_queries.results_count"
+                  action="One match is a coin flip: a competitor model released tomorrow and the visitor is gone. Thin demand needs alternatives, not a new device."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">{searchInsights?.totals.answeredSharePct ?? 0}%</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {searchInsights?.totals.avgResults ?? 0} results per search on average ·{' '}
+                  {searchInsights?.totals.thinSharePct ?? 0}% thin (1–3 results)
+                </p>
+                {(searchInsights?.totals.unrecordedSearches ?? 0) > 0 && (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {(searchInsights?.totals.unrecordedSearches ?? 0).toLocaleString()} searches excluded — no recorded
+                    result count
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Repeat Demand</CardTitle>
+                <MetricInfo
+                  metric="Repeat demand"
+                  definition="Share of searches that repeat a term already typed in the period. Repetition is the strongest signal of unmet demand: the visitor asked once, was not answered, and asked again."
+                  formula="(searches − distinct terms) ÷ searches × 100"
+                  ga4Alias="— (session-scoped, not GA4)"
+                  dataSource="search_queries"
+                  action="A repeated term that still shows zero results is a customer telling you, in their own words, what to publish next."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">{searchInsights?.totals.repeatQuerySharePct ?? 0}%</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  over {searchInsights?.totals.activeDays ?? 0} active day
+                  {(searchInsights?.totals.activeDays ?? 0) === 1 ? '' : 's'} in the period
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Search className="h-5 w-5 text-red-500" />
-                Zero-Result Searches (Content Backlog)
+                <LayoutGrid className="h-5 w-5 text-brand-primary" />
+                Demand Surface — Every Term Sized By Volume
+                <MetricInfo
+                  metric="Query demand treemap"
+                  definition="Top queries as nested rectangles: AREA is search volume, FILL is the answer state (green answered · amber thin · red zero), and the small bar inside each tile is the intent shape. One picture showing both what the audience wants and whether the catalog serves it."
+                  formula="tile area ∝ searches · fill = answer state of the query's average result count"
+                  ga4Alias="view_search_results by search_term"
+                  dataSource="search_queries × devices · articles · videos"
+                  action="Start with the biggest red tile: the highest-volume question the site currently refuses to answer."
+                />
               </CardTitle>
+              <CardDescription>Area = volume · colour = answered / thin / zero · bar = intent shape</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <QueryDemandTreemap
+                tiles={searchInsights?.demand.treemap ?? []}
+                maxSearches={searchInsights?.demand.maxSearches ?? 1}
+              />
+            </CardContent>
+          </Card>
+
+          {/* ══ B · SUPPLY — can the catalog answer it? ══════════════ */}
+          <SectionHeading
+            letter="B"
+            title="Supply — can the catalog answer what is asked?"
+            hint="answer coverage · intent shape success"
+          />
+          <div className="grid xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Gauge className="h-5 w-5 text-emerald-400" />
+                  Answer Coverage
+                  <MetricInfo
+                    metric="Answer coverage"
+                    definition="Every search in the period bucketed by how well it was answered: answered (4+ results on average), thin (1–3), zero (nothing). Plus the head/long-tail split — how much demand sits in the top 20% of terms, which is the part visitors experience as 'search works'."
+                    formula="searches per answer-state bucket ÷ all searches · head = top 20% of terms by volume"
+                    ga4Alias="— (first-party result counts)"
+                    dataSource="search_queries.results_count"
+                    action="Coverage on the head is a UX problem (fix now); coverage on the long tail is an SEO/content programme (schedule it)."
+                  />
+                </CardTitle>
+                <CardDescription>The shrinkage that matters is demand → answered</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AnswerCoverageBand
+                  mix={searchInsights?.supply.mix ?? []}
+                  totalSearches={searchInsights?.totals.searches ?? 0}
+                  recordedSearches={searchInsights?.totals.recordedSearches ?? 0}
+                  unrecordedSearches={searchInsights?.totals.unrecordedSearches ?? 0}
+                  headSharePct={searchInsights?.supply.headSharePct ?? 0}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-brand-primary" />
+                  Intent Shapes — What Kind Of Demand Walks In
+                  <MetricInfo
+                    metric="Query intent shapes"
+                    definition="Every query classified by what it is asking for: brand + model (highest purchase intent), brand only (wants a range view), head-to-head (wants a comparison page), spec intent (wants a guide), price intent (wants a filtered range), generic. Demand share sits beside the answered-rate of each shape."
+                    formula="query classification by keyword/brand heuristics · success = answered searches ÷ shape searches"
+                    ga4Alias="— (first-party classification)"
+                    dataSource="search_queries × brand names"
+                    action="Brand+model failing is a catalog/alias problem; spec and price intent failing is an editorial problem. Two failures, two different teams — this card tells you which one to call."
+                  />
+                </CardTitle>
+                <CardDescription>Bar = demand share · green overlay = share of that demand answered</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <QueryShapeBreakdown
+                  rows={searchInsights?.supply.shapes ?? []}
+                  totalSearches={searchInsights?.totals.searches ?? 0}
+                />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ══ C · HABIT & HEALTH — is search a habit, is the machine serving? ═══ */}
+          <SectionHeading
+            letter="C"
+            title="Habit & health — is search a habit, and is the machine serving it?"
+            hint="repeat frequency · engine layers · index coverage"
+          />
+          <div className="grid xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Repeat className="h-5 w-5 text-amber-400" />
+                  Query Repetition
+                  <MetricInfo
+                    metric="Query repetition histogram"
+                    definition="Queries bucketed by how many times each was typed in the period (1× · 2× · 3–5× · 6×+), with search volume per bucket and the most repeated terms listed underneath. Nobody else on the dashboard measures repetition."
+                    formula="distinct terms per frequency bucket · repeat share = (searches − distinct terms) ÷ searches"
+                    ga4Alias="— (first-party)"
+                    dataSource="search_queries"
+                    action="A term typed 6+ times is a habit — either the audience names the product differently (add a synonym) or the site keeps failing it (fix the page)."
+                  />
+                </CardTitle>
+                <CardDescription>One-off = exploration · repeated = unresolved demand</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <QueryRepeatChart
+                  buckets={searchInsights?.habit.buckets ?? []}
+                  topRepeats={searchInsights?.habit.topRepeats ?? []}
+                  oneOffQueries={searchInsights?.totals.oneOffQueries ?? 0}
+                  repeatSharePct={searchInsights?.totals.repeatQuerySharePct ?? 0}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-emerald-400" />
+                  Search Engine &amp; Index Health
+                  <MetricInfo
+                    metric="Search index health"
+                    definition="Which search layers are live for this runtime (catalog full-text · Upstash BM25 · semantic vector · Upstash query analytics) and whether published devices and articles are actually inside the index. A published page missing from the index is invisible to search no matter how good the page is."
+                    formula="index ids per prefix (device: · article: · video:) vs published catalog rows"
+                    ga4Alias="— (infrastructure observability)"
+                    dataSource="Upstash Search index · devices · articles · videos · page_views"
+                    action="Coverage below ~95% means run the reindex job before spending any time on ranking — the bottleneck is supply, not relevance."
+                  />
+                </CardTitle>
+                <CardDescription>The machinery behind the demand above — checked on the tab, not assumed</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SearchIndexHealth
+                  layers={
+                    searchInsights?.health.layers ?? {
+                      postgres: false,
+                      upstash: false,
+                      semantic: false,
+                      upstashAnalytics: false,
+                    }
+                  }
+                  indexed={
+                    searchInsights?.health.indexed ?? {
+                      devices: 0,
+                      articles: 0,
+                      videos: 0,
+                      total: 0,
+                      readable: false,
+                    }
+                  }
+                  published={searchInsights?.health.published ?? { devices: 0, articles: 0, videos: 0 }}
+                  coveragePct={searchInsights?.health.coveragePct ?? 0}
+                  missingFromIndex={searchInsights?.health.missingFromIndex ?? []}
+                  searchPageViews={searchInsights?.totals.searchPageViews ?? 0}
+                  searches={searchInsights?.totals.searches ?? 0}
+                  recordedSearches={searchInsights?.totals.recordedSearches ?? 0}
+                  unrecordedSearches={searchInsights?.totals.unrecordedSearches ?? 0}
+                  telemetry={
+                    searchInsights?.health.telemetry ?? {
+                      configured: false,
+                      ok: false,
+                      error: 'Telemetry unavailable',
+                      indexName: null,
+                      indexId: null,
+                      upstashPeriod: '30d',
+                      documentCount: null,
+                      pendingDocumentCount: null,
+                      dailyQueryCount: null,
+                      monthlyQueryCount: null,
+                      periodQueryCount: null,
+                      captureRatePct: null,
+                      latencyMeanMs: null,
+                      latencyP99Ms: null,
+                      queryThroughput: [],
+                      fetchedAt: '',
+                    }
+                  }
+                />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ══ D · ACTION — the backlog, ranked ═════════════════════ */}
+          <SectionHeading
+            letter="D"
+            title="Action — the backlog, ranked by demand at stake"
+            hint="near misses first · then zero-result terms · then thin demand"
+          />
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Search className="h-5 w-5 text-brand-primary" />
+                  Search Backlog Queue
+                  <MetricInfo
+                    metric="Search backlog queue"
+                    definition="Every unanswerable term in the period, ranked by demand at stake. Near-miss rows are zero-result queries whose tokens closely match something already in the catalog — those are synonym or slug fixes, so they outrank new content of the same volume. Unindexed published pages are included so the queue can also assign a reindex."
+                    formula="stake = searches × weight (near miss 4 · zero-result 3 · thin 1.5) ; unindexed page flat 10"
+                    dataSource="search_queries × catalog titles · Upstash index"
+                    action="Work top-down: the first three rows are the three highest-return hours this week."
+                  />
+                </CardTitle>
+                <CardDescription>One row per term, with the fix named — not just the miss</CardDescription>
+              </div>
+              <Link href={`/api/admin/export/search-backlog?period=${period}`}>
+                <Button variant="outline" size="sm" className="border-border text-muted-foreground">
+                  <Download className="h-4 w-4 mr-1" /> CSV
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              <SearchFixQueue items={searchInsights?.action.fixQueue ?? []} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <ListOrdered className="h-5 w-5 text-brand-primary" />
+                  Query Ledger
+                  <MetricInfo
+                    metric="Query ledger"
+                    definition="Every logged term with its volume, answer state, intent shape, average result count and last-seen timestamp. The raw table behind the visuals above — the exported CSV carries the full 50-row ledger for sorting."
+                    formula="per normalised term: searches · avg results · zero-results · state · shape · last seen"
+                    ga4Alias="— (first-party)"
+                    dataSource="search_queries"
+                    action="Watch the last-seen column: a term that spiked once and vanished is a campaign or an event, not a content gap."
+                  />
+                </CardTitle>
+                <CardDescription>Queries normalised (casing/whitespace) so a term is one row</CardDescription>
+              </div>
+              <Link href={`/api/admin/export/search-demand?period=${period}`}>
+                <Button variant="outline" size="sm" className="border-border text-muted-foreground">
+                  <Download className="h-4 w-4 mr-1" /> CSV
+                </Button>
+              </Link>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-muted-foreground border-b border-border">
-                      <th className="text-left py-2 pr-4 font-medium">Rank</th>
-                      <th className="text-left py-2 pr-4 font-medium">Query</th>
-                      <th className="text-right py-2 font-medium">Misses</th>
+                    <tr className="border-b border-border text-muted-foreground">
+                      <th className="py-2 pr-3 text-left font-medium">#</th>
+                      <th className="py-2 pr-3 text-left font-medium">Query</th>
+                      <th className="py-2 pr-3 text-left font-medium">Shape</th>
+                      <th className="py-2 pr-3 text-left font-medium">Answer</th>
+                      <th className="py-2 pr-3 text-right font-medium">Searches</th>
+                      <th className="py-2 pr-3 text-right font-medium">Avg results</th>
+                      <th className="py-2 text-right font-medium">Last seen</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {searchQuality.zeroResult.map((q, i) => (
-                      <tr key={q.query} className="border-b border-border last:border-0 hover:bg-foreground/5">
-                        <td className="py-2 pr-4 text-muted-foreground">{i + 1}</td>
-                        <td className="py-2 pr-4 text-foreground">&quot;{q.query}&quot;</td>
-                        <td className="py-2 text-right">{q.count.toLocaleString()}</td>
+                    {(searchInsights?.demand.topQueries ?? []).slice(0, 25).map((row, i) => (
+                      <tr key={row.query} className="border-b border-border last:border-0 hover:bg-foreground/5">
+                        <td className="py-2 pr-3 text-muted-foreground">{i + 1}</td>
+                        <td className="max-w-[16rem] py-2 pr-3">
+                          <a
+                            href={`/search?q=${encodeURIComponent(row.query)}`}
+                            className="block truncate font-mono text-xs text-brand-primary hover:underline"
+                            title={row.query}
+                          >
+                            {row.query}
+                          </a>
+                        </td>
+                        <td className="py-2 pr-3 text-xs text-muted-foreground">{QUERY_SHAPE_LABELS[row.shape]}</td>
+                        <td className="py-2 pr-3">
+                          <span
+                            className="rounded-full px-2 py-0.5 text-[11px] font-medium"
+                            style={{
+                              backgroundColor: `${ANSWER_STATE_COLORS[row.state]}22`,
+                              color: ANSWER_STATE_COLORS[row.state],
+                            }}
+                            title={row.recorded ? undefined : 'Result count was never captured for this term'}
+                          >
+                            {ANSWER_STATE_LABELS[row.state]}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums text-foreground">{row.searches}</td>
+                        <td className="py-2 pr-3 text-right tabular-nums text-foreground">
+                          {row.recorded ? row.avgResults : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="py-2 text-right text-xs text-muted-foreground">
+                          {row.lastSeen ? formatHoverDate(row.lastSeen.slice(0, 10)) : '—'}
+                        </td>
                       </tr>
                     ))}
-                    {searchQuality.zeroResult.length === 0 && (
+                    {(searchInsights?.demand.topQueries ?? []).length === 0 && (
                       <tr>
-                        <td colSpan={3} className="py-4 text-center text-muted-foreground">
-                          No zero-result searches in period — the catalog is matching demand
+                        <td colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
+                          No searches logged in this period — the ledger fills as soon as the /search page is used.
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
-              <p className="text-muted-foreground text-xs mt-2">
-                Every zero-result query is a content opportunity — turn these into articles, devices or buying guides.
-              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Search className="h-5 w-5 text-brand-primary" />
+                Roadmap
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RoadmapPanel items={ROADMAP_SEARCH} />
             </CardContent>
           </Card>
         </div>

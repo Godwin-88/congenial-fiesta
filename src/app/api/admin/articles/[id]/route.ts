@@ -97,14 +97,12 @@ export async function PATCH(
       return NextResponse.json({ error: 'Article not found' }, { status: 404 })
     }
 
-    // Trigger search reindex if published
-    if (body.status === 'published') {
-      try {
-        const { indexArticle } = await import('@/lib/search/indexing')
-        await indexArticle(data).catch(() => {})
-      } catch {
-        // Non-blocking
-      }
+    // Search index sync — index when published, evict when draft.
+    try {
+      const { syncArticleIndex } = await import('@/lib/search/indexing')
+      await syncArticleIndex(data).catch(() => {})
+    } catch {
+      // Non-blocking: search indexing is optional
     }
 
     return NextResponse.json({ data })
@@ -127,6 +125,14 @@ export async function DELETE(
     const { id } = await params
     const supabase = await getAdminClient()
 
+    // Grab the slug first — the index key is `article:<slug>` and the row is
+    // about to disappear.
+    const { data: existing } = await supabase
+      .from('articles')
+      .select('slug')
+      .eq('id', parseInt(id))
+      .maybeSingle()
+
     const { error } = await supabase
       .from('articles')
       .delete()
@@ -134,6 +140,17 @@ export async function DELETE(
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Evict from the search + vector indexes so a deleted article can never be
+    // served by /search again.
+    if (existing?.slug) {
+      try {
+        const { removeFromIndex } = await import('@/lib/search/indexing')
+        await removeFromIndex(`article:${existing.slug}`).catch(() => {})
+      } catch {
+        // Non-blocking: search indexing is optional
+      }
     }
 
     return NextResponse.json({ success: true })

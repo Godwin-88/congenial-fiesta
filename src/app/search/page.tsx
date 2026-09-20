@@ -1,6 +1,4 @@
-import { searchDocuments } from '@/lib/upstash/search'
-import { semanticSearch } from '@/lib/upstash/vector'
-import { type SearchDocument } from '@/lib/upstash/search'
+import { hybridCatalogSearch, logSearchQuery } from '@/lib/search/server-search'
 import { DeviceCard } from '@/components/devices/DeviceCard'
 import { ArticleCard } from '@/components/articles/ArticleCard'
 import SearchBar from '@/components/search/SearchBar'
@@ -18,41 +16,19 @@ export default async function SearchPage({
   searchParams: Promise<{ q?: string; type?: string }>
 }) {
   const params = await searchParams
-  const q = params.q ?? ''
+  const q = (params.q ?? '').trim().slice(0, 200)
   const typeFilter = params.type as 'device' | 'article' | 'video' | undefined
 
-  let results: SearchDocument[] = []
+  // One shared hybrid (Postgres → Upstash BM25 → semantic) — the page can never
+  // disagree with /api/search about what "search" found. The committed page-load
+  // is also the single analytics logging point (preview keystrokes are excluded).
+  const hybrid = q ? await hybridCatalogSearch(q, { type: typeFilter, semanticTopK: 8 }) : null
+  const results = hybrid?.results ?? []
+  const layers = hybrid?.layers ?? []
 
   if (q) {
-    // Hybrid search
-    const [textResults, semanticResults] = await Promise.all([
-      searchDocuments(q, typeFilter),
-      semanticSearch(q, 8),
-    ])
-
-    // Merge + deduplicate
-    const seen = new Set<string>()
-    for (const doc of textResults) {
-      if (!seen.has(doc.id)) {
-        seen.add(doc.id)
-        results.push(doc)
-      }
-    }
-    for (const sr of semanticResults) {
-      if (!seen.has(sr.id)) {
-        seen.add(sr.id)
-        results.push({
-          id: sr.id,
-          type: (sr.metadata.type as 'device' | 'article' | 'video') ?? 'device',
-          title: (sr.metadata.title as string) ?? sr.id,
-          description: (sr.metadata.description as string) ?? '',
-          url: (sr.metadata.url as string) ?? '',
-          imageUrl: (sr.metadata.imageUrl as string) ?? '',
-          publishedAt: new Date().toISOString(),
-        })
-      }
-    }
-    results = results.slice(0, 20)
+    // fire-and-forget analytics — never block the render on logging
+    void logSearchQuery(q, results.length).catch(() => {})
   }
 
   const typeTabs = [
@@ -117,9 +93,18 @@ export default async function SearchPage({
             })}
           </div>
 
-          <p className="text-sm text-foreground/50 mb-6">
+          <p className="text-sm text-foreground/50 mb-2">
             {results.length} result{results.length !== 1 ? 's' : ''} for &ldquo;{q}&rdquo;
           </p>
+          {q && (
+            <p className="mb-6 text-xs text-foreground/40">
+              {layers.includes('postgres')
+                ? 'Matched against the live catalog.'
+                : layers.length > 0
+                  ? 'Matched against the search index (catalog fallback found nothing).'
+                  : 'Catalog and indexes returned nothing — this query lands in the zero-result backlog below.'}
+            </p>
+          )}
 
           {results.length === 0 ? (
             <div className="mt-12 text-center">

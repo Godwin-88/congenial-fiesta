@@ -268,14 +268,12 @@ export async function POST(request: NextRequest) {
       console.warn('[ranking] initial calculation failed:', (err as Error).message)
     }
 
-    // Trigger search reindex if published
-    if (body.status === 'published') {
-      try {
-        const { indexDevice } = await import('@/lib/search/indexing')
-        await indexDevice(data).catch(() => {})
-      } catch {
-        // Non-blocking
-      }
+    // Search index sync — index when published, evict when draft.
+    try {
+      const { syncDeviceIndex } = await import('@/lib/search/indexing')
+      await syncDeviceIndex(data).catch(() => {})
+    } catch {
+      // Non-blocking: search indexing is optional
     }
 
     return NextResponse.json(
