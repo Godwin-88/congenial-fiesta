@@ -12,6 +12,7 @@ import {
   runExploreQuery,
   getDeviceInsights,
   getConsiderationInsights,
+  getCommunityInsights,
 } from './queries'
 
 export const REPORT_LABELS: Record<string, string> = {
@@ -25,6 +26,8 @@ export const REPORT_LABELS: Record<string, string> = {
   'catalog-gaps': 'Catalog Gaps (Fix Queue)',
   'consideration-funnel': 'Consideration Funnel',
   'consideration-queue': 'Consideration Queue',
+  'community-roster': 'Community Contributor Roster',
+  'community-queue': 'Community Queue (Trust Fixes)',
   explore: 'Explore',
 }
 
@@ -236,6 +239,45 @@ export async function generateReportCsv(
           })),
         ),
         filename: `consideration-queue-${period}-${date}.csv`,
+      }
+    }
+    case 'community-roster': {
+      const insights = await getCommunityInsights(period)
+      return {
+        csv: toCSV(
+          insights.people.contributors.map((c, i) => ({
+            rank: i + 1,
+            user_id: c.userId,
+            grade: c.grade,
+            ratings: c.ratings,
+            comments: c.comments,
+            votes_cast: c.votesCast,
+            helpful_received: c.helpfulReceived,
+            devices: c.devices,
+            contributions: c.contributions,
+            last_contribution_at: c.lastContributionAt,
+          })),
+        ),
+        filename: `community-roster-${period}-${date}.csv`,
+      }
+    }
+    case 'community-queue': {
+      const insights = await getCommunityInsights(period)
+      return {
+        csv: toCSV(
+          insights.action.fixQueue.map((item, i) => ({
+            rank: i + 1,
+            priority: item.severity,
+            issue: item.issue,
+            device_slug: item.slug ?? '',
+            device_name: item.name,
+            at_stake: item.stake,
+            detail: item.detail,
+            action: item.action,
+            href: item.href,
+          })),
+        ),
+        filename: `community-queue-${period}-${date}.csv`,
       }
     }
     case 'explore': {

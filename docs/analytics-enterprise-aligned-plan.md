@@ -128,6 +128,8 @@ These are *our* implementation's contribution — recorded **here** as "proposed
 - **Phase 7 (affiliate-network API connectors) — ✅ LIVE:** zero-touch earnings reconciliation — `affiliate_networks` config table (endpoint · auth type · env-var key secret-ref · field mapping) + `affiliate_sync_logs` audit trail; sync engine fetches JSON/CSV reports, maps to the `affiliate_earnings` ledger and dedupes via natural key; admin UI (Affiliate → Network API Connectors panel) with Add/Sync-now/Enable/Delete + runs log; daily cron `affiliate-sync` (20:00 UTC); Big Three seeded and disabled until configured (Jumia/Amazon/Kilimall).
 - **Phase 8 (Devices & Catalog intelligence) — ✅ LIVE:** the Devices tab rebuilt as a catalog-revenue story — `getDeviceInsights(period)` joins the catalog to the audience (coverage → demand → leakage → action) with no new instrumentation, no migration and no new cron; new visuals + a prescriptive fix queue; two new CSV reports + a JSON endpoint (see §7.4).
 - **Phase 9 (Compare & Consideration intelligence) — ✅ LIVE:** the Compare tab rebuilt as the intent story — `getConsiderationInsights(period)` joins the intent beacon to traffic + catalog (funnel → mix → audience → pairs → action); shared qualification model (hot/warm/cold MQL tiers) in `src/lib/analytics/consideration.ts`; six purpose-built visuals + a prescriptive consideration queue; two new CSV reports + a JSON endpoint + two new Explore surfaces (`intent_score` metric · `qualification_tier` dimension) — see §7.5.
+- **Phase 10 (Community & Trust intelligence) — ✅ LIVE:** the Community tab rebuilt as the social-proof story — `getCommunityInsights(period)` joins ratings + comments + votes + watchers to traffic (Trust → Voice → People → Action); shared trust model (healthy/thin/stale/silent bands, `trustGrade()`, contributor grades) in `src/lib/analytics/community.ts`; five purpose-built visuals + a prescriptive community queue with issue codes; two new CSV reports + a JSON endpoint — see §7.6.
+
 
 ### 5.3 KPI dictionary skeleton (every KPI ships with full metadata — ℹ glossary)
 
@@ -365,6 +367,58 @@ states how to read it, and every card carries an ℹ `MetricInfo`.
   top rather than its ratios.
 - Pair slugs are matched against the catalog; pairs touching an unpublished or renamed device are counted as
   **lopsided or half-dead** and pushed to the queue instead of being hidden.
+
+### 7.6 Community & Trust tab — the social-proof story (Phase 10, ✅ LIVE)
+
+The Community tab reframes ratings/comments from a moderation inbox into a **social-proof asset story**: the
+catalog's proof is inventory — it has coverage, freshness, and a lifecycle — and every uncovered page is traffic
+wasted. The tab runs on `getCommunityInsights(period)` (same four-act shape as Devices/Compare: **A Trust →
+B Voice → C People → D Action**) and reads only first-party tables: `device_ratings`, `comments`,
+`rating_votes`, `device_watchers`, joined to `devices`/`brands` and period `/devices/*` views. Vocab lives in
+`src/lib/analytics/community.ts` (dependency-free, shared server+client), mirroring `deviceOutcome.ts` /
+`consideration.ts`.
+
+**The trust model (per-device health, not a global average).** Each catalog device is classified into a
+lifecycle band from its signals (ratings + comments, any age):
+
+| Band | Definition | Read as |
+|---|---|---|
+| `healthy` | 2+ signals, newest inside the period | self-sustaining proof |
+| `thin` | exactly 1 signal | one-voice risk — a single 2★ flips the page |
+| `stale` | proof exists but newest is older than the period | decaying asset |
+| `silent` | zero signals ever | uncovered traffic |
+
+`trustGrade()` compresses the catalog position into 0–100 for the monthly review:
+`avgRating/5×60 + coverage%×0.25 + min(15, log2(signals+1)×3)`. Coverage is the denominator; grade climbs only
+when coverage climbs — volume concentrated on the same devices plateaus it.
+
+**Issue codes (Community queue)** — `no_proof` (traffic, zero proof) · `thin_proof` (single voice) ·
+`stale_proof` (nothing recent) · `orphan_proof` (proof on an unpublished/dead slug) · `hanging_question`
+(unanswered `?` comment — trust leaking in public) · `unreviewed_report` (flagged comment awaiting a call).
+Ranking is **stake = period page views on the device** (comment-level rows stake thread signals), severity
+high ≥100 views, medium ≥20, capped 20 rows — so ticket order is traffic order, same rule as the Devices queue.
+
+**Voice & People.** Voice act: momentum (signals per bucket stacked ratings vs comments), the 5★→1★ histogram
+(the average hides the shape), most-discussed and most-helpful leaderboards (`comments.helpful_count`). People
+act: contributor grades — **advocate ≥5 contributions, regular 2–4, newcomer 1** (period signals per user) —
+top roster ranked by helpful votes received then volume; users render as truncated ids, admin-only. Watchers
+(`device_watchers`) surface as owned notify-me demand, not community voice.
+
+**Endpoints & registration.** JSON: `GET /api/admin/analytics/community?period=7d|30d|90d&view=full|summary|trust|voice|people|queue`
+(`meta.definitions` documents every formula, mirroring the devices/compare contracts). CSVs: `community-roster`
+and `community-queue` registered in `generateReportCsv` + `REPORT_LABELS` (export.ts) and
+`SCHEDULED_EXPORT_REPORTS` (queries.ts).
+
+**Known reads / caveats (all surfaced in the UI):**
+
+- Live data is **near-empty by design**: ~0 ratings/comments means most bands are `silent` and leaderboards
+  show their empty states honestly — the tab is the instrument, not the excuse.
+- Ratings are drive-by verdicts and comments are dialogue; a rating-heavy mix reads as a community that scores
+  and leaves, not a failing one.
+- Watcher counts are distinct devices, not people; one watcher on 20 devices still reads as 20 devices of owned
+  demand.
+- `comments.reported` flags queue rows but nothing is auto-hidden — moderation is a human call, surfaced at the
+  top of the queue.
 
 ## 8. Open Questions (for architecture review)
 

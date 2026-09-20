@@ -10,7 +10,7 @@ import {
   getAlertRules, computeAlertKpiValues, listAlertEvents,
   getRetentionStatus, listRetentionLog,
   runExploreQuery, listScheduledExports, getTrafficInsights, getContentInsights, getDeviceInsights,
-  getConsiderationInsights,
+  getConsiderationInsights, getCommunityInsights,
 } from '@/lib/analytics/queries'
 import { ROLE_ALLOWED, type TabId } from '@/lib/analytics/tabs'
 import { getAdminUser } from '@/lib/admin/require-admin'
@@ -82,7 +82,13 @@ import QualificationThermometer from './QualificationThermometer'
 import ComparePairChord from './ComparePairChord'
 import ConsiderationDepthTable from './ConsiderationDepthTable'
 import ConsiderationFixQueue from './ConsiderationFixQueue'
-import { deviceChipsFor, considerationChipsFor, tierBadgeClass, tierLabel, TierDot } from './ConsiderationTabHelpers'
+import TrustHealthBand from './TrustHealthBand'
+import VoiceMomentumChart from './VoiceMomentumChart'
+import RatingHistogram from './RatingHistogram'
+import DiscussionTable from './DiscussionTable'
+import ContributorRoster from './ContributorRoster'
+import CommunityFixQueue from './CommunityFixQueue'
+import { deviceChipsFor, considerationChipsFor, communityChipsFor, tierBadgeClass, tierLabel, TierDot } from './ConsiderationTabHelpers'
 import RoadmapPanel, { type RoadmapItem } from './RoadmapPanel'
 import QualifiedLeadsTable from './QualifiedLeadsTable'
 import EarningsReconciliationTable from './EarningsReconciliationTable'
@@ -413,6 +419,14 @@ export default async function AnalyticsPage({
     considerationInsights = await getConsiderationInsights(period)
   }
   const compareChips = considerationInsights ? considerationChipsFor(considerationInsights) : []
+
+  // Community & Engagement analytics join social proof to traffic, so the
+  // whole tab hangs off one aggregator (same discipline as Compare).
+  let communityInsights: Awaited<ReturnType<typeof getCommunityInsights>> | null = null
+  if (activeTab === 'community' && allowedTabs.includes('community')) {
+    communityInsights = await getCommunityInsights(period)
+  }
+  const communityChips = communityInsights ? communityChipsFor(communityInsights) : []
 
   const csvLinks = [
     { href: `/api/admin/export/top-pages?period=${period}`, label: 'Top Pages CSV' },
@@ -2178,34 +2192,350 @@ export default async function AnalyticsPage({
 
       {activeTab === 'community' && (
         <div className="space-y-6">
+          {/* ── Insight banner ─────────────────────────────────────── */}
+          {communityInsights && (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {communityChips.map((chip) => (
+                  <span
+                    key={chip.label}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs"
+                  >
+                    <span className="text-muted-foreground">{chip.label}:</span>
+                    <span className="font-semibold text-foreground">{chip.value}</span>
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Data sources:{' '}
+                <span className="font-medium text-foreground">
+                  device_ratings · comments · rating_votes · device_watchers · devices · page_views
+                </span>
+                <span className="ml-1">
+                  — trust reads the whole ledger (any age), voice and people read the period; the tab reads as trust →
+                  voice → people → action.
+                </span>
+              </p>
+            </div>
+          )}
+
+          {/* ══ A · TRUST — the catalog-wide social-proof position ════ */}
+          <SectionHeading
+            letter="A"
+            title="Trust — how much of the catalog can prove itself?"
+            hint="coverage · health lifecycle · grade"
+          />
+          {/* __COMMUNITY_TRUST__ */}
+          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Trust Grade</CardTitle>
+                <MetricInfo
+                  metric="Trust grade"
+                  definition="A 0–100 composite of the catalog's social-proof position: rating quality (avg rating, up to 60) + proof coverage (up to 25) + signal volume (up to 15, log-scaled). One number for the monthly review."
+                  formula="grade = avgRating/5×60 + coverage%×0.25 + min(15, log2(signals+1)×3)"
+                  ga4Alias="— (composite, not a GA4 metric)"
+                  dataSource="device_ratings × comments × devices"
+                  action="The grade only climbs when coverage climbs — volume on the same 20 devices plateaus it. Watch the silent band, not the average."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">
+                  {communityInsights?.trust.totals.grade ?? 0}
+                  <span className="text-base font-normal text-muted-foreground">/100</span>
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  avg rating {communityInsights?.trust.totals.avgRating ?? '—'} ·{' '}
+                  {communityInsights?.trust.totals.lifetimeRatings.toLocaleString() ?? 0} lifetime ratings
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Proof Coverage</CardTitle>
+                <MetricInfo
+                  metric="Proof coverage"
+                  definition="Published devices with at least one rating or comment (any age) ÷ all published devices. The old coverage KPI, kept as the tab's second card — it is the denominator of trust."
+                  formula="covered published devices ÷ published devices"
+                  ga4Alias="— (first-party coverage, not in GA4)"
+                  dataSource="device_ratings · comments · devices"
+                  action="Every uncovered device is a page that ships without proof — the queue ranks them by the traffic they waste."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">
+                  {communityInsights?.trust.totals.coveragePct ?? 0}%
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {communityInsights?.trust.totals.coveredDevices ?? 0} of{' '}
+                  {communityInsights?.trust.totals.publishedDevices ?? 0} published devices
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* __COMMUNITY_KPIS_2__ */}
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Signals This Period</CardTitle>
+                <MetricInfo
+                  metric="Community signals"
+                  definition="Ratings + comments created inside the period — the flow, not the stock. Ratings are drive-by verdicts; comments are dialogue. The balance between them is the community's character."
+                  formula="count(device_ratings) + count(comments) created_at ≥ period start"
+                  dataSource="device_ratings · comments"
+                  action="A rating-heavy mix means people score and leave — add reply prompts to convert verdicts into conversations."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">
+                  {((communityInsights?.trust.totals.periodRatings ?? 0) +
+                    (communityInsights?.trust.totals.periodComments ?? 0)).toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {communityInsights?.trust.totals.periodRatings ?? 0} ratings ·{' '}
+                  {communityInsights?.trust.totals.periodComments ?? 0} comments
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <CardTitle className="text-sm">Watchers</CardTitle>
+                <MetricInfo
+                  metric="Device watchers"
+                  definition="Distinct devices with at least one 'notify me' watcher registered. This is owned demand — emails you can reach the moment availability or price changes, no algorithm in between."
+                  formula="count(distinct device_watchers.device_id)"
+                  dataSource="device_watchers"
+                  action="Availability flips and price drops should trigger a watcher email first — this list converts better than any campaign."
+                />
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-foreground">
+                  {communityInsights?.people.totals.watchers ?? 0}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">devices with notify-me demand</p>
+              </CardContent>
+            </Card>
+          </div>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Heart className="h-5 w-5 text-brand-primary" />
-                Trust Coverage — Social Proof Across the Catalog
+                Social-Proof Health Across The Catalog
+                <MetricInfo
+                  metric="Trust health bands"
+                  definition="Every catalog device classified by its social-proof lifecycle: healthy (2+ signals, one inside the period), thin (exactly one signal — an outlier risk), stale (proof exists but nothing recent), silent (never proven). Read the bands, not just coverage."
+                  formula="health = f(signal count, newest signal age) per device"
+                  dataSource="device_ratings · comments · devices"
+                  action="Thin devices need a second voice, stale devices need revival, silent devices need their first — the queue ranks all three by traffic."
+                />
               </CardTitle>
+              <CardDescription>The lifecycle, not just the percentage</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid md:grid-cols-3 gap-4">
-                <div className="rounded-xl border border-border bg-card p-4">
-                  <p className="text-3xl font-bold text-foreground">{trust.coveragePct}%</p>
-                  <p className="text-xs text-muted-foreground">Devices with ≥1 rating or comment</p>
+              <TrustHealthBand
+                mix={communityInsights?.trust.healthMix ?? []}
+                total={(communityInsights?.trust.healthMix ?? []).reduce((s, m) => s + m.devices, 0)}
+              />
+            </CardContent>
+          </Card>
+
+          {/* ══ B · VOICE — what the community actually said ══════════ */}
+          <SectionHeading
+            letter="B"
+            title="Voice — what the community actually said"
+            hint="distribution · momentum · where dialogue lives"
+          />
+          {/* __COMMUNITY_VOICE__ */}
+          <div className="grid xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-brand-primary" />
+                  Voice Momentum — Ratings vs Comments
+                  <MetricInfo
+                    metric="Voice momentum"
+                    definition="Community signals per time bucket, stacked by kind. The layers tell two different stories: ratings are one-tap verdicts, comments are dialogue that can answer objections. A healthy community does both."
+                    formula="Σ ratings / Σ comments per bucket"
+                    dataSource="device_ratings · comments"
+                    action="Comment droughts precede trust droughts — seed conversations on the devices the queue flags as thin."
+                  />
+                </CardTitle>
+                <CardDescription>Verdicts vs dialogue, per bucket</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <VoiceMomentumChart momentum={communityInsights?.voice.momentum ?? []} />
+                {(communityInsights?.voice.bySurface ?? []).length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(communityInsights?.voice.bySurface ?? []).map((row) => (
+                      <span
+                        key={row.surface}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs"
+                      >
+                        <span className="text-muted-foreground">{row.label}:</span>
+                        <span className="font-semibold text-foreground">
+                          {row.comments.toLocaleString()} · {row.sharePct}%
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Heart className="h-5 w-5 text-brand-primary" />
+                  Rating Distribution
+                  <MetricInfo
+                    metric="Rating distribution"
+                    definition="The shape of this period's verdicts, 5★ → 1★. The average hides the shape: a 3.8 can be a fat 5★ band with a product-claim tail, or a lukewarm hump — and they call for opposite actions."
+                    formula="count(device_ratings.rating = n) per n ∈ 1..5"
+                    ga4Alias="rating distribution"
+                    dataSource="device_ratings"
+                    action="A fat 2★/1★ tail is a product-claim problem: read those comments before the device is promoted anywhere."
+                  />
+                </CardTitle>
+                <CardDescription>The average hides the shape — read the bands</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RatingHistogram histogram={communityInsights?.voice.ratingHistogram ?? []} />
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Heart className="h-5 w-5 text-brand-primary" />
+                  Most Discussed Devices
+                  <MetricInfo
+                    metric="Most discussed devices"
+                    definition="Devices ranked by comment count in the period, beside the traffic each carried. Dialogue on high traffic is an asset to curate; dialogue on dead slugs is proof going to waste (see the queue)."
+                    formula="count(comments.content_type = 'device') per slug × views"
+                    dataSource="comments × page_views"
+                    action="Pin the best answers, reply as the brand, and surface the thread on the device page — curated dialogue converts."
+                  />
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DiscussionTable rows={communityInsights?.voice.mostDiscussed ?? []} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Heart className="h-5 w-5 text-brand-primary" />
+                  Most Helpful Threads
+                  <MetricInfo
+                    metric="Helpful-vote leaderboard"
+                    definition="Devices whose comments earned the most 'helpful' votes — proof that the community answers its own questions. These threads are the catalog's best free sales copy."
+                    formula="Σ comments.helpful_count per device slug"
+                    dataSource="comments"
+                    action="Quote the top-voted answers in the device verdict block, and thank the authors — recognition is the cheapest retention there is."
+                  />
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DiscussionTable rows={communityInsights?.voice.helpfulLeaderboard ?? []} helpfulMode />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ══ C · PEOPLE — who carries the community ════════════════ */}
+          <SectionHeading
+            letter="C"
+            title="People — who carries the community"
+            hint="grades · roster · the advocacy pipeline"
+          />
+          {/* __COMMUNITY_PEOPLE__ */}
+          <div className="grid xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Heart className="h-5 w-5 text-brand-primary" />
+                  Contributor Grades
+                  <MetricInfo
+                    metric="Contributor grades"
+                    definition="The community's pipeline shape: advocates (5+ contributions) are the asset, regulars (2–4) are the dependable middle, newcomers (1) are the future. A roster that is all newcomers has no advocates to keep it alive."
+                    formula="grade = f(ratings + comments per user in period)"
+                    dataSource="device_ratings · comments · rating_votes"
+                    action="Thank advocates publicly, prompt regulars at review-worthy moments, onboard newcomers with a reply — the pipeline is the program."
+                  />
+                </CardTitle>
+                <CardDescription>Advocates · regulars · newcomers — the pipeline shape</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-3">
+                  {(communityInsights?.people.gradeMix ?? []).map((g) => (
+                    <div key={g.grade} className="rounded-xl border border-border bg-background p-3 text-center">
+                      <p className="text-2xl font-bold text-foreground">{g.contributors.toLocaleString()}</p>
+                      <p className="text-[11px] text-muted-foreground">{g.label}</p>
+                    </div>
+                  ))}
                 </div>
-                <div className="rounded-xl border border-border bg-card p-4">
-                  <p className="text-3xl font-bold text-foreground">{trust.coveredDevices} / {trust.totalDevices}</p>
-                  <p className="text-xs text-muted-foreground">Covered / published devices</p>
-                </div>
-                <div className="rounded-xl border border-border bg-card p-4">
-                  <p className="text-3xl font-bold text-foreground">
-                    {trust.ratedDevices}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Rated · {trust.commentedDevices} commented</p>
-                </div>
-              </div>
-              <p className="text-muted-foreground text-xs mt-4">
-                Trust is a revenue asset: devices with social proof convert better. Coverage below 100% is the
-                editorial review backlog — which devices need a rating or comment next.
-              </p>
+                <p className="mt-3 text-[11px] text-muted-foreground">
+                  {communityInsights?.people.totals.contributors.toLocaleString() ?? 0} contributing users ·{' '}
+                  {communityInsights?.people.totals.newContributors ?? 0} first-timers this period ·{' '}
+                  {communityInsights?.people.totals.avgPerContributor ?? 0} contributions each on average.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Heart className="h-5 w-5 text-brand-primary" />
+                  Top Contributors
+                  <MetricInfo
+                    metric="Contributor roster"
+                    definition="The top hands, ranked by helpful votes received (value) then contribution count (effort). Admin-only: users appear as truncated ids, never names or emails."
+                    formula="Σ helpful votes received · contributions per user"
+                    dataSource="device_ratings · comments · rating_votes"
+                    action="These are the people to recognise first — early access, badges, or a simple thank-you beat incentives."
+                  />
+                </CardTitle>
+                <CardDescription>Value first, effort second — ids truncated, admin-only</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ContributorRoster
+                  contributors={communityInsights?.people.contributors ?? []}
+                  gradeMix={communityInsights?.people.gradeMix ?? []}
+                  total={communityInsights?.people.totals.contributors ?? 0}
+                />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ══ D · ACTION — the moderation / solicitation queue ══════ */}
+          <SectionHeading
+            letter="D"
+            title="Action — what to fix, ranked by views at stake"
+            hint="the loop from trust back into traffic + editorial"
+          />
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wrench className="h-5 w-5 text-amber-400" />
+                Community Queue
+                <MetricInfo
+                  metric="Community fix queue"
+                  definition="One row per (device, issue): traffic without proof, single-voice proof, hanging questions, proof stranded on dead slugs, and unreviewed reports. Ranked by the traffic or signals at stake, so the ticket order is the revenue order."
+                  formula="issues from signals × views × report state, ranked by stake"
+                  ga4Alias="— (prescriptive, not a GA4 metric)"
+                  dataSource="device_ratings · comments · devices · page_views"
+                  action="Work top-down — each fixed row compounds proof on traffic you already have, no campaign needed."
+                />
+              </CardTitle>
+              <CardDescription>Prescriptive, prioritised, deep-linked where it counts</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CommunityFixQueue items={communityInsights?.action.fixQueue ?? []} />
             </CardContent>
           </Card>
 
@@ -2213,7 +2543,7 @@ export default async function AnalyticsPage({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Heart className="h-5 w-5 text-brand-primary" />
-                Sentiment Analytics — Roadmap
+                Roadmap
               </CardTitle>
             </CardHeader>
             <CardContent>

@@ -3,7 +3,7 @@ import {
   QUALIFICATION_COLORS,
   type QualificationTier,
 } from '@/lib/analytics/consideration'
-import type { ConsiderationInsights, DeviceInsights } from '@/lib/analytics/queries'
+import type { ConsiderationInsights, DeviceInsights, CommunityInsights } from '@/lib/analytics/queries'
 
 type DeviceChip = { label: string; value: string }
 
@@ -90,4 +90,34 @@ export function TierDot({ tier }: { tier: QualificationTier }) {
       aria-hidden="true"
     />
   )
+}
+
+type CommunityChip = { label: string; value: string }
+
+export function communityChipsFor(insights: CommunityInsights): CommunityChip[] {
+  const chips: CommunityChip[] = [
+    { label: 'Trust grade', value: `${insights.trust.totals.grade}/100` },
+    {
+      label: 'Proof coverage',
+      value: `${insights.trust.totals.coveragePct}% (${insights.trust.totals.coveredDevices}/${insights.trust.totals.publishedDevices})`,
+    },
+    {
+      label: 'Signals this period',
+      value: `${(insights.trust.totals.periodRatings + insights.trust.totals.periodComments).toLocaleString()} (${insights.trust.totals.periodRatings}★ · ${insights.trust.totals.periodComments}💬)`,
+    },
+  ]
+  if (insights.trust.totals.avgRating !== null) {
+    chips.push({ label: 'Avg rating', value: `${insights.trust.totals.avgRating}/5` })
+  }
+  chips.push({ label: 'Silent devices', value: `${insights.trust.silentDevices.toLocaleString()}` })
+  if (insights.people.totals.advocates > 0) {
+    chips.push({ label: 'Advocates', value: `${insights.people.totals.advocates}` })
+  }
+  if (insights.action.fixQueue.length > 0) {
+    chips.push({
+      label: 'Moderation queue',
+      value: `${insights.action.fixQueue.length} items`,
+    })
+  }
+  return chips
 }

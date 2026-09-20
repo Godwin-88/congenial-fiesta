@@ -18,6 +18,12 @@ import {
   qualificationTier,
   CONSIDERATION_ISSUE_META,
 } from './consideration'
+import {
+  type TrustHealth,
+  type ModerationIssue,
+  MODERATION_ISSUE_META,
+  trustGrade,
+} from './community'
 
 export type {
   IntentAction,
@@ -25,12 +31,9 @@ export type {
   FunnelStage,
   ConsiderationIssue,
 } from './consideration'
-export {
-  INTENT_WEIGHTS,
-  AFFILIATE_CLICK_WEIGHT,
-  SIGNED_IN_BONUS,
-  qualificationTier,
-} from './consideration'
+export type { TrustHealth, ModerationIssue } from './community'
+export { MODERATION_ISSUE_META } from './community'
+export { INTENT_WEIGHTS, AFFILIATE_CLICK_WEIGHT, SIGNED_IN_BONUS, qualificationTier } from './consideration'
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -1731,6 +1734,8 @@ export const SCHEDULED_EXPORT_REPORTS = [
   'catalog-gaps',
   'consideration-funnel',
   'consideration-queue',
+  'community-roster',
+  'community-queue',
   'explore',
 ]
 
@@ -4414,6 +4419,8 @@ export async function getConsiderationInsights(period: string): Promise<Consider
     mix: {
       totals: {
         events: totalEvents,
+
+
         saves: actionCounts.save,
         compares: actionCounts.add_to_compare,
         watches: actionCounts.watch,
@@ -4474,3 +4481,563 @@ export async function getConsiderationInsights(period: string): Promise<Consider
 
 
 
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 10 — Community & Engagement intelligence
+//
+// Canvas anchors: `Manage Community Engagement` — ratings/comments/watchers
+// as **trust assets** + `Manage Onsite Behavioural Analytics` — contributor
+// behaviour, not just volume.
+//
+// One aggregator for the whole tab; pure-JS over existing tables
+// (device_ratings · comments · rating_votes · device_watchers · devices ·
+// page_views · affiliate_clicks) — no new instrumentation, no migration, no
+// new cron. Same discipline as the Traffic/Content/Devices/Compare
+// aggregators.
+
+/** One device's social-proof ledger. */
+export interface CommunityDeviceRow {
+  slug: string
+  name: string
+  brandName: string
+  status: string
+  views: number
+  clicks: number
+  ratings: number
+  comments: number
+  /** Sum of helpful votes across the device's comments. */
+  helpfulVotes: number
+  avgRating: number | null
+  /** New signals (ratings + comments) created inside the period. */
+  recentSignals: number
+  /** Latest signal of any age (ISO), null if the device has none. */
+  lastSignalAt: string | null
+  watchers: number
+  health: TrustHealth
+}
+
+/** One community contributor (identified only by user id — admin-only view). */
+export interface CommunityContributorRow {
+  userId: string
+  contributions: number
+  ratings: number
+  comments: number
+  votesCast: number
+  /** Helpful votes received across their comments. */
+  helpfulReceived: number
+  devices: number
+  grade: 'advocate' | 'regular' | 'newcomer'
+  lastContributionAt: string
+}
+
+/** One moderation queue row. */
+export interface CommunityFixQueueItem {
+  slug: string | null
+  name: string
+  issue: ModerationIssue
+  label: string
+  action: string
+  detail: string
+  /** Traffic or signal volume at stake — the queue's rank order. */
+  stake: number
+  severity: 'high' | 'medium' | 'low'
+  href: string | null
+  editHref: string | null
+}
+
+export interface CommunityInsights {
+  /** A. Trust — the catalog-wide social-proof position. */
+  trust: {
+    totals: {
+      publishedDevices: number
+      coveredDevices: number
+      coveragePct: number
+      ratedDevices: number
+      commentedDevices: number
+      periodRatings: number
+      periodComments: number
+      lifetimeRatings: number
+      avgRating: number | null
+      /** 0–100 composite: rating quality (60) + coverage (25) + volume (15). */
+      grade: number
+    }
+    healthMix: Array<{ health: TrustHealth; label: string; devices: number; sharePct: number }>
+    silentDevices: number
+  }
+  /** B. Voice — what the community actually said this period. */
+  voice: {
+    ratingHistogram: Array<{ bucket: string; count: number; sharePct: number }>
+    /** Σ ratings + comments per period bucket (weekly for 30/90d, daily 7d). */
+    momentum: Array<{ bucket: string; ratings: number; comments: number; total: number }>
+    bySurface: Array<{ surface: string; label: string; comments: number; sharePct: number }>
+    helpfulLeaderboard: CommunityDeviceRow[]
+    mostDiscussed: CommunityDeviceRow[]
+  }
+  /** C. People — who carries the community. */
+  people: {
+    totals: {
+      contributors: number
+      newContributors: number
+      advocates: number
+      avgPerContributor: number
+      watchers: number
+    }
+    contributors: CommunityContributorRow[]
+    gradeMix: Array<{ grade: string; label: string; contributors: number; sharePct: number }>
+  }
+  /** D. Action — the moderation / solicitation queue. */
+  action: {
+    fixQueue: CommunityFixQueueItem[]
+    stake: number
+  }
+}
+
+/**
+ * Community & Engagement analytics — one aggregator for the whole tab.
+ *
+ * @param period '7d' | '30d' | '90d'
+ */
+export async function getCommunityInsights(period: string): Promise<CommunityInsights> {
+  const since = sinceISO(period)
+  const dayMs = 86400000
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30
+  const nowMs = Date.now()
+
+  // 1) Load every plane in parallel — signals, votes, watchers, catalog, traffic.
+  const [ratingsRes, commentsRes, votesRes, watchersRes, devicesRes] = await Promise.all([
+    supabase.from('device_ratings').select('device_slug, rating, user_id, created_at').gte('created_at', since),
+    supabase
+      .from('comments')
+      .select('content_type, content_slug, user_id, parent_id, body, helpful_count, reported, created_at')
+      .gte('created_at', since),
+    supabase.from('rating_votes').select('rating_id, user_id, created_at').gte('created_at', since),
+    supabase.from('device_watchers').select('device_id, created_at'),
+    supabase.from('devices').select('id, slug, name, status, brand:brands(slug, name)'),
+  ])
+
+  // __COMMUNITY_FN_2__
+
+  // 2) Catalog map — every device, published or not (orphan-proof detection).
+  const deviceById = new Map<number, { slug: string; name: string; brandName: string; status: string; editHref: string }>()
+  const deviceBySlug = new Map<string, { id: number; name: string; brandName: string; status: string; editHref: string; href: string | null }>()
+  for (const d of devicesRes.data ?? []) {
+    const id = Number(d.id)
+    const slug = String(d.slug ?? '')
+    if (!slug) continue
+    const brandRaw = d.brand as { slug?: string; name?: string } | Array<{ slug?: string; name?: string }> | null
+    const brand = Array.isArray(brandRaw) ? brandRaw[0] : brandRaw
+    const name = String(d.name ?? slug)
+    const brandName = String(brand?.name ?? 'Unknown brand')
+    const status = String(d.status ?? 'draft')
+    deviceById.set(id, { slug, name, brandName, status, editHref: `/admin/devices/${id}/edit` })
+    deviceBySlug.set(slug, {
+      id,
+      name,
+      brandName,
+      status,
+      editHref: `/admin/devices/${id}/edit`,
+      href: brand?.slug ? `/devices/${String(brand.slug)}/${slug}` : null,
+    })
+  }
+
+  // 3) Ratings plane — period rows + lifetime averages + histogram + contributors.
+  const ratingRows = (ratingsRes.data ?? []) as Array<{ device_slug: string; rating: number; user_id: string; created_at: string }>
+  const { count: lifetimeRatings } = await supabase
+    .from('device_ratings')
+    .select('*', { count: 'exact', head: true })
+  const ratingsBySlug = new Map<string, { count: number; sum: number; latest: number }>()
+  const histogram = new Map<number, number>([[1, 0], [2, 0], [3, 0], [4, 0], [5, 0]])
+  const ratingsPerDay = new Map<string, number>()
+  for (const row of ratingRows) {
+    const slug = String(row.device_slug ?? '')
+    const rating = Number(row.rating ?? 0)
+    if (!slug || rating < 1 || rating > 5) continue
+    const cur = ratingsBySlug.get(slug) ?? { count: 0, sum: 0, latest: 0 }
+    cur.count++
+    cur.sum += rating
+    const t = new Date(String(row.created_at)).getTime()
+    if (Number.isFinite(t)) cur.latest = Math.max(cur.latest, t)
+    ratingsBySlug.set(slug, cur)
+    histogram.set(rating, (histogram.get(rating) ?? 0) + 1)
+    const day = new Date(String(row.created_at)).toISOString().split('T')[0]
+    ratingsPerDay.set(day, (ratingsPerDay.get(day) ?? 0) + 1)
+  }
+  const avgRating = ratingRows.length > 0
+    ? Math.round((ratingRows.reduce((s, r) => s + Number(r.rating ?? 0), 0) / ratingRows.length) * 10) / 10
+    : null
+
+  // 4) Comments plane — per slug, per surface, replies, reported, contributors.
+  const commentRows = (commentsRes.data ?? []) as Array<{
+    content_type: string
+    content_slug: string
+    user_id: string
+    parent_id: number | null
+    body: string
+    helpful_count: number
+    reported: boolean
+    created_at: string
+  }>
+  const commentsBySlug = new Map<string, { count: number; helpful: number; latest: number; questions: number; reported: number }>()
+  const commentsBySurface = new Map<string, number>()
+  const commentsPerDay = new Map<string, number>()
+  let reportedUnreviewed = 0
+  for (const row of commentRows) {
+    const slug = String(row.content_slug ?? '')
+    if (!slug) continue
+    const cur = commentsBySlug.get(slug) ?? { count: 0, helpful: 0, latest: 0, questions: 0, reported: 0 }
+    cur.count++
+    cur.helpful += Number(row.helpful_count ?? 0)
+    if (row.reported) {
+      cur.reported++
+      reportedUnreviewed++
+    }
+    const body = String(row.body ?? '')
+    if (body.includes('?')) cur.questions++
+    const t = new Date(String(row.created_at)).getTime()
+    if (Number.isFinite(t)) cur.latest = Math.max(cur.latest, t)
+    commentsBySlug.set(slug, cur)
+    commentsBySurface.set(String(row.content_type ?? 'device'), (commentsBySurface.get(String(row.content_type ?? 'device')) ?? 0) + 1)
+    const day = new Date(String(row.created_at)).toISOString().split('T')[0]
+    commentsPerDay.set(day, (commentsPerDay.get(day) ?? 0) + 1)
+  }
+
+  // __COMMUNITY_FN_3__
+
+  // 5) Votes + watchers planes — contribution effort and owned-audience demand.
+  const voteRows = (votesRes.data ?? []) as Array<{ rating_id: number; user_id: string; created_at: string }>
+  const watchersByDevice = new Map<number, { count: number; latest: number }>()
+  for (const row of watchersRes.data ?? []) {
+    const id = Number(row.device_id ?? 0)
+    if (!id) continue
+    const cur = watchersByDevice.get(id) ?? { count: 0, latest: 0 }
+    cur.count++
+    const t = new Date(String(row.created_at ?? '')).getTime()
+    if (Number.isFinite(t)) cur.latest = Math.max(cur.latest, t)
+    watchersByDevice.set(id, cur)
+  }
+
+  // 6) Traffic for the period (devices only) — demand context for the health model.
+  const { data: deviceViewRows } = await supabase
+    .from('page_views')
+    .select('path')
+    .gte('created_at', since)
+    .like('path', '/devices/%')
+  const viewsBySlug = new Map<string, number>()
+  for (const row of deviceViewRows ?? []) {
+    const parts = String(row.path ?? '').replace('/devices/', '').split('/').filter(Boolean)
+    const slug = parts[1] ?? parts[0] ?? ''
+    if (slug) viewsBySlug.set(slug, (viewsBySlug.get(slug) ?? 0) + 1)
+  }
+
+  // 7) Per-device ledger + trust health classification.
+  const deviceRows: CommunityDeviceRow[] = []
+  const healthCounts = new Map<TrustHealth, number>()
+  let silentDevices = 0
+  const allSlugs = new Set<string>([...deviceBySlug.keys(), ...ratingsBySlug.keys(), ...commentsBySlug.keys()])
+  for (const slug of allSlugs) {
+    const meta = deviceBySlug.get(slug)
+    const ratings = ratingsBySlug.get(slug)
+    const comments = commentsBySlug.get(slug)
+    const ratingCount = ratings?.count ?? 0
+    const commentCount = comments?.count ?? 0
+    const avg = ratingCount > 0 ? Math.round((ratings!.sum / ratingCount) * 10) / 10 : null
+    const latest = Math.max(ratings?.latest ?? 0, comments?.latest ?? 0)
+    const recentSignals = ratingCount + commentCount
+    const views = viewsBySlug.get(slug) ?? 0
+    const hasProofEver = ratingCount + commentCount > 0
+
+    // Health reads the whole ledger, not just the period:
+    //   healthy — 2+ signals and the newest falls inside the period
+    //   thin    — exactly 1 signal ever
+    //   stale   — proof exists but the newest predates the period
+    //   silent  — no signal at all
+    let health: TrustHealth
+    if (!hasProofEver) {
+      health = 'silent'
+      silentDevices++
+    } else if (recentSignals === 1) {
+      health = 'thin'
+    } else if (latest >= new Date(since).getTime()) {
+      health = 'healthy'
+    } else {
+      health = 'stale'
+    }
+
+    healthCounts.set(health, (healthCounts.get(health) ?? 0) + 1)
+    deviceRows.push({
+      slug,
+      name: meta?.name ?? slug.replace(/[-_]/g, ' '),
+      brandName: meta?.brandName ?? 'Unknown brand',
+      status: meta?.status ?? 'unknown',
+      views,
+      clicks: 0,
+      ratings: ratingCount,
+      comments: commentCount,
+      helpfulVotes: comments?.helpful ?? 0,
+      avgRating: avg,
+      recentSignals,
+      lastSignalAt: latest ? new Date(latest).toISOString() : null,
+      watchers: meta ? (watchersByDevice.get(meta.id)?.count ?? 0) : 0,
+      health,
+    })
+  }
+  deviceRows.sort((a, b) => b.recentSignals - a.recentSignals || b.views - a.views)
+
+  // __COMMUNITY_FN_4__
+
+  // 8) Contributors — effort (contributions) + value (helpful votes received).
+  const contributorMap = new Map<string, { ratings: number; comments: number; votes: number; devices: Set<string>; latest: number }>()
+  const trackContributor = (userId: string, kind: 'rating' | 'comment' | 'vote', slug: string | null, at: number) => {
+    if (!userId) return
+    const cur = contributorMap.get(userId) ?? { ratings: 0, comments: 0, votes: 0, devices: new Set<string>(), latest: 0 }
+    if (kind === 'rating') cur.ratings++
+    else if (kind === 'comment') cur.comments++
+    else cur.votes++
+    if (slug) cur.devices.add(slug)
+    if (Number.isFinite(at) && at > 0) cur.latest = Math.max(cur.latest, at)
+    contributorMap.set(userId, cur)
+  }
+  for (const row of ratingRows) {
+    trackContributor(String(row.user_id ?? ''), 'rating', String(row.device_slug ?? ''), new Date(String(row.created_at)).getTime())
+  }
+  for (const row of commentRows) {
+    trackContributor(String(row.user_id ?? ''), 'comment', String(row.content_slug ?? ''), new Date(String(row.created_at)).getTime())
+  }
+  for (const row of voteRows) {
+    trackContributor(String(row.user_id ?? ''), 'vote', null, new Date(String(row.created_at)).getTime())
+  }
+
+  const contributors: CommunityContributorRow[] = []
+  for (const [userId, c] of contributorMap) {
+    const contributionCount = c.ratings + c.comments
+    if (contributionCount === 0) continue // pure voters still count toward votes, not the roster
+    const grade = contributionCount >= 5 ? 'advocate' : contributionCount >= 2 ? 'regular' : 'newcomer'
+    contributors.push({
+      userId,
+      contributions: contributionCount,
+      ratings: c.ratings,
+      comments: c.comments,
+      votesCast: c.votes,
+      helpfulReceived: 0,
+      devices: c.devices.size,
+      grade,
+      lastContributionAt: c.latest ? new Date(c.latest).toISOString() : '',
+    })
+  }
+  // Helpful votes received → map back via the comments the user wrote.
+  const helpfulByUser = new Map<string, number>()
+  for (const row of commentRows) {
+    helpfulByUser.set(String(row.user_id ?? ''), (helpfulByUser.get(String(row.user_id ?? '')) ?? 0) + Number(row.helpful_count ?? 0))
+  }
+  for (const c of contributors) c.helpfulReceived = helpfulByUser.get(c.userId) ?? 0
+  contributors.sort((a, b) => b.helpfulReceived - a.helpfulReceived || b.contributions - a.contributions)
+
+  // __COMMUNITY_FN_5__
+
+  // 9) Voice momentum — weekly buckets (daily on 7d), ratings vs comments.
+  const bucketSize = days === 7 ? 1 : 7
+  const momentum: CommunityInsights['voice']['momentum'] = []
+  for (let start = nowMs - (days - 1) * dayMs; start <= nowMs; start += bucketSize * dayMs) {
+    const bucketStart = new Date(start)
+    const isoStart = bucketStart.toISOString().split('T')[0]
+    const isoEnd = new Date(start + (bucketSize - 1) * dayMs).toISOString().split('T')[0]
+    let r = 0
+    let c = 0
+    for (const [day, n] of ratingsPerDay) if (day >= isoStart && day <= isoEnd) r += n
+    for (const [day, n] of commentsPerDay) if (day >= isoStart && day <= isoEnd) c += n
+    momentum.push({
+      bucket: `${bucketStart.getMonth() + 1}/${bucketStart.getDate()}`,
+      ratings: r,
+      comments: c,
+      total: r + c,
+    })
+  }
+
+  // 10) Trust totals + health mix over published devices.
+  const publishedRows = deviceRows.filter((row) => {
+    const meta = deviceBySlug.get(row.slug)
+    return meta ? meta.status === 'published' : false
+  })
+  const coveredRows = publishedRows.filter((row) => row.ratings + row.comments > 0)
+  const totalComments = commentRows.length
+  const totalRatings = ratingRows.length
+
+  const healthMix = (['healthy', 'thin', 'stale', 'silent'] as TrustHealth[]).map((health) => {
+    const labels: Record<TrustHealth, string> = { healthy: 'Healthy', thin: 'Thin', stale: 'Stale', silent: 'Silent' }
+    const devices = health === 'silent' ? silentDevices : (healthCounts.get(health) ?? 0)
+    return { health, label: labels[health], devices, sharePct: sharePct(devices, deviceRows.length, 1) }
+  })
+
+  // __COMMUNITY_FN_6__
+
+  // 11) Moderation / solicitation fix queue — ranked by what's at stake.
+  const fixQueue: CommunityFixQueueItem[] = []
+  const pushFix = (
+    issue: ModerationIssue,
+    opts: { slug: string | null; name: string; stake: number; detail: string; href: string | null; editHref: string | null },
+  ) => {
+    fixQueue.push({
+      slug: opts.slug,
+      name: opts.name,
+      issue,
+      label: MODERATION_ISSUE_META[issue].label,
+      action: MODERATION_ISSUE_META[issue].action,
+      detail: opts.detail,
+      stake: opts.stake,
+      severity: opts.stake >= 100 ? 'high' : opts.stake >= 20 ? 'medium' : 'low',
+      href: opts.href,
+      editHref: opts.editHref,
+    })
+  }
+
+  for (const row of publishedRows) {
+    const meta = deviceBySlug.get(row.slug)
+    // 11a) Traffic without proof — the biggest solicitation opportunity.
+    if (row.views >= 20 && row.ratings + row.comments === 0) {
+      pushFix('high_demand_no_proof', {
+        slug: row.slug,
+        name: row.name,
+        stake: row.views,
+        detail: `${row.views.toLocaleString()} views this period and zero ratings or comments — the page sells without proof`,
+        href: meta?.href ?? null,
+        editHref: meta?.editHref ?? null,
+      })
+    }
+    // 11b) Single voice — one reviewer is an outlier.
+    if (row.ratings + row.comments === 1 && row.views >= 5) {
+      pushFix('single_voice', {
+        slug: row.slug,
+        name: row.name,
+        stake: row.views,
+        detail: `one ${row.ratings === 1 ? 'rating' : 'comment'} carries all the proof — ${row.views.toLocaleString()} views see a single opinion`,
+        href: meta?.href ?? null,
+        editHref: meta?.editHref ?? null,
+      })
+    }
+    // 11c) Questions asked in comments are the most direct conversion aid.
+    const slugMeta = commentsBySlug.get(row.slug)
+    if (slugMeta && slugMeta.questions > 0) {
+      pushFix('unanswered_question', {
+        slug: row.slug,
+        name: row.name,
+        stake: slugMeta.questions * 10 + row.views / 10,
+        detail: `${slugMeta.questions} question-style comment(s) on ${row.name} — every one is an objection someone voiced publicly`,
+        href: meta?.href ?? null,
+        editHref: meta?.editHref ?? null,
+      })
+    }
+  }
+
+  // 11d) Proof on dead slugs — ratings/comments point at slugs with no published row.
+  for (const slug of new Set([...ratingsBySlug.keys(), ...commentsBySlug.keys()])) {
+    const meta = deviceBySlug.get(slug)
+    if (meta && meta.status === 'published') continue
+    const signals = (ratingsBySlug.get(slug)?.count ?? 0) + (commentsBySlug.get(slug)?.count ?? 0)
+    pushFix('orphan_proof', {
+      slug,
+      name: meta?.name ?? slug.replace(/[-_]/g, ' '),
+      stake: signals * 5,
+      detail: meta
+        ? `${signals} signal(s) exist but the device is ${meta.status} — the proof is invisible to visitors`
+        : `${signals} signal(s) point at an unknown slug — ratings/comments reference a device that no longer exists`,
+      href: meta?.href ?? null,
+      editHref: meta?.editHref ?? null,
+    })
+  }
+
+  // 11e) Reported comments awaiting review (one row, catalog-level).
+  if (reportedUnreviewed > 0) {
+    pushFix('reported_unreviewed', {
+      slug: null,
+      name: 'Comment moderation',
+      stake: reportedUnreviewed * 20,
+      detail: `${reportedUnreviewed} comment(s) reported this period and not yet reviewed`,
+      href: null,
+      editHref: null,
+    })
+  }
+
+  fixQueue.sort((a, b) => b.stake - a.stake || a.label.localeCompare(b.label))
+  const totalStake = fixQueue.reduce((s, item) => s + item.stake, 0)
+
+  // __COMMUNITY_RETURN__
+
+  // 12) Shape the return payload.
+  const gradeCounts = new Map<string, number>()
+  for (const c of contributors) gradeCounts.set(c.grade, (gradeCounts.get(c.grade) ?? 0) + 1)
+  const gradeLabels: Record<string, string> = { advocate: 'Advocates (5+)', regular: 'Regulars (2–4)', newcomer: 'Newcomers (1)' }
+
+  const surfaceLabels: Record<string, string> = { device: 'Devices', article: 'Articles', video: 'Videos' }
+  const bySurface = Array.from(commentsBySurface.entries())
+    .map(([surface, count]) => ({
+      surface,
+      label: surfaceLabels[surface] ?? surface,
+      comments: count,
+      sharePct: sharePct(count, totalComments, 1),
+    }))
+    .sort((a, b) => b.comments - a.comments)
+
+  const helpfulLeaderboard = deviceRows
+    .filter((row) => row.helpfulVotes > 0)
+    .sort((a, b) => b.helpfulVotes - a.helpfulVotes)
+    .slice(0, 10)
+
+  const mostDiscussed = deviceRows
+    .filter((row) => row.comments > 0)
+    .sort((a, b) => b.comments - a.comments)
+    .slice(0, 10)
+
+  const histogramTotal = totalRatings
+  const ratingHistogram = ([5, 4, 3, 2, 1] as number[]).map((bucket) => ({
+    bucket: `${bucket}★`,
+    count: histogram.get(bucket) ?? 0,
+    sharePct: sharePct(histogram.get(bucket) ?? 0, histogramTotal, 1),
+  }))
+
+  return {
+    trust: {
+      totals: {
+        publishedDevices: publishedRows.length,
+        coveredDevices: coveredRows.length,
+        coveragePct: sharePct(coveredRows.length, publishedRows.length, 1),
+        ratedDevices: ratingsBySlug.size,
+        commentedDevices: commentsBySlug.size,
+        periodRatings: totalRatings,
+        periodComments: totalComments,
+        lifetimeRatings: lifetimeRatings ?? 0,
+        avgRating,
+        grade: trustGrade(avgRating, sharePct(coveredRows.length, publishedRows.length, 1), totalRatings + totalComments),
+      },
+      healthMix,
+      silentDevices,
+    },
+    voice: {
+      ratingHistogram,
+      momentum,
+      bySurface,
+      helpfulLeaderboard,
+      mostDiscussed,
+    },
+    people: {
+      totals: {
+        contributors: contributors.length,
+        newContributors: contributors.filter((c) => c.grade === 'newcomer').length,
+        advocates: contributors.filter((c) => c.grade === 'advocate').length,
+        avgPerContributor: contributors.length > 0 ? Math.round((contributors.reduce((s, c) => s + c.contributions, 0) / contributors.length) * 10) / 10 : 0,
+        watchers: watchersByDevice.size,
+      },
+      contributors: contributors.slice(0, 25),
+      gradeMix: (['advocate', 'regular', 'newcomer'] as const).map((grade) => ({
+        grade,
+        label: gradeLabels[grade],
+        contributors: gradeCounts.get(grade) ?? 0,
+        sharePct: sharePct(gradeCounts.get(grade) ?? 0, contributors.length, 1),
+      })),
+    },
+    action: {
+      fixQueue,
+      stake: totalStake,
+    },
+  }
+}
