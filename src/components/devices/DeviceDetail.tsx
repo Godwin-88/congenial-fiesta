@@ -22,7 +22,7 @@ import PageProgress from '@/components/devices/PageProgress'
 import SectionHeader from '@/components/ui/SectionHeader'
 import VideoReview from '@/components/devices/VideoReview'
 import { getRelatedDevices } from '@/lib/devices/queries'
-import { readRearCameras, readSelfieCameras } from '@/lib/devices/camera-types'
+import { buildFullSpecGroups, quickSpecValues } from '@/lib/devices/spec-display'
 import type { Device } from '@/types/cms'
 
 interface DeviceDetailProps {
@@ -30,23 +30,6 @@ interface DeviceDetailProps {
   isPreview?: boolean
   /** Absolute site origin (https://host) computed server-side for hydration-safe share links. */
   origin?: string
-}
-
-/** Flatten the nested camera JSONB into display-ready rows for the specs accordion. */
-function cameraToRows(cam?: Record<string, unknown>): { label: string; value?: string }[] {
-  if (!cam) return []
-  const rows: { label: string; value?: string }[] = []
-  // Shared readers resolve the lens role from the stored `type`/`slot` (and
-  // fall back positionally), so "Rear camera 1/2/3" becomes
-  // "Main camera / Ultrawide camera / Telephoto camera…" for every stored shape.
-  for (const r of readRearCameras(cam)) rows.push({ label: r.label, value: r.value })
-  for (const s of readSelfieCameras(cam)) rows.push({ label: s.label, value: s.value })
-  const c = cam as Record<string, unknown>
-  const video = (c.video ?? null) as Record<string, unknown> | null
-  if (video?.rear) rows.push({ label: 'Video (rear)', value: String(video.rear) })
-  if (video?.front) rows.push({ label: 'Video (front)', value: String(video.front) })
-  if (c.extras) rows.push({ label: 'Camera extras', value: String(c.extras) })
-  return rows
 }
 
 export default async function DeviceDetail({ device, isPreview = false, origin = '' }: DeviceDetailProps) {
@@ -75,24 +58,14 @@ export default async function DeviceDetail({ device, isPreview = false, origin =
     dScoreBattery > 0 || dScoreValue > 0
   const dBuyLinks = d.buy_links as Array<Record<string, unknown>> | undefined
   const hasBuyLinks = Array.isArray(dBuyLinks) && (dBuyLinks.length ?? 0) > 0
-  const dSpecsDesign = d.specs_design as Record<string, unknown> | undefined
-  const dSpecsDisplay = d.specs_display as Record<string, unknown> | undefined
-  const dSpecsProcessor = d.specs_processor as Record<string, unknown> | undefined
-  const dSpecsMemory = d.specs_memory as Record<string, unknown> | undefined
-  const dSpecsCamera = d.specs_camera as Record<string, unknown> | undefined
-  const dCamMain = (() => {
-    const rear = (dSpecsCamera as any)?.rear
-    if (Array.isArray(rear) && rear[0]?.sensorType) return String(rear[0].sensorType).split(' ')[0]
-    // Selfie may be an array (canonical) or a single object (legacy admin).
-    const selfie = Array.isArray((dSpecsCamera as any)?.selfie)
-      ? (dSpecsCamera as any)?.selfie?.[0]?.sensorType
-      : (dSpecsCamera as any)?.selfie?.sensorType
-    if (selfie) return String(selfie).split(' ')[0]
-    return undefined
-  })()
-  const dSpecsBattery = d.specs_battery as Record<string, unknown> | undefined
   const dRelatedVideoId = String(d.related_video_id ?? '')
   const dRelatedTiktokUrl = String(d.related_tiktok_url ?? '')
+
+  // Full Specs groups + Quick Specs values come from the canonical-first display
+  // layer (spec-display.ts) — it reads the canonical snake_case keys written by
+  // the §24b write gate AND the legacy label keys of pre-gate rows.
+  const fullSpecGroups = buildFullSpecGroups(d as Record<string, unknown>)
+  const quickSpecs = quickSpecValues(d as Record<string, unknown>)
 
   const [relatedDevices] = await Promise.all([
     getRelatedDevices({
@@ -103,39 +76,18 @@ export default async function DeviceDetail({ device, isPreview = false, origin =
   ])
 
   // Section anchors for the sticky jump nav (ids must be unique & stable).
-  // Phase 2: video is prominent — place it right after Overview.
+  // A section that will not render must not appear in the TOC — a jump target
+  // that lands on nothing is worse than no entry (the "TOC ignores specs" bug).
+  const hasFullSpecs = fullSpecGroups.some((g) => g.rows.some((r) => r.value))
+  const hasQuickSpecs = Object.values(quickSpecs).some((v) => !!v)
   const specSections = [
     { id: 'overview', label: 'Overview' },
-    { id: 'video-review', label: 'Video' },
-    { id: 'quick-specs', label: 'Quick Specs' },
-    { id: 'full-specs', label: 'Full Specs' },
+    ...(dRelatedVideoId || dRelatedTiktokUrl ? [{ id: 'video-review', label: 'Video' }] : []),
+    ...(hasQuickSpecs ? [{ id: 'quick-specs', label: 'Quick Specs' }] : []),
+    ...(hasFullSpecs ? [{ id: 'full-specs', label: 'Full Specs' }] : []),
     { id: 'related-devices', label: 'Related' },
     { id: 'reviews', label: 'Reviews' },
   ]
-
-  // Convert the unstructured JSONB spec objects into stable {title, rows} groups.
-  const specGroups = [
-    { title: 'Design & Build', data: dSpecsDesign, keys: ['Dimensions', 'Weight', 'Front', 'Back', 'Colours', 'IP Rating'] },
-    { title: 'Display', data: dSpecsDisplay, keys: ['Size', 'Type', 'Resolution', 'Refresh Rate', 'Pixel Density', 'Peak Brightness', 'HDR', 'Protection', 'Cover Display', 'Cover Display Size', 'Cover Display Type', 'Cover Display Resolution', 'Cover Display Refresh Rate', 'Cover Display Peak Brightness', 'Cover Display Protection'] },
-    { title: 'Processor', data: dSpecsProcessor, keys: ['Chipset', 'CPU', 'GPU'] },
-    { title: 'Memory', data: dSpecsMemory, keys: ['RAM', 'RAM type', 'Storage', 'Expandable'] },
-    { title: 'Battery', data: dSpecsBattery, keys: ['Capacity', 'Battery type', 'Wired charging', 'Wireless charging', 'Reverse charging'] },
-    { title: 'Camera', data: dSpecsCamera, keys: [] },
-    { title: 'Connectivity', data: d.specs_connectivity as Record<string, unknown> | undefined, keys: ['WiFi', 'Bluetooth', 'NFC', 'USB', 'Positioning', 'IR blaster'] },
-    { title: 'Network', data: d.specs_network as Record<string, unknown> | undefined, keys: ['SIM', 'Technology', '2G bands', '3G bands', '4G bands', '5G bands'] },
-    { title: 'Software', data: d.specs_software as Record<string, unknown> | undefined, keys: ['OS', 'UI layer', 'Major OS upgrades', 'Security patches'] },
-  ]
-  const fullSpecGroups = specGroups.map((g) => ({
-    title: g.title,
-    rows: [
-      ...g.keys.map((k) => {
-        const val = (g.data as Record<string, unknown> | undefined)?.[k]
-        return { label: k, value: val ? String(val) : undefined }
-      }),
-      // Camera gets a custom flatten for rear/selfie/video arrays.
-      ...(g.title === 'Camera' ? cameraToRows(dSpecsCamera) : []),
-    ],
-  }))
 
   const schemaOrg = {
     '@context': 'https://schema.org',
@@ -333,12 +285,12 @@ export default async function DeviceDetail({ device, isPreview = false, origin =
           />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             {[
-              { Icon: Smartphone, label: 'Display', value: dSpecsDisplay?.['Size'] },
-              { Icon: Cpu, label: 'Chipset', value: dSpecsProcessor?.['Chipset'] },
-              { Icon: Camera, label: 'Camera', value: dCamMain },
-              { Icon: BatteryFull, label: 'Battery', value: dSpecsBattery?.['Capacity'] },
-              { Icon: MemoryStick, label: 'RAM', value: dSpecsMemory?.['RAM']?.toString().split(' ')[0] },
-              { Icon: ShieldCheck, label: 'IP Rating', value: dSpecsDesign?.['IP Rating'] },
+              { Icon: Smartphone, label: 'Display', value: quickSpecs.Display },
+              { Icon: Cpu, label: 'Chipset', value: quickSpecs.Chipset },
+              { Icon: Camera, label: 'Camera', value: quickSpecs.Camera },
+              { Icon: BatteryFull, label: 'Battery', value: quickSpecs.Battery },
+              { Icon: MemoryStick, label: 'RAM', value: quickSpecs.RAM },
+              { Icon: ShieldCheck, label: 'IP Rating', value: quickSpecs['IP Rating'] },
             ]
               .filter((s) => s.value)
               .map((spec) => (

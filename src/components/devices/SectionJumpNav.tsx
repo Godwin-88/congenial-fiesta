@@ -29,22 +29,35 @@ export default function SectionJumpNav({ items, variant = 'horizontal' }: Sectio
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('IntersectionObserver' in window)) return
-    observerRef.current = new IntersectionObserver(
+    const observer = new IntersectionObserver(
       (entries) => {
+        // Pick the intersecting section closest to the top of the viewport —
+        // entries arrive in observation order, not document order, so a bare
+        // loop could highlight a LATER section over an earlier one.
+        let best: Element | null = null
+        let bestTop = Number.POSITIVE_INFINITY
         for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActive(entry.target.id)
+          if (!entry.isIntersecting) continue
+          const top = entry.boundingClientRect.top
+          if (top < bestTop) {
+            bestTop = top
+            best = entry.target
           }
         }
+        if (best) setActive(best.id)
       },
-      { rootMargin: '-20% 0px -70% 0px', threshold: 0 },
+      // A narrow band around the upper-middle of the viewport: short sections
+      // (Quick Specs tiles) still cross it, tall sections stay honest.
+      { rootMargin: '-35% 0px -55% 0px', threshold: 0 },
     )
     for (const item of items) {
       const el = document.getElementById(item.id)
-      if (el) observerRef.current.observe(el)
+      if (el) observer.observe(el)
     }
+    observerRef.current = observer
     return () => {
-      observerRef.current?.disconnect()
+      observer.disconnect()
+      observerRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -52,6 +65,9 @@ export default function SectionJumpNav({ items, variant = 'horizontal' }: Sectio
   const scrollTo = (id: string) => {
     const el = document.getElementById(id)
     if (!el) return
+    // Optimistic highlight so the TOC responds instantly, even before the
+    // scroll-spy catches up with the smooth scroll.
+    setActive(id)
     el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 

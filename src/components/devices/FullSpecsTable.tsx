@@ -34,7 +34,18 @@ export default function FullSpecsTable({
 
   const visible = groups.filter((g) => g.rows.some((r) => r.value != null && r.value !== ''))
 
-  if (visible.length === 0) return null
+  if (visible.length === 0) {
+    // The section anchor must still exist (the TOC links here), but an empty
+    // accordion would look broken — explain the data gap honestly instead.
+    return (
+      <div className="mt-12">
+        <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Full Specifications</h2>
+        <p className="rounded-xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+          The full specification sheet for this device has not been published yet.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="mt-12">
