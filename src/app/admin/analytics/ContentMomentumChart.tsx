@@ -62,7 +62,9 @@ export default function ContentMomentumChart({ data }: Props) {
   const activeTotal = activeRow ? SECTIONS.reduce((s, sec) => s + Number(activeRow[sec.key] || 0), 0) : 0
 
   return (
-    <div className="overflow-x-auto">
+    <div>
+      {/* Pinned card lives OUTSIDE the scroll container — an overflow-x-auto
+          parent clips it to the visible viewport (the truncation bug). */}
       {activeRow && (
         <div className="mb-3 flex justify-start">
           <ChartHoverCard
@@ -81,6 +83,7 @@ export default function ContentMomentumChart({ data }: Props) {
           />
         </div>
       )}
+      <div className="overflow-x-auto">
       <div
         className="grid gap-1"
         style={{ gridTemplateColumns: `72px repeat(${buckets.length}, minmax(34px, 1fr))` }}
@@ -129,6 +132,7 @@ export default function ContentMomentumChart({ data }: Props) {
             })}
           </div>
         ))}
+      </div>
       </div>
       <p className="mt-3 text-[11px] text-muted-foreground">
         <span className="font-medium text-foreground">X:</span> time bucket · <span className="font-medium text-foreground">Y:</span> content section · cell intensity = view volume

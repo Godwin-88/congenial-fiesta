@@ -50,7 +50,9 @@ export default function IntentMomentumChart({ momentum, maxCell }: Props) {
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div>
+      {/* Pinned card lives OUTSIDE the scroll container — an overflow-x-auto
+          parent clips it to the visible viewport (the truncation bug). */}
       {activeRow && (
         <div className="mb-3 flex justify-start">
           <ChartHoverCard
@@ -65,6 +67,7 @@ export default function IntentMomentumChart({ momentum, maxCell }: Props) {
           />
         </div>
       )}
+      <div className="overflow-x-auto">
       <table className="w-full border-separate border-spacing-0.5 text-xs">
         <thead>
           <tr>
@@ -131,6 +134,7 @@ export default function IntentMomentumChart({ momentum, maxCell }: Props) {
           </tr>
         </tbody>
       </table>
+      </div>
       <p className="mt-3 text-[11px] text-muted-foreground">
         <span className="font-medium text-foreground">Darker</span> = more events · read a row left-to-right for an
         action&apos;s trend. A compare row that only lights up on one date is a single viral page, not a habit.

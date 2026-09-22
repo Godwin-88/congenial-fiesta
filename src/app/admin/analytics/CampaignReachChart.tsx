@@ -70,28 +70,28 @@ export default function CampaignReachChart({ trend, maxDaily, byClass, tagRatePc
         })}
       </div>
 
+      {/* Pinned date card: in-flow ABOVE the strip (never absolute — the Card
+          has overflow-hidden and an absolutely positioned card gets clipped),
+          never inside an overflow-x-auto (clipped to the scroll viewport). */}
+      {activeDay && (
+        <div className="mb-3 flex justify-start">
+          <ChartHoverCard
+            title={formatHoverDate(activeDay.date)}
+            subtitle={`${activeDay.total.toLocaleString()} views`}
+            rows={STACK_ORDER.map((cls) => ({
+              color: ATTRIBUTION_COLORS[cls],
+              label: ATTRIBUTION_LABELS[cls],
+              value: `${activeDay[cls].toLocaleString()} views · ${
+                activeDay.total > 0 ? Math.round((activeDay[cls] / activeDay.total) * 10) / 10 : 0
+              }%`,
+            }))}
+            footer={pinnedDate && !hoveredDate ? 'Pinned — tap the same day again to dismiss.' : undefined}
+          />
+        </div>
+      )}
+
       {/* Day columns: stacked attribution bands, same scale across the row. */}
-      <div className="relative" onMouseLeave={() => setHoveredDate(null)}>
-        {activeDay && (
-          <div className="pointer-events-none absolute -top-2 left-1/2 z-10 w-64 max-w-[90vw] -translate-x-1/2 -translate-y-full sm:left-auto sm:right-0 sm:translate-x-0">
-            <ChartHoverCard
-              title={formatHoverDate(activeDay.date)}
-              subtitle={`${activeDay.total.toLocaleString()} views`}
-              rows={STACK_ORDER.map((cls) => ({
-                color: ATTRIBUTION_COLORS[cls],
-                label: ATTRIBUTION_LABELS[cls],
-                value: `${activeDay[cls].toLocaleString()} views · ${
-                  activeDay.total > 0 ? Math.round((activeDay[cls] / activeDay.total) * 10) / 10 : 0
-                }%`,
-              }))}
-              footer={
-                pinnedDate && !hoveredDate
-                  ? 'Pinned — tap the same day again to dismiss.'
-                  : undefined
-              }
-            />
-          </div>
-        )}
+      <div onMouseLeave={() => setHoveredDate(null)}>
         <div className="flex h-32 items-end gap-[2px]">
           {trend.map((day) => (
             <button

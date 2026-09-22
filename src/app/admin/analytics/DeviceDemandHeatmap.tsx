@@ -41,7 +41,9 @@ export default function DeviceDemandHeatmap({ buckets, tiers, tierLabels, matrix
   const activeTotal = activeRow?.total ?? 0
 
   return (
-    <div className="overflow-x-auto">
+    <div>
+      {/* Pinned card lives OUTSIDE the scroll container — an overflow-x-auto
+          parent clips it to the visible viewport (the truncation bug). */}
       {activeRow && (
         <div className="mb-3 flex justify-start">
           <ChartHoverCard
@@ -58,7 +60,8 @@ export default function DeviceDemandHeatmap({ buckets, tiers, tierLabels, matrix
           />
         </div>
       )}
-      <table className="w-full border-separate border-spacing-0.5 text-xs">
+      <div className="overflow-x-auto">
+        <table className="w-full border-separate border-spacing-0.5 text-xs">
         <thead>
           <tr>
             <th className="sticky left-0 bg-card px-1 text-left font-medium text-muted-foreground">Period</th>
@@ -122,6 +125,7 @@ export default function DeviceDemandHeatmap({ buckets, tiers, tierLabels, matrix
           </tr>
         </tbody>
       </table>
+      </div>
       <p className="mt-3 text-[11px] text-muted-foreground">
         <span className="font-medium text-foreground">Darker</span> = more views · one row per{' '}
         {buckets.length > 1 ? 'week' : 'day'} · read a column top-to-bottom for a tier&apos;s trend: an expensive tier
