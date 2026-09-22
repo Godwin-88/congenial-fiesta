@@ -3,7 +3,7 @@ import {
   QUALIFICATION_COLORS,
   type QualificationTier,
 } from '@/lib/analytics/consideration'
-import type { ConsiderationInsights, DeviceInsights, CommunityInsights, RevenueInsights, SearchInsights, CampaignInsights } from '@/lib/analytics/queries'
+import type { ConsiderationInsights, DeviceInsights, CommunityInsights, RevenueInsights, SearchInsights, CampaignInsights, OutreachInsights } from '@/lib/analytics/queries'
 import { RECON_LABELS } from '@/lib/analytics/revenue'
 
 type DeviceChip = { label: string; value: string }
@@ -220,6 +220,38 @@ export function campaignChipsFor(insights: CampaignInsights): CampaignChip[] {
 
   if (insights.action.fixQueue.length > 0) {
     chips.push({ label: 'Campaign queue', value: `${insights.action.fixQueue.length} items` })
+  }
+  return chips
+}
+
+type OutreachChip = { label: string; value: string }
+
+export function outreachChipsFor(insights: OutreachInsights): OutreachChip[] {
+  const chips: OutreachChip[] = [
+    {
+      label: 'Inbound',
+      value: `${insights.totals.inquiries.toLocaleString()} (${insights.totals.open} open · ${insights.totals.openPct}%)`,
+    },
+    {
+      label: 'Open pipeline',
+      value: insights.totals.medianOpenAgeDays !== null ? `median ${insights.totals.medianOpenAgeDays}d · ${insights.totals.agedOpen} aged` : 'empty',
+    },
+  ]
+  if (insights.totals.pressInquiries > 0) {
+    chips.push({ label: 'Press', value: `${insights.totals.pressInquiries} coverage requests` })
+  }
+  if (insights.totals.selfServeLeads > 0) {
+    chips.push({
+      label: 'Self-serve leads',
+      value: `${insights.totals.selfServeLeads.toLocaleString()} (${insights.totals.selfServeHot} hot)`,
+    })
+  }
+  chips.push({ label: 'Won', value: `${insights.totals.won} closed · ${insights.totals.activeSponsors} active sponsors` })
+  if (insights.demand.unmatchedInterest > 0) {
+    chips.push({ label: 'Unquotable demand', value: `${insights.demand.unmatchedInterest} asks match no package` })
+  }
+  if (insights.action.fixQueue.length > 0) {
+    chips.push({ label: 'Outreach queue', value: `${insights.action.fixQueue.length} items` })
   }
   return chips
 }

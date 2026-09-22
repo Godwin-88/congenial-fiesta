@@ -11,7 +11,7 @@ import {
   getRetentionStatus, listRetentionLog,
   runExploreQuery, listScheduledExports, getTrafficInsights, getContentInsights, getDeviceInsights,
   getConsiderationInsights, getCommunityInsights, getRevenueInsights, getSearchInsights,
-  getCampaignInsights,
+  getCampaignInsights, getOutreachInsights,
 } from '@/lib/analytics/queries'
 import { ROLE_ALLOWED, type TabId } from '@/lib/analytics/tabs'
 import {
@@ -117,7 +117,8 @@ import CampaignEfficiencyMatrix from './CampaignEfficiencyMatrix'
 import CampaignTagRegistry from './CampaignTagRegistry'
 import CampaignFixQueue from './CampaignFixQueue'
 import CampaignsTabBody from './CampaignsTabBody'
-import { deviceChipsFor, considerationChipsFor, communityChipsFor, revenueChipsFor, searchChipsFor, campaignChipsFor, tierBadgeClass, tierLabel, TierDot } from './ConsiderationTabHelpers'
+import OutreachTabBody from './OutreachTabBody'
+import { deviceChipsFor, considerationChipsFor, communityChipsFor, revenueChipsFor, searchChipsFor, campaignChipsFor, outreachChipsFor, tierBadgeClass, tierLabel, TierDot } from './ConsiderationTabHelpers'
 import RoadmapPanel, { type RoadmapItem } from './RoadmapPanel'
 import QualifiedLeadsTable from './QualifiedLeadsTable'
 import LinkHealthTable from './LinkHealthTable'
@@ -178,20 +179,10 @@ const ROADMAP_REVENUE: RoadmapItem[] = [
 const ROADMAP_CAMPAIGNS_LEGACY: RoadmapItem[] = []
 void ROADMAP_CAMPAIGNS_LEGACY
 
-const ROADMAP_OUTREACH: RoadmapItem[] = [
-  {
-    phase: 'Live',
-    feature: 'High-intent audience export',
-    data: 'FP-id + qualification score (compare/save/signed-in) → CSV',
-    kpi: 'MQL → CRM handoff',
-  },
-  {
-    phase: 'Phase 3',
-    feature: 'Press/sponsor/media-kit inquiry funnel',
-    data: 'inquiry submissions with status flow',
-    kpi: 'Lead volume + status win-rate',
-  },
-]
+// (Replaced by the Outreach tab's story roadmap in OutreachTabBody.)
+// Kept as an empty array so no dead constant lingers on the dashboard.
+const ROADMAP_OUTREACH_LEGACY: RoadmapItem[] = []
+void ROADMAP_OUTREACH_LEGACY
 
 const ROADMAP_SEARCH: RoadmapItem[] = [
   {
@@ -508,6 +499,16 @@ export default async function AnalyticsPage({
     campaignInsights = await getCampaignInsights(period)
   }
   const campaignChips = campaignInsights ? campaignChipsFor(campaignInsights) : []
+
+  // Outreach & Leads analytics hang off one aggregator too: the formal inbound
+  // pipeline (sponsor + press inquiries, honest aging) → what the market asked
+  // for (budget ladder × package matching) → the self-serve fp_id audience →
+  // the ranked money-first queue.
+  let outreachInsights: Awaited<ReturnType<typeof getOutreachInsights>> | null = null
+  if (activeTab === 'outreach' && allowedTabs.includes('outreach')) {
+    outreachInsights = await getOutreachInsights(period)
+  }
+  const outreachChips = outreachInsights ? outreachChipsFor(outreachInsights) : []
 
 const csvLinks = [
     { href: `/api/admin/export/top-pages?period=${period}`, label: 'Top Pages CSV' },
@@ -3216,19 +3217,7 @@ const csvLinks = [
       )}
 
       {activeTab === 'outreach' && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Handshake className="h-5 w-5 text-brand-primary" />
-                Outreach &amp; Leads
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <RoadmapPanel items={ROADMAP_OUTREACH} />
-            </CardContent>
-          </Card>
-        </div>
+        <OutreachTabBody insights={outreachInsights} chips={outreachChips} period={period} />
       )}
 
       {activeTab === 'goals' && (

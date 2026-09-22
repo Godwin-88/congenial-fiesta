@@ -85,6 +85,27 @@ import {
   tagComplianceFor,
   tagIssuesFor,
 } from './campaigns'
+import {
+  type InquiryStatus,
+  type InquiryFreshness,
+  type PackageMatchKind,
+  type OutreachIssue,
+  INQUIRY_STATUS_ORDER,
+  INQUIRY_STATUS_LABELS,
+  FRESHNESS_ORDER,
+  FRESHNESS_LABELS,
+  BUDGET_LADDER,
+  PACKAGE_MATCH_LABELS,
+  freshnessFor,
+  isOpenStatus,
+  isPressInquiry,
+  budgetRank,
+  matchPackageInterest,
+  normalizeOutreachName,
+  isQuietLead,
+  OUTREACH_ISSUE_META,
+  outreachSeverity,
+} from './outreach'
 
 export type {
   IntentAction,
@@ -95,9 +116,31 @@ export type {
 export type { TrustHealth, ModerationIssue } from './community'
 export type { MonetizationTier, ReconState, ChannelState, RevenueIssue } from './revenue'
 export type { AttributionClass, TagIssue, TagCompliance, ChannelClass, CampaignVerdict, LandingKind, CampaignIssue } from './campaigns'
+export type { InquiryStatus, InquiryFreshness, PackageMatchKind, OutreachIssue } from './outreach'
 export { MODERATION_ISSUE_META } from './community'
 export { REVENUE_ISSUE_META } from './revenue'
 export { CAMPAIGN_ISSUE_META, TAG_ISSUE_META } from './campaigns'
+export {
+  OUTREACH_ISSUE_META,
+  INQUIRY_STATUS_LABELS,
+  INQUIRY_STATUS_ORDER,
+  INQUIRY_STATUS_COLORS,
+  FRESHNESS_ORDER,
+  FRESHNESS_LABELS,
+  FRESHNESS_COLORS,
+  BUDGET_LADDER,
+  BUDGET_LADDER_LABELS,
+  PACKAGE_MATCH_LABELS,
+  freshnessFor,
+  isOpenStatus,
+  isPressInquiry,
+  rankToTier,
+  budgetRank,
+  matchPackageInterest,
+  normalizeOutreachName,
+  isQuietLead,
+  outreachSeverity,
+} from './outreach'
 export { INTENT_WEIGHTS, AFFILIATE_CLICK_WEIGHT, SIGNED_IN_BONUS, qualificationTier } from './consideration'
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
@@ -1772,6 +1815,8 @@ export const SCHEDULED_EXPORT_REPORTS = [
   'search-backlog',
   'campaign-ledger',
   'campaign-queue',
+  'outreach-pipeline',
+  'outreach-queue',
   'explore',
 ]
 
@@ -6971,5 +7016,491 @@ export async function getCampaignInsights(period: string): Promise<CampaignInsig
       fixQueue: fixQueue.slice(0, 25),
       stakeTotal: Math.round(fixQueue.reduce((s, i) => s + i.stake, 0) * 10) / 10,
     },
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 14 — Outreach & Leads intelligence
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One row of the inquiry ledger (a sponsor OR press inquiry). */
+export interface OutreachInquiryRow {
+  id: number
+  name: string
+  company: string
+  website: string | null
+  email: string
+  budgetRange: string
+  isPress: boolean
+  message: string
+  /** Raw free-text interest from the advertise form. */
+  packageInterest: string | null
+  packageMatch: string | null
+  packageMatchKind: PackageMatchKind
+  status: InquiryStatus
+  statusLabel: string
+  /** Days since created (honest clock: no status history exists). */
+  ageDays: number
+  freshness: InquiryFreshness
+  freshnessLabel: string
+  createdAt: string
+}
+
+/** One row of the prescriptive outreach queue. */
+export interface OutreachFixQueueItem {
+  issue: OutreachIssue
+  label: string
+  /** What the row is about: a company, a package name, or the whole channel. */
+  target: string
+  detail: string
+  action: string
+  stake: number
+  severity: 'high' | 'medium' | 'low'
+  href: string
+}
+
+export interface OutreachInsights {
+  totals: {
+    inquiries: number
+    pressInquiries: number
+    commercialInquiries: number
+    open: number
+    /** Open ÷ all × 100 — how much inbound still expects an answer. */
+    openPct: number
+    /** Median age in days of OPEN inquiries (null when none are open). */
+    medianOpenAgeDays: number | null
+    /** Open inquiries sitting past 21 days — the pipeline-rot count. */
+    agedOpen: number
+    won: number
+    declined: number
+    activeSponsors: number
+    livePackages: number
+    selfServeLeads: number
+    selfServeHot: number
+    selfServeWarm: number
+    selfServeClickers: number
+  }
+  pipeline: {
+    byStatus: Array<{
+      status: InquiryStatus
+      label: string
+      count: number
+      sharePct: number
+      open: boolean
+      medianAgeDays: number | null
+      oldestAgeDays: number | null
+    }>
+    freshness: Array<{
+      freshness: InquiryFreshness
+      label: string
+      open: boolean
+      count: number
+      sharePct: number
+    }>
+    trend: Array<{ date: string; count: number }>
+    maxDaily: number
+  }
+  demand: {
+    budgets: Array<{ budgetRange: string; count: number; sharePct: number; isPress: boolean; rank: number }>
+    packages: Array<{
+      interest: string
+      matched: string | null
+      kind: PackageMatchKind
+      kindLabel: string
+      count: number
+    }>
+    livePackages: Array<{ name: string; tier: string; inquiries: number; highlighted: boolean }>
+    unmatchedInterest: number
+    statedInterest: number
+  }
+  selfServe: {
+    leads: QualifiedLead[]
+    hot: number
+    warm: number
+    cold: number
+    clickers: number
+    signedIn: number
+    cooling: number
+    medianScore: number
+  }
+  action: {
+    fixQueue: OutreachFixQueueItem[]
+    stakeTotal: number
+  }
+  /** Row-level inquiry ledger — the export-friendly cut of the pipeline. */
+  ledger: OutreachInquiryRow[]
+}
+
+
+
+/**
+ * Outreach & Leads intelligence — the pipeline story.
+ *
+ * PIPELINE → DEMAND → SELF-SERVE → ACTION. Two very different lead sources,
+ * one tab: formal inbound (`sponsor_inquiries`, press rows included via
+ * budget_range='press') and the self-serve audience whose behaviour scores
+ * them as leads without a form (fp_id qualification, shared with the Compare
+ * tab's model). Aging is honest: statuses carry no history, so age is
+ * days-since-created and the aging clock only runs on OPEN rows.
+ */
+export async function getOutreachInsights(period: string): Promise<OutreachInsights> {
+  const since = sinceISO(period)
+
+  const [inquiriesRes, packagesRes, sponsorsRes, leads] = await Promise.all([
+    supabase
+      .from('sponsor_inquiries')
+      .select('id, name, company, website, email, budget_range, message, package_interest, status, created_at')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false }),
+    supabase.from('sponsorship_packages').select('name, tier, highlighted, display_order').order('display_order'),
+    supabase.from('sponsors').select('company_name, partnership_type, active'),
+    getQualifiedLeads(period, 100),
+  ])
+
+  const nowMs = Date.now()
+  const rows = (inquiriesRes.data ?? []) as Array<{
+    id: number
+    name: string
+    company: string
+    website: string | null
+    email: string
+    budget_range: string
+    message: string
+    package_interest: string | null
+    status: string
+    created_at: string
+  }>
+  const livePackages = (packagesRes.data ?? []) as Array<{
+    name: string
+    tier: string
+    highlighted: boolean
+    display_order: number
+  }>
+  const sponsorRows = (sponsorsRes.data ?? []) as Array<{
+    company_name: string
+    partnership_type: string | null
+    active: boolean
+  }>
+  const catalogNames = livePackages.map((p) => p.name)
+  const activeSponsorNames = sponsorRows.filter((s) => s.active).map((s) => normalizeOutreachName(s.company_name))
+
+  const dayMs = 86400000
+  const inquiryRows: OutreachInquiryRow[] = rows.map((r) => {
+    const status = (INQUIRY_STATUS_ORDER.includes(r.status as InquiryStatus) ? r.status : 'new') as InquiryStatus
+    const ageDays = Math.max(0, Math.floor((nowMs - new Date(r.created_at).getTime()) / dayMs))
+    const match = matchPackageInterest(r.package_interest, catalogNames)
+    const fresh = freshnessFor(ageDays)
+    return {
+      id: r.id,
+      name: r.name,
+      company: r.company,
+      website: r.website,
+      email: r.email,
+      budgetRange: r.budget_range,
+      isPress: isPressInquiry(r.budget_range),
+      message: r.message,
+      packageInterest: r.package_interest,
+      packageMatch: match.matched,
+      packageMatchKind: match.kind,
+      status,
+      statusLabel: INQUIRY_STATUS_LABELS[status],
+      ageDays,
+      freshness: fresh,
+      freshnessLabel: FRESHNESS_LABELS[fresh],
+      createdAt: r.created_at,
+    }
+  })
+
+  const pressRows = inquiryRows.filter((r) => r.isPress)
+  const openRows = inquiryRows.filter((r) => isOpenStatus(r.status))
+  const openAges = openRows.map((r) => r.ageDays)
+  const agedOpen = openRows.filter((r) => r.ageDays > 21).length
+
+
+  // ── A · pipeline — what arrived and where it stands ───────────────────────
+  const byStatus: OutreachInsights['pipeline']['byStatus'] = INQUIRY_STATUS_ORDER.map((status) => {
+    const list = inquiryRows.filter((r) => r.status === status)
+    const ages = list.map((r) => r.ageDays)
+    return {
+      status,
+      label: INQUIRY_STATUS_LABELS[status],
+      count: list.length,
+      sharePct: sharePct(list.length, inquiryRows.length, 1),
+      open: isOpenStatus(status),
+      medianAgeDays: list.length > 0 ? Math.round(median(ages)) : null,
+      oldestAgeDays: list.length > 0 ? Math.max(...ages) : null,
+    }
+  })
+
+  const freshness: OutreachInsights['pipeline']['freshness'] = FRESHNESS_ORDER.map((fresh) => {
+    const list = openRows.filter((r) => r.freshness === fresh)
+    return {
+      freshness: fresh,
+      label: FRESHNESS_LABELS[fresh],
+      open: true,
+      count: list.length,
+      sharePct: sharePct(list.length, openRows.length, 1),
+    }
+  })
+
+  // Inquiry trend: zero-filled calendar days so quiet weeks read as quiet.
+  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30
+  const dayKeys: string[] = []
+  for (let i = days - 1; i >= 0; i--) {
+    dayKeys.push(new Date(nowMs - i * dayMs).toISOString().split('T')[0])
+  }
+  const trend = dayKeys.map((date) => ({
+    date,
+    count: inquiryRows.filter((r) => new Date(r.createdAt).toISOString().split('T')[0] === date).length,
+  }))
+
+  // ── B · demand — what the market asked for ────────────────────────────────
+  const budgetCounts = new Map<string, number>()
+  for (const r of inquiryRows) {
+    budgetCounts.set(r.budgetRange, (budgetCounts.get(r.budgetRange) ?? 0) + 1)
+  }
+  const budgets: OutreachInsights['demand']['budgets'] = Array.from(budgetCounts.entries())
+    .map(([budgetRange, count]) => ({
+      budgetRange,
+      count,
+      sharePct: sharePct(count, inquiryRows.length, 1),
+      isPress: isPressInquiry(budgetRange),
+      rank: budgetRank(budgetRange),
+    }))
+    .sort((a, b) => {
+      // Ladder order first; press/unknown ride at the bottom.
+      const ra = a.rank >= 0 ? a.rank : 99
+      const rb = b.rank >= 0 ? b.rank : 99
+      return ra - rb || b.count - a.count
+    })
+
+  // package_interest: stated free text matched against the live catalog. The
+  // unmatched rows are the point — demand the catalog cannot quote.
+  const interestCounts = new Map<string, number>()
+  for (const r of inquiryRows) {
+    const stated = (r.packageInterest ?? '').trim()
+    if (!stated) continue
+    interestCounts.set(stated, (interestCounts.get(stated) ?? 0) + 1)
+  }
+  const packages: OutreachInsights['demand']['packages'] = Array.from(interestCounts.entries())
+    .map(([interest, count]) => {
+      const match = matchPackageInterest(interest, catalogNames)
+      return {
+        interest,
+        matched: match.matched,
+        kind: match.kind,
+        kindLabel: PACKAGE_MATCH_LABELS[match.kind],
+        count,
+      }
+    })
+    .sort((a, b) => b.count - a.count)
+
+  const livePackagesOut: OutreachInsights['demand']['livePackages'] = livePackages.map((p) => ({
+    name: p.name,
+    tier: p.tier,
+    highlighted: p.highlighted,
+    inquiries: packages
+      .filter((row) => row.matched === p.name)
+      .reduce((s, row) => s + row.count, 0),
+  }))
+
+  const statedInterest = packages.reduce((s, p) => s + p.count, 0)
+  const unmatchedInterest = packages.filter((p) => p.kind === 'unmatched').reduce((s, p) => s + p.count, 0)
+
+
+  // ── C · self-serve — the visitors who behave like leads without a form ────
+  const hotLeads = leads.filter((l) => l.bucket === 'hot')
+  const warmLeads = leads.filter((l) => l.bucket === 'warm')
+  const coldLeads = leads.filter((l) => l.bucket === 'cold')
+  const cooling = hotLeads.filter((l) => isQuietLead(l)).length
+
+  // ── D · action — the ranked outreach queue ────────────────────────────────
+  const STAKE_WEIGHT: Partial<Record<OutreachIssue, number>> = {
+    stale_new: 12,
+    press_unanswered: 8,
+    aging_contacted: 6,
+    hot_lead_cooling: 4,
+    package_unmatched: 3,
+    won_not_showcased: 2,
+    no_website: 1,
+    no_inquiries: 1,
+  }
+
+  const fixQueue: OutreachFixQueueItem[] = []
+  const outreachHref = '/admin/analytics?tab=outreach'
+
+  // Money waiting first: 'new' inquiries gone stale, oldest first.
+  for (const r of inquiryRows
+    .filter((r) => r.status === 'new' && r.ageDays > 7)
+    .sort((a, b) => b.ageDays - a.ageDays)
+    .slice(0, 6)) {
+    const stake = Math.max(r.ageDays * 2, 15)
+    fixQueue.push({
+      issue: r.isPress ? 'press_unanswered' : 'stale_new',
+      label: OUTREACH_ISSUE_META[r.isPress ? 'press_unanswered' : 'stale_new'].label,
+      target: `${r.company} · ${r.name}`,
+      detail: `${r.isPress ? 'Press' : 'Sponsor'} inquiry from ${r.company} (${r.budgetRange}${r.packageInterest ? `, interested in “${r.packageInterest}”` : ''}) has been sitting NEW for ${r.ageDays} days.`,
+      action: OUTREACH_ISSUE_META[r.isPress ? 'press_unanswered' : 'stale_new'].action,
+      stake,
+      severity: outreachSeverity(stake),
+      href: outreachHref,
+    })
+  }
+
+  // Pipeline rot: contacted but never resolved past three weeks.
+  for (const r of inquiryRows
+    .filter((r) => r.status === 'contacted' && r.ageDays > 21)
+    .sort((a, b) => b.ageDays - a.ageDays)
+    .slice(0, 5)) {
+    const stake = r.ageDays * 1.5
+    fixQueue.push({
+      issue: 'aging_contacted',
+      label: OUTREACH_ISSUE_META.aging_contacted.label,
+      target: `${r.company} · ${r.name}`,
+      detail: `Contacted ${r.ageDays} days ago with no recorded outcome (${r.budgetRange}${r.packageInterest ? `, “${r.packageInterest}”` : ''}).`,
+      action: OUTREACH_ISSUE_META.aging_contacted.action,
+      stake,
+      severity: outreachSeverity(stake),
+      href: outreachHref,
+    })
+  }
+
+  // Demand the catalog cannot quote.
+  for (const p of packages.filter((x) => x.kind === 'unmatched').slice(0, 4)) {
+    const stake = p.count * 6
+    fixQueue.push({
+      issue: 'package_unmatched',
+      label: OUTREACH_ISSUE_META.package_unmatched.label,
+      target: `“${p.interest}”`,
+      detail: `${p.count} inquiry${p.count === 1 ? '' : 'ies'} stated an interest that matches no live package (${livePackages.map((lp) => lp.name).join(' · ') || 'catalog empty'}).`,
+      action: OUTREACH_ISSUE_META.package_unmatched.action,
+      stake,
+      severity: outreachSeverity(stake),
+      href: '/admin/sponsors',
+    })
+  }
+
+  // Closed deals that never became logos.
+  for (const r of inquiryRows.filter((r) => r.status === 'closed').slice(0, 5)) {
+    const company = normalizeOutreachName(r.company)
+    const showcased = activeSponsorNames.some(
+      (s) => s.includes(company) || company.includes(s),
+    )
+    if (company && !showcased) {
+      const stake = 14
+      fixQueue.push({
+        issue: 'won_not_showcased',
+        label: OUTREACH_ISSUE_META.won_not_showcased.label,
+        target: r.company,
+        detail: `Inquiry closed as completed work, but no active sponsor matches “${r.company}” on the live sponsor wall.`,
+        action: OUTREACH_ISSUE_META.won_not_showcased.action,
+        stake,
+        severity: outreachSeverity(stake),
+        href: '/admin/sponsors',
+      })
+    }
+  }
+
+  // Hot self-serve leads gone quiet — cheapest recovered revenue.
+  for (const l of hotLeads.filter((x) => isQuietLead(x)).slice(0, 4)) {
+    const stake = Math.max(l.score * 2, 10)
+    fixQueue.push({
+      issue: 'hot_lead_cooling',
+      label: OUTREACH_ISSUE_META.hot_lead_cooling.label,
+      target: `fp_id ${l.fpId.slice(0, 12)}… · score ${l.score}`,
+      detail: `Hot lead (${l.compares} compares · ${l.saves} saves · ${l.affiliateClicks} clicks) not seen in the last week of the window.`,
+      action: OUTREACH_ISSUE_META.hot_lead_cooling.action,
+      stake,
+      severity: outreachSeverity(stake),
+      href: outreachHref,
+    })
+  }
+
+  // Profile gap: companies we cannot pre-qualify.
+  for (const r of inquiryRows.filter((x) => !x.website && isOpenStatus(x.status)).slice(0, 3)) {
+    const stake = 6
+    fixQueue.push({
+      issue: 'no_website',
+      label: OUTREACH_ISSUE_META.no_website.label,
+      target: `${r.company} · ${r.name}`,
+      detail: `Open ${r.statusLabel.toLowerCase()} inquiry with no website on file — qualification means a manual lookup before every reply.`,
+      action: OUTREACH_ISSUE_META.no_website.action,
+      stake,
+      severity: outreachSeverity(stake),
+      href: outreachHref,
+    })
+  }
+
+  if (inquiryRows.length === 0) {
+    fixQueue.push({
+      issue: 'no_inquiries',
+      label: OUTREACH_ISSUE_META.no_inquiries.label,
+      target: 'Advertise & press surfaces',
+      detail: 'No sponsor or press inquiries arrived in this window.',
+      action: OUTREACH_ISSUE_META.no_inquiries.action,
+      stake: 30,
+      severity: 'high',
+      href: '/advertise',
+    })
+  }
+
+  fixQueue.sort((a, b) => b.stake - a.stake)
+
+  // ── Self-serve rollups (fp_id qualification, shared with the Compare tab) ──
+  const clickerSet = new Set<string>()
+  let signedInCount = 0
+  for (const l of leads) {
+    if (l.affiliateClicks > 0) clickerSet.add(l.fpId)
+    if (l.signedIn) signedInCount += 1
+  }
+  const scoreList = leads.map((l) => l.score)
+  const medianScore = scoreList.length > 0 ? Math.round(median(scoreList) * 10) / 10 : 0
+
+  return {
+    totals: {
+      inquiries: inquiryRows.length,
+      pressInquiries: pressRows.length,
+      commercialInquiries: inquiryRows.length - pressRows.length,
+      open: openRows.length,
+      openPct: sharePct(openRows.length, inquiryRows.length, 1),
+      medianOpenAgeDays: openAges.length > 0 ? Math.round(median(openAges)) : null,
+      agedOpen,
+      won: inquiryRows.filter((r) => r.status === 'closed').length,
+      declined: inquiryRows.filter((r) => r.status === 'declined').length,
+      activeSponsors: activeSponsorNames.length,
+      livePackages: livePackages.length,
+      selfServeLeads: leads.length,
+      selfServeHot: hotLeads.length,
+      selfServeWarm: warmLeads.length,
+      selfServeClickers: clickerSet.size,
+    },
+    pipeline: {
+      byStatus,
+      freshness,
+      trend,
+      maxDaily: trend.reduce((m, t) => Math.max(m, t.count), 0),
+    },
+    demand: {
+      budgets,
+      packages,
+      livePackages: livePackagesOut,
+      unmatchedInterest,
+      statedInterest,
+    },
+    selfServe: {
+      leads: leads.slice(0, 60),
+      hot: hotLeads.length,
+      warm: warmLeads.length,
+      cold: coldLeads.length,
+      clickers: clickerSet.size,
+      signedIn: signedInCount,
+      cooling,
+      medianScore,
+    },
+    action: {
+      fixQueue: fixQueue.slice(0, 25),
+      stakeTotal: Math.round(fixQueue.reduce((s, i) => s + i.stake, 0) * 10) / 10,
+    },
+    ledger: inquiryRows,
   }
 }

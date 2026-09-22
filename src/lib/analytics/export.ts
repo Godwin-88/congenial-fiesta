@@ -16,6 +16,7 @@ import {
   getRevenueInsights,
   getSearchInsights,
   getCampaignInsights,
+  getOutreachInsights,
 } from './queries'
 
 export const REPORT_LABELS: Record<string, string> = {
@@ -37,6 +38,8 @@ export const REPORT_LABELS: Record<string, string> = {
   'search-backlog': 'Search Backlog Queue',
   'campaign-ledger': 'Campaign UTM Ledger',
   'campaign-queue': 'Campaign Tag Queue',
+  'outreach-pipeline': 'Outreach Inquiry Pipeline',
+  'outreach-queue': 'Outreach Queue (Leads & Fixes)',
   explore: 'Explore',
 }
 
@@ -412,6 +415,49 @@ export async function generateReportCsv(
           })),
         ),
         filename: `campaign-queue-${period}-${date}.csv`,
+      }
+    }
+    case 'outreach-pipeline': {
+      const insights = await getOutreachInsights(period)
+      return {
+        csv: toCSV(
+          insights.ledger.map((row, i) => ({
+            rank: i + 1,
+            company: row.company,
+            contact: row.name,
+            email: row.email,
+            website: row.website ?? '',
+            kind: row.isPress ? 'press' : 'commercial',
+            budget_range: row.budgetRange,
+            status: row.status,
+            status_label: row.statusLabel,
+            age_days: row.ageDays,
+            freshness: row.freshness,
+            package_interest: row.packageInterest ?? '',
+            matched_package: row.packageMatch ?? '',
+            match_kind: row.packageMatchKind,
+            created_at: row.createdAt,
+          })),
+        ),
+        filename: `outreach-pipeline-${period}-${date}.csv`,
+      }
+    }
+    case 'outreach-queue': {
+      const insights = await getOutreachInsights(period)
+      return {
+        csv: toCSV(
+          insights.action.fixQueue.map((item, i) => ({
+            rank: i + 1,
+            priority: item.severity,
+            issue: item.issue,
+            target: item.target,
+            at_stake: item.stake,
+            detail: item.detail,
+            action: item.action,
+            href: item.href,
+          })),
+        ),
+        filename: `outreach-queue-${period}-${date}.csv`,
       }
     }
     case 'explore': {

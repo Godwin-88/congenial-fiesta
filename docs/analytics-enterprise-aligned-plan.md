@@ -133,6 +133,7 @@ These are *our* implementation's contribution — recorded **here** as "proposed
 - **Phase 12 (Search & Discovery intelligence + engine telemetry) — ✅ LIVE:** the Search tab rebuilt as the demand story — `getSearchInsights(period)` joins the query log to the catalog and the index (Demand → Supply → Habit & Health → Action); shared query model (answer states answered/thin/zero/**unknown**, intent shapes, near-miss Dice matching, stake weighting) in `src/lib/analytics/searchStory.ts`; six purpose-built visuals incl. the dashboard's only treemap + a prescriptive backlog; two CSV reports + a JSON endpoint — see §7.8. Search itself fixed end-to-end (3-layer hybrid + publish-aware index eviction); Upstash index-side telemetry (query volume, capture-rate reconciliation, latency percentiles) wired through the account Developer API.
 - **Phase 13 (Campaigns & Acquisition intelligence) — ✅ LIVE:** the Campaigns tab rebuilt as the acquisition-integrity story — `getCampaignInsights(period)` joins page_views to affiliate_clicks + interactions by `fp_id` and grades every raw UTM tuple (Reach → Attribution → Efficiency & Governance → Action); shared campaign model (attribution classes tagged/untagged/direct, tag-convention lint, channel vocabulary from utm_medium, median-split verdicts scale/optimise/test/pause) in `src/lib/analytics/campaigns.ts`; the legacy row-level `getCampaignMetrics` is superseded and removed; two CSV reports (`campaign-ledger`, `campaign-queue`) + a JSON endpoint — see §7.9.
 - **Phase 13b (chart date-hover, cross-tab consistency) — ✅ LIVE:** `ChartHoverCard` is now the single hover-card contract (title = formatted date via `formatHoverDate`, colour-dot metric rows, optional footer); recharts tooltips and the hand-rolled heatmaps/bands all render it — Content Velocity, Traffic Trend, Click & Voice Momentum, Query Repeat, Device Demand Heatmap, Intent Momentum, Answer Coverage Band, Trust Health Band and Campaign Reach. Every date-bearing visual on the dashboard now shows its full per-date metrics on hover, and tap-to-pin makes it work on touch screens too.
+- **Phase 14 (Outreach & Leads intelligence) — ✅ LIVE:** the Outreach tab rebuilt as the pipeline-integrity story — `getOutreachInsights(period)` reads `sponsor_inquiries` with first-touch `fp_id` attribution (Pipeline → Demand → Self-serve → Action); shared vocabulary (status enum without history → age-of-open freshness tiers, fixed budget ladder `rankToTier` + Press/Other, free-text `package_interest` fuzzy matcher vs live `sponsorship_packages`, self-serve lead scores via `getQualifiedLeads` with hot-cooling detection) in `src/lib/analytics/outreach.ts`; seven purpose-built visuals + prescriptive fix queue with stake weighting; two CSV reports (`outreach-pipeline`, `outreach-queue`) + a JSON endpoint — see §7.11.
 
 
 ### 5.3 KPI dictionary skeleton (every KPI ships with full metadata — ℹ glossary)
@@ -655,6 +656,43 @@ optional subtitle and footer. Two consumers:
 
 Rule going forward: **any chart whose x-axis is a date must surface the formatted date and that date's metrics
 through `ChartHoverCard`** — no new tooltip markup, no `title=`-only date cells.
+
+§7.10b companion fix (same phase): pinned hover cards were being **clipped** on some screens — `components/ui/card.tsx`
+sets `overflow-hidden`, and the pinned cards rendered inside `overflow-x-auto` scroll containers. Fixed by rendering the
+pinned `ChartHoverCard` in-flow ABOVE the visual (`CampaignReachChart`) or outside the scroll container
+(`DeviceDemandHeatmap`, `ContentMomentumChart`, `IntentMomentumChart`), with a sizing contract documented in the
+`ChartHoverCard` header (`inline-block max-w-80`, break-words, truncated labels).
+
+### 7.11 Outreach & Leads tab — the pipeline-integrity story (Phase 14, ✅ LIVE)
+
+The Outreach tab is the monetisation funnel read: sponsors and press enquire through `/advertise`, the site's
+self-serve surfaces (compare, chat, price alerts) generate qualified leads, and the admin has to work both queues.
+Phase 14 replaces the legacy outreach roadmap card with one governed read built on `getOutreachInsights(period)`
+(`src/lib/analytics/outreach.ts` holds the shared vocabulary). Four blocks, A–D:
+
+1. **A — Pipeline (OutreachTrendStrip, OutreachStatusPipeline, OutreachLeadScoreboard).** Daily inquiries trend with
+   press vs commercial split; the status pipeline (new/contacted/declined/closed) with median age per status. The data
+   reality is encoded, not hidden: the status enum **has no history** (no transitions stored), so freshness is computed
+   from age-of-row on OPEN rows only — fresh ≤7d, warm ≤21d, stale ≤45d, cold beyond. The lead scoreboard ranks open
+   inquiries by first-touch `fp_id` context (which content or campaign produced them).
+2. **B — Demand (OutreachBudgetLadder, OutreachPackageDemand).** The fixed budget ladder (`rankToTier`: Entry/Mid/Top
+   plus Press and Other) shows where self-qualified prospects place themselves — an Entry-heavy ladder against a
+   mid/top-heavy catalog is a packaging problem. `package_interest` is free-text, so a fuzzy matcher (catalog exact /
+   fuzzy / unmatched / none) reconciles stated interest against the live `sponsorship_packages` table; unmatched asks
+   are quotable-revenue leaks worth a form or catalog fix. A supply-side chip row shows which live packages received
+   any demand (dashed = zero).
+3. **C — Self-serve (OutreachLeadMix).** `getQualifiedLeads` fp_id scores bucketed hot (≥8) / warm (≥4) / cold, with
+   cooling detection (hot + last-seen >7d) and sign-in intent. This is pipeline the site generates on its own.
+4. **D — Action (OutreachFixQueue).** Prescriptive queue, capped at 25, stake-weighted: `stale_new` ×2/day (press
+   branch → `press_unanswered`), `aging_contacted` ×1.5/day, `package_unmatched` ×6/ask, `hot_lead_cooling` ×2/score,
+   `won_not_showcased` ×14 (closed deal absent from the sponsors wall — normalised-name cross-check with containment
+   either way), `no_website` ×6 (lead arrived with no contactable site), `no_inquiries` ×30 (the honest zero: nothing
+   arrived in the window → fix the advertise/press surfaces). Deep-links where the action happens.
+
+Convention parity: A–D `SectionHeading` blocks, `MetricInfo` on every metric, one aggregator + dependency-free
+vocabulary module, `ChartHoverCard` for every date axis, CSV + JSON endpoints (`outreach-pipeline`, `outreach-queue`;
+`/api/admin/analytics/outreach?view=full|summary|pipeline|demand|self-serve|queue`), prefetch gated on tab + role.
+Empty states are honest (an empty `sponsorship_packages` catalog is stated as such, not rendered as zero demand).
 
 
 ## 8. Open Questions (for architecture review)
